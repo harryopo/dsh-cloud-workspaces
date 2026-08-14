@@ -45,3 +45,25 @@ scripts/                 # build-time generators (css, xterm css)
 2. `POST /api/dsh-remote-ide/connect {alias}` → `connected`.
 3. `POST /api/dsh-remote-ide/fs/ls {path}` etc.
 4. WebSocket terminal: `ws://127.0.0.1:<port>/api/dsh-remote-ide/terminal?alias=<alias>` with the frame protocol in `protocol.ts`.
+
+## Source-checkout development instance (optional)
+
+A second dsh web on another port, run from the official source checkout, gives
+an isolated dev loop (restarting it never touches the production 4100
+instance, and client-bundle changes hot-reload via `pnpm run dev:web`):
+
+```sh
+git clone https://github.com/deepseek-ai/deepseek-harness.git   # or use a tarball
+cd deepseek-harness
+pnpm install
+pnpm run build
+pnpm dsh web --port 4101        # same ~/.dsh/profiles/web — this plugin loads too
+```
+
+The plugin's host half still needs a restart after changes (engine code runs
+in the host process); client-half changes only need the bundle rebuilt:
+
+```sh
+pnpm build                      # plugin: gen:css + tsc + tsdown
+# browser hard-refresh picks up lib/client.js (served fresh per request)
+```
