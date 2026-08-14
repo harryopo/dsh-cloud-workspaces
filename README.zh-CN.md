@@ -99,7 +99,8 @@ dsh web
 - [x] 远程资源管理器（SFTP 目录树）
 - [x] 远程编辑器（CodeMirror + SFTP 读写）
 - [x] 远程终端（WebSocket SSH PTY）
-- [ ] Agent 工具（`remote_read` / `remote_write` / `remote_exec`）
+- [ ] **Agent 工具**（按官方 `defineTool` 契约）：`remote_read` / `remote_write` / `remote_exec`，带类型化参数 schema、`output.schema` + 纯函数 `presentCall`/`presentResult` 渲染意图、长任务经 `ctx.jobs.start` 走 `run_in_background` —— 让 DSH Agent 在对话里直接操作已连接的服务器。
+- [ ] **conversation node 集成**（官方外部 UI 路径）：host 半产出持久 `SessionEventMap` 事件族（`remote-ide/*`），浏览器半经 `ctx.conversationEvents.register` + `ctx.slots.inject('conversation.chat.node')` 注册 `ConversationNodeDefinition` + keyed 渲染器，远程执行结果以可回放行渲染进聊天流。
 - [ ] 远程 Git 面板（status / diff / commit 走 SSH）
 - [ ] 文件搜索 + 带进度的上传/下载
 - [ ] 端口转发隧道

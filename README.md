@@ -99,7 +99,8 @@ Host process                        Browser (dsh web GUI)
 - [x] Remote explorer (SFTP tree)
 - [x] Remote editor (CodeMirror + SFTP read/write)
 - [x] Remote terminal (WebSocket SSH PTY)
-- [ ] Agent tools (`remote_read` / `remote_write` / `remote_exec`)
+- [ ] **Agent tools** (per the official `defineTool` contract): `remote_read` / `remote_write` / `remote_exec` with typed parameter schemas, `output.schema` + pure `presentCall`/`presentResult` render intents, and `run_in_background` long ops via `ctx.jobs.start` — the DSH agent then operates the connected server from chat.
+- [ ] **Conversation-node integration** (the official external-UI path): the host emits a durable `SessionEventMap` family (`remote-ide/*`), the browser half registers a `ConversationNodeDefinition` + keyed Chat renderer through `ctx.conversationEvents.register` + `ctx.slots.inject('conversation.chat.node')`, so remote-exec results render as replayable rows in the chat flow.
 - [ ] Remote Git panel (status / diff / commit over SSH)
 - [ ] File search + upload/download with progress
 - [ ] Tunnel (local port forwarding)
