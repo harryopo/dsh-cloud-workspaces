@@ -17,9 +17,9 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { RemoteIdeApi } from './api'
 import { mountBetterSidebar } from './better-sidebar'
+import { IdeLayoutController } from './ide-layout'
 import { en, interpolate, zh, type RemoteIdeKey } from './locales'
 import { mountPanel } from './mount'
-import { PanelController } from './panel/controller'
 import { ensurePanelCss } from './panel/panel-css'
 import { dictionary } from './panel/helpers'
 import { mountSidebarEntry } from './sidebar-entry'
@@ -43,7 +43,6 @@ export type { RemoteExplorerProps } from './panel/RemoteExplorer'
 export type { RemoteEditorProps } from './panel/RemoteEditor'
 export type { RemoteTerminalProps } from './panel/RemoteTerminal'
 export type { HostFormDialogProps } from './panel/HostFormDialog'
-export type { PanelControllerSnapshot } from './panel/controller'
 export type { RemoteIdeKey } from './locales'
 
 /** Locale-aware translator bound to the active dictionary. */
@@ -58,13 +57,15 @@ function t(key: string, values?: Record<string, string | number>): string {
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-remote-ide: dictionaries')
 
-  const controller = new PanelController()
+  const layout = new IdeLayoutController()
   const api = new RemoteIdeApi()
   const disposers: Array<() => void> = []
   try {
     ensurePanelCss()
-    disposers.push(mountSidebarEntry(controller, t('entry.label'), t('entry.tooltip')))
-    disposers.push(mountPanel(controller, api, t))
+    layout.mount()
+    disposers.push(() => layout.dispose())
+    disposers.push(mountSidebarEntry(layout, t('entry.label'), t('entry.tooltip')))
+    disposers.push(mountPanel(layout, api, t))
     // Second track: when dsh-better-sidebar is installed, add a Remote IDE
     // tab to its workbench (additive; absent service => no-op).
     const betterSidebarDispose = mountBetterSidebar(ctx, api, t)

@@ -14,17 +14,24 @@
 DeepSeek Harness is a powerful coding agent, but its web GUI works on **local** files. When your code, data or production box lives on a remote server, you either SSH in separately or fight with sync tools. `dsh-remote-ide` brings the whole IDE into the harness:
 
 ```
-┌─────────────────────────── dsh web GUI ───────────────────────────┐
-│  sidebar: [远程 IDE] → center panel                                │
-│  ┌──────────┬──────────────────────────────────────────────────┐  │
-│  │  REMOTE   │  editor tabs + CodeMirror 6 (save = SFTP write)  │  │
-│  │  FILES    │                                                  │  │
-│  │  (SFTP    ├──────────────────────────────────────────────────┤  │
-│  │   tree)   │  xterm.js terminal (WebSocket → SSH PTY)         │  │
-│  └──────────┴──────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────────────────┘
-          │                          ↑
-          └── dsh host process ──────┘  ssh2 connection pool
+┌──────────────────────────── dsh web GUI ────────────────────────────┐
+│  sidebar: [远程 IDE] → opens the right-side IDE workbench           │
+│  ┌─────────── conversation (kept) ────────────┬───────────────────┐  │
+│  │  agent chat keeps running while you work  │  REMOTE IDE       │  │
+│  │                                            │  ┌─────────────┐ │  │
+│  │                                            │  │ remote tree │ │  │
+│  │                                            │  ├─────────────┤ │  │
+│  │                                            │  │ editor tabs  │ │  │
+│  │                                            │  │ (SFTP read/  │ │  │
+│  │                                            │  │  write)      │ │  │
+│  │                                            │  ├─────────────┤ │  │
+│  │                                            │  │ xterm SSH    │ │  │
+│  │                                            │  │ terminal     │ │  │
+│  │                                            │  └─────────────┘ │  │
+│  └────────────────────────────────────────────┴───────────────────┘  │
+│                    │                    ↑                            │
+│                    └── dsh host process ┘  ssh2 connection pool      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Features

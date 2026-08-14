@@ -9,9 +9,9 @@
  *
  * The row is plain DOM (no React tree) so it can never disturb the shell's
  * reconciliation; the panel view it toggles is a separate React root mounted
- * in the center column (see mount.tsx).
+ * in the right-side IDE column (see mount.tsx).
  */
-import type { PanelController } from './panel/controller'
+import type { IdeLayoutController } from './ide-layout'
 import { ensurePanelCss, panelClasses as css } from './panel/panel-css'
 
 /** Stable data attribute identifying the injected entry row. */
@@ -39,7 +39,7 @@ function newSessionButton(root: HTMLElement): HTMLButtonElement | undefined {
 }
 
 /** Build the entry row (a detached button; insert once the shell is up). */
-function createEntry(controller: PanelController, label: string, tooltip: string): HTMLButtonElement {
+function createEntry(layout: IdeLayoutController, label: string, tooltip: string): HTMLButtonElement {
   const entry = document.createElement('button')
   entry.type = 'button'
   entry.dataset.dshRemoteIdeEntry = ''
@@ -47,7 +47,7 @@ function createEntry(controller: PanelController, label: string, tooltip: string
   entry.setAttribute('aria-label', label)
   entry.setAttribute('title', tooltip)
   entry.innerHTML = '<span class="' + css.entryIcon + '">' + ICON + '</span><span class="' + css.entryLabel + '">' + label + '</span>'
-  entry.addEventListener('click', () => { controller.toggle() })
+  entry.addEventListener('click', () => { layout.toggle() })
   return entry
 }
 
@@ -73,13 +73,13 @@ function placeEntry(root: HTMLElement, entry: HTMLButtonElement): boolean {
 /**
  * Mount the sidebar entry, waiting for the shell to render and self-healing
  * on later React re-renders.
- * @param controller - the panel controller the entry toggles.
+ * @param layout - the layout controller the entry toggles.
  * @param label - entry label text.
  * @param tooltip - entry tooltip text.
  * @returns disposer removing the entry and its observers.
  */
-export function mountSidebarEntry(controller: PanelController, label: string, tooltip: string): () => void {
-  const entry = createEntry(controller, label, tooltip)
+export function mountSidebarEntry(layout: IdeLayoutController, label: string, tooltip: string): () => void {
+  const entry = createEntry(layout, label, tooltip)
   let root: HTMLElement | undefined
   let placed = false
 
@@ -118,10 +118,10 @@ export function mountSidebarEntry(controller: PanelController, label: string, to
   })
 
   const syncActive = (): void => {
-    if (controller.getSnapshot().panelOpen) entry.dataset.active = 'true'
+    if (layout.isOpen()) entry.dataset.active = 'true'
     else delete entry.dataset.active
   }
-  const unsubscribe = controller.subscribe(syncActive)
+  const unsubscribe = layout.subscribe(syncActive)
   syncActive()
 
   tryPlace()

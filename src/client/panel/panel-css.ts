@@ -3,48 +3,31 @@
  * editing src/client/panel/panel.module.css (wired into `pnpm build`).
  */
 /** Scoped CSS text; inject once via ensurePanelCss(). */
-export const panelCss = `._ri_16dhQq_view {
+export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
   flex-direction: column;
   height: 100%;
   min-height: 0;
   display: flex;
 }
 
-html[data-dsh-remote-ide-active] [data-pane="conversation"] > :not([data-dsh-remote-ide-view]), html[data-dsh-remote-ide-active] [class*="centerCol"] > :not([data-dsh-remote-ide-view]) {
-  display: none !important;
-}
-
-html[data-dsh-remote-ide-active] [data-pane="conversation"], html[data-dsh-remote-ide-active] [class*="centerCol"] {
-  overflow: hidden;
-}
-
-._ri_16dhQq_tabHost {
+._ri_16dhQq_workbench {
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  display: flex;
 }
 
-@media (width <= 520px) {
-  ._ri_16dhQq_workbench {
-    flex-direction: column;
-  }
+._ri_16dhQq_explorer {
+  border-right: none;
+  border-bottom: 1px solid var(--ri-border, #333);
+  flex: none;
+  width: auto;
+  max-height: 38%;
+}
 
-  ._ri_16dhQq_explorer {
-    border-right: none;
-    border-bottom: 1px solid var(--ri-border, #333);
-    flex: none;
-    width: auto;
-    max-height: 40%;
-  }
+._ri_16dhQq_explorerBody {
+  overflow-y: auto;
+}
 
-  ._ri_16dhQq_explorerBody {
-    overflow-y: auto;
-  }
-
-  ._ri_16dhQq_toolbarTitle {
-    display: none;
-  }
+._ri_16dhQq_toolbarTitle {
+  display: none;
 }
 
 ._ri_16dhQq_entry {
@@ -678,80 +661,80 @@ html[data-dsh-remote-ide-active] [data-pane="conversation"], html[data-dsh-remot
 }`
 /** Scoped class-name map (Lightning CSS CSS modules). */
 export const panelClasses = {
+  "workbench": "_ri_16dhQq_workbench",
+  "toolbar": "_ri_16dhQq_toolbar",
+  "treeRow": "_ri_16dhQq_treeRow",
+  "error": "_ri_16dhQq_error",
+  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
+  "hostSelect": "_ri_16dhQq_hostSelect",
+  "editorStatus": "_ri_16dhQq_editorStatus",
+  "tab": "_ri_16dhQq_tab",
+  "overlay": "_ri_16dhQq_overlay",
+  "formLabel": "_ri_16dhQq_formLabel",
+  "formSelect": "_ri_16dhQq_formSelect",
+  "placeholder": "_ri_16dhQq_placeholder",
+  "mainColumn": "_ri_16dhQq_mainColumn",
+  "statePill": "_ri_16dhQq_statePill",
+  "spacer": "_ri_16dhQq_spacer",
+  "treeIcon": "_ri_16dhQq_treeIcon",
+  "ok": "_ri_16dhQq_ok",
+  "hostDetail": "_ri_16dhQq_hostDetail",
+  "hostMain": "_ri_16dhQq_hostMain",
+  "dialog": "_ri_16dhQq_dialog",
+  "btnDanger": "_ri_16dhQq_btnDanger",
+  "stateConnecting": "_ri_16dhQq_stateConnecting",
+  "btnPrimary": "_ri_16dhQq_btnPrimary",
+  "cm-editor": "_ri_16dhQq_cm-editor",
+  "tabHost": "_ri_16dhQq_tabHost",
+  "panel": "_ri_16dhQq_panel",
+  "formError": "_ri_16dhQq_formError",
+  "entry": "_ri_16dhQq_entry",
+  "stateFailed": "_ri_16dhQq_stateFailed",
+  "explorerPath": "_ri_16dhQq_explorerPath",
+  "entryLabel": "_ri_16dhQq_entryLabel",
+  "tabBar": "_ri_16dhQq_tabBar",
+  "statusItem": "_ri_16dhQq_statusItem",
+  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
+  "dragging": "_ri_16dhQq_dragging",
+  "terminalHeader": "_ri_16dhQq_terminalHeader",
+  "explorerHeader": "_ri_16dhQq_explorerHeader",
+  "editorArea": "_ri_16dhQq_editorArea",
+  "terminalBody": "_ri_16dhQq_terminalBody",
+  "tabDirty": "_ri_16dhQq_tabDirty",
+  "btn": "_ri_16dhQq_btn",
+  "terminalWrap": "_ri_16dhQq_terminalWrap",
+  "xterm": "_ri_16dhQq_xterm",
+  "explorer": "_ri_16dhQq_explorer",
+  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
+  "view": "_ri_16dhQq_view",
+  "entryIcon": "_ri_16dhQq_entryIcon",
+  "envBadge": "_ri_16dhQq_envBadge",
+  "keyBadge": "_ri_16dhQq_keyBadge",
   "formRowInline": "_ri_16dhQq_formRowInline",
-  "explorerBody": "_ri_16dhQq_explorerBody",
+  "formActions": "_ri_16dhQq_formActions",
+  "hostAlias": "_ri_16dhQq_hostAlias",
+  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
+  "dialogTitle": "_ri_16dhQq_dialogTitle",
+  "statusBar": "_ri_16dhQq_statusBar",
+  "stateConnected": "_ri_16dhQq_stateConnected",
   "treeMeta": "_ri_16dhQq_treeMeta",
   "treeCaret": "_ri_16dhQq_treeCaret",
-  "panel": "_ri_16dhQq_panel",
-  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
-  "explorer": "_ri_16dhQq_explorer",
-  "mainColumn": "_ri_16dhQq_mainColumn",
-  "explorerHeader": "_ri_16dhQq_explorerHeader",
-  "editorStatus": "_ri_16dhQq_editorStatus",
-  "overlay": "_ri_16dhQq_overlay",
-  "hostSelect": "_ri_16dhQq_hostSelect",
-  "btnPrimary": "_ri_16dhQq_btnPrimary",
-  "hostList": "_ri_16dhQq_hostList",
-  "formError": "_ri_16dhQq_formError",
-  "dragging": "_ri_16dhQq_dragging",
-  "statusBar": "_ri_16dhQq_statusBar",
-  "terminalWrap": "_ri_16dhQq_terminalWrap",
-  "terminalResize": "_ri_16dhQq_terminalResize",
-  "error": "_ri_16dhQq_error",
-  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
-  "treeIcon": "_ri_16dhQq_treeIcon",
-  "statePill": "_ri_16dhQq_statePill",
-  "xterm": "_ri_16dhQq_xterm",
-  "dialog": "_ri_16dhQq_dialog",
-  "formRow": "_ri_16dhQq_formRow",
-  "stateFailed": "_ri_16dhQq_stateFailed",
-  "entryLabel": "_ri_16dhQq_entryLabel",
-  "keyBadge": "_ri_16dhQq_keyBadge",
-  "tabName": "_ri_16dhQq_tabName",
-  "workbench": "_ri_16dhQq_workbench",
-  "btnDanger": "_ri_16dhQq_btnDanger",
-  "cm-editor": "_ri_16dhQq_cm-editor",
-  "formInput": "_ri_16dhQq_formInput",
-  "formActions": "_ri_16dhQq_formActions",
-  "errorText": "_ri_16dhQq_errorText",
-  "hostName": "_ri_16dhQq_hostName",
-  "tabHost": "_ri_16dhQq_tabHost",
-  "stateConnecting": "_ri_16dhQq_stateConnecting",
-  "active": "_ri_16dhQq_active",
-  "view": "_ri_16dhQq_view",
-  "btn": "_ri_16dhQq_btn",
-  "entry": "_ri_16dhQq_entry",
-  "editorArea": "_ri_16dhQq_editorArea",
-  "formLabel": "_ri_16dhQq_formLabel",
-  "envBadge": "_ri_16dhQq_envBadge",
-  "hostDetail": "_ri_16dhQq_hostDetail",
-  "formSelect": "_ri_16dhQq_formSelect",
-  "dialogTitle": "_ri_16dhQq_dialogTitle",
-  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
-  "treeName": "_ri_16dhQq_treeName",
-  "entryIcon": "_ri_16dhQq_entryIcon",
-  "treeIndent": "_ri_16dhQq_treeIndent",
-  "terminalHeader": "_ri_16dhQq_terminalHeader",
-  "statusItem": "_ri_16dhQq_statusItem",
-  "selected": "_ri_16dhQq_selected",
-  "spacer": "_ri_16dhQq_spacer",
-  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
-  "ok": "_ri_16dhQq_ok",
-  "tabBar": "_ri_16dhQq_tabBar",
-  "treeRow": "_ri_16dhQq_treeRow",
-  "tab": "_ri_16dhQq_tab",
-  "placeholder": "_ri_16dhQq_placeholder",
-  "terminalBody": "_ri_16dhQq_terminalBody",
-  "stateConnected": "_ri_16dhQq_stateConnected",
-  "explorerPath": "_ri_16dhQq_explorerPath",
-  "tabClose": "_ri_16dhQq_tabClose",
-  "hostCard": "_ri_16dhQq_hostCard",
-  "toolbar": "_ri_16dhQq_toolbar",
-  "hostMain": "_ri_16dhQq_hostMain",
   "btnGhost": "_ri_16dhQq_btnGhost",
-  "tabDirty": "_ri_16dhQq_tabDirty",
-  "hostAlias": "_ri_16dhQq_hostAlias",
-  "hostActions": "_ri_16dhQq_hostActions"
+  "hostName": "_ri_16dhQq_hostName",
+  "tabName": "_ri_16dhQq_tabName",
+  "terminalResize": "_ri_16dhQq_terminalResize",
+  "hostActions": "_ri_16dhQq_hostActions",
+  "explorerBody": "_ri_16dhQq_explorerBody",
+  "hostCard": "_ri_16dhQq_hostCard",
+  "active": "_ri_16dhQq_active",
+  "treeIndent": "_ri_16dhQq_treeIndent",
+  "formRow": "_ri_16dhQq_formRow",
+  "hostList": "_ri_16dhQq_hostList",
+  "treeName": "_ri_16dhQq_treeName",
+  "tabClose": "_ri_16dhQq_tabClose",
+  "selected": "_ri_16dhQq_selected",
+  "formInput": "_ri_16dhQq_formInput",
+  "errorText": "_ri_16dhQq_errorText"
 }
 /** Idempotent <style> injection (one tag per page). */
 let panelCssInjected = false

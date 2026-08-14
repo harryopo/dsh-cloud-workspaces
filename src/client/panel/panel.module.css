@@ -1,29 +1,12 @@
 /* dsh-remote-ide panel styles. VSCode-like workbench, theme-aware via
    prefers-color-scheme (the shell currently ships a dark theme by default). */
 
-/* Panel view container inside the conversation column. */
+/* Panel view container inside the right-side IDE column. */
 .view {
   height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-/* While the panel is active, hide every other child of the conversation
-   column (the conversation itself) so the panel owns the center column.
-   Matches both the legacy [data-pane="conversation"] shell and the current
-   centerCol build. */
-html[data-dsh-remote-ide-active] [data-pane='conversation'] > :not([data-dsh-remote-ide-view]) {
-  display: none !important;
-}
-
-html[data-dsh-remote-ide-active] [class*='centerCol'] > :not([data-dsh-remote-ide-view]) {
-  display: none !important;
-}
-
-html[data-dsh-remote-ide-active] [data-pane='conversation'],
-html[data-dsh-remote-ide-active] [class*='centerCol'] {
-  overflow: hidden;
 }
 
 /* Host container inside a better-sidebar tab: full height, no scroll. */
@@ -34,25 +17,23 @@ html[data-dsh-remote-ide-active] [class*='centerCol'] {
   flex-direction: column;
 }
 
-/* Narrow workbench (better-sidebar drawer ~300-360px): stack the explorer
-   above the editor and shrink the terminal so nothing overflows. */
-@media (max-width: 520px) {
-  .workbench {
-    flex-direction: column;
-  }
-  .explorer {
-    width: auto;
-    flex: none;
-    max-height: 40%;
-    border-right: none;
-    border-bottom: 1px solid var(--ri-border, #333);
-  }
-  .explorerBody {
-    overflow-y: auto;
-  }
-  .toolbarTitle {
-    display: none;
-  }
+/* The right-side IDE column is narrow (~320-900px): stack the explorer
+   above the editor with the terminal pinned at the bottom. */
+.workbench {
+  flex-direction: column;
+}
+.explorer {
+  width: auto;
+  flex: none;
+  max-height: 38%;
+  border-right: none;
+  border-bottom: 1px solid var(--ri-border, #333);
+}
+.explorerBody {
+  overflow-y: auto;
+}
+.toolbarTitle {
+  display: none;
 }
 
 .entry {
