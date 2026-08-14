@@ -49,7 +49,9 @@ export function mountBetterSidebar(
 ): (() => void) | undefined {
   // Dynamic feature detection: better-sidebar is an optional peer; when it is
   // missing (or loads later), the standalone panel remains the entry point.
-  const service = (ctx as unknown as { betterSidebar?: BetterSidebarLike }).betterSidebar
+  // Optional services are read through ctx.get (never inject) per the cordis
+  // service contract.
+  const service = (ctx.get('betterSidebar') as BetterSidebarLike | undefined)
   if (service === undefined) return undefined
 
   const disposers: Array<() => void> = []

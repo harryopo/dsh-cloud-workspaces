@@ -37,14 +37,19 @@ export default [
   // ------------------------------------------------------------ host half
   defineConfig({
     name: `${ID}/host`,
-    entry: { index: './src/index.ts' },
+    entry: {
+      index: './src/index.ts',
+      invariant: './src/invariant.ts',
+    },
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
     target: 'es2024',
     dts: false,
     sourcemap: true,
-    clean: true,
+    // tsc emits lib/types (declarations) first; tsdown must not wipe them
+    // (the build script owns a full lib/ cleanup before tsc runs).
+    clean: false,
     outExtensions: () => ({ js: '.js' }),
     // Resolved from the dsh profile tree at runtime, never bundled.
     external: [
