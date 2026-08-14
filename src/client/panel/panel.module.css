@@ -10,12 +10,19 @@
 }
 
 /* While the panel is active, hide every other child of the conversation
-   column (the conversation itself) so the panel owns the center column. */
+   column (the conversation itself) so the panel owns the center column.
+   Matches both the legacy [data-pane="conversation"] shell and the current
+   centerCol build. */
 html[data-dsh-remote-ide-active] [data-pane='conversation'] > :not([data-dsh-remote-ide-view]) {
   display: none !important;
 }
 
-html[data-dsh-remote-ide-active] [data-pane='conversation'] {
+html[data-dsh-remote-ide-active] [class*='centerCol'] > :not([data-dsh-remote-ide-view]) {
+  display: none !important;
+}
+
+html[data-dsh-remote-ide-active] [data-pane='conversation'],
+html[data-dsh-remote-ide-active] [class*='centerCol'] {
   overflow: hidden;
 }
 
