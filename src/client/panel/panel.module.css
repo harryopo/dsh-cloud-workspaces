@@ -156,6 +156,37 @@
   flex: 1;
 }
 
+/* -------------------------------------------------------------- welcome */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ri-muted, #8a8a8a);
+  user-select: none;
+}
+
+.welcomeIcon {
+  font-size: 42px;
+  opacity: 0.8;
+}
+
+.welcomeTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ri-fg, #d4d4d4);
+}
+
+.welcomeText {
+  font-size: 12.5px;
+  max-width: 280px;
+  line-height: 1.6;
+}
+
 /* ------------------------------------------------------------- buttons */
 
 .btn {

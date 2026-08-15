@@ -146,6 +146,35 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
   flex: 1;
 }
 
+._ri_16dhQq_welcome {
+  text-align: center;
+  color: var(--ri-muted, #8a8a8a);
+  user-select: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  display: flex;
+}
+
+._ri_16dhQq_welcomeIcon {
+  opacity: .8;
+  font-size: 42px;
+}
+
+._ri_16dhQq_welcomeTitle {
+  color: var(--ri-fg, #d4d4d4);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+._ri_16dhQq_welcomeText {
+  max-width: 280px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 ._ri_16dhQq_btn {
   border: 1px solid var(--ri-border, #444);
   background: var(--ri-input-bg, #252526);
@@ -661,80 +690,84 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }`
 /** Scoped class-name map (Lightning CSS CSS modules). */
 export const panelClasses = {
-  "workbench": "_ri_16dhQq_workbench",
-  "toolbar": "_ri_16dhQq_toolbar",
-  "treeRow": "_ri_16dhQq_treeRow",
-  "error": "_ri_16dhQq_error",
-  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
-  "hostSelect": "_ri_16dhQq_hostSelect",
-  "editorStatus": "_ri_16dhQq_editorStatus",
-  "tab": "_ri_16dhQq_tab",
-  "overlay": "_ri_16dhQq_overlay",
-  "formLabel": "_ri_16dhQq_formLabel",
-  "formSelect": "_ri_16dhQq_formSelect",
-  "placeholder": "_ri_16dhQq_placeholder",
-  "mainColumn": "_ri_16dhQq_mainColumn",
-  "statePill": "_ri_16dhQq_statePill",
-  "spacer": "_ri_16dhQq_spacer",
-  "treeIcon": "_ri_16dhQq_treeIcon",
-  "ok": "_ri_16dhQq_ok",
-  "hostDetail": "_ri_16dhQq_hostDetail",
+  "welcomeText": "_ri_16dhQq_welcomeText",
+  "formActions": "_ri_16dhQq_formActions",
   "hostMain": "_ri_16dhQq_hostMain",
-  "dialog": "_ri_16dhQq_dialog",
-  "btnDanger": "_ri_16dhQq_btnDanger",
-  "stateConnecting": "_ri_16dhQq_stateConnecting",
-  "btnPrimary": "_ri_16dhQq_btnPrimary",
-  "cm-editor": "_ri_16dhQq_cm-editor",
-  "tabHost": "_ri_16dhQq_tabHost",
-  "panel": "_ri_16dhQq_panel",
-  "formError": "_ri_16dhQq_formError",
-  "entry": "_ri_16dhQq_entry",
-  "stateFailed": "_ri_16dhQq_stateFailed",
-  "explorerPath": "_ri_16dhQq_explorerPath",
-  "entryLabel": "_ri_16dhQq_entryLabel",
-  "tabBar": "_ri_16dhQq_tabBar",
-  "statusItem": "_ri_16dhQq_statusItem",
-  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
-  "dragging": "_ri_16dhQq_dragging",
-  "terminalHeader": "_ri_16dhQq_terminalHeader",
-  "explorerHeader": "_ri_16dhQq_explorerHeader",
-  "editorArea": "_ri_16dhQq_editorArea",
-  "terminalBody": "_ri_16dhQq_terminalBody",
-  "tabDirty": "_ri_16dhQq_tabDirty",
-  "btn": "_ri_16dhQq_btn",
-  "terminalWrap": "_ri_16dhQq_terminalWrap",
-  "xterm": "_ri_16dhQq_xterm",
-  "explorer": "_ri_16dhQq_explorer",
-  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
-  "view": "_ri_16dhQq_view",
+  "welcome": "_ri_16dhQq_welcome",
+  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
   "entryIcon": "_ri_16dhQq_entryIcon",
+  "stateConnecting": "_ri_16dhQq_stateConnecting",
+  "cm-editor": "_ri_16dhQq_cm-editor",
+  "active": "_ri_16dhQq_active",
+  "formInput": "_ri_16dhQq_formInput",
+  "tabHost": "_ri_16dhQq_tabHost",
+  "welcomeIcon": "_ri_16dhQq_welcomeIcon",
+  "treeRow": "_ri_16dhQq_treeRow",
+  "formRow": "_ri_16dhQq_formRow",
+  "errorText": "_ri_16dhQq_errorText",
+  "mainColumn": "_ri_16dhQq_mainColumn",
+  "terminalBody": "_ri_16dhQq_terminalBody",
+  "explorerBody": "_ri_16dhQq_explorerBody",
+  "tab": "_ri_16dhQq_tab",
+  "statusItem": "_ri_16dhQq_statusItem",
+  "hostDetail": "_ri_16dhQq_hostDetail",
+  "formLabel": "_ri_16dhQq_formLabel",
+  "spacer": "_ri_16dhQq_spacer",
+  "treeName": "_ri_16dhQq_treeName",
+  "stateConnected": "_ri_16dhQq_stateConnected",
+  "stateFailed": "_ri_16dhQq_stateFailed",
+  "statusBar": "_ri_16dhQq_statusBar",
+  "explorer": "_ri_16dhQq_explorer",
+  "treeIndent": "_ri_16dhQq_treeIndent",
+  "btnDanger": "_ri_16dhQq_btnDanger",
+  "tabDirty": "_ri_16dhQq_tabDirty",
+  "toolbar": "_ri_16dhQq_toolbar",
+  "tabClose": "_ri_16dhQq_tabClose",
+  "welcomeTitle": "_ri_16dhQq_welcomeTitle",
+  "hostName": "_ri_16dhQq_hostName",
+  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
+  "terminalResize": "_ri_16dhQq_terminalResize",
+  "btnPrimary": "_ri_16dhQq_btnPrimary",
+  "terminalWrap": "_ri_16dhQq_terminalWrap",
+  "terminalHeader": "_ri_16dhQq_terminalHeader",
+  "hostAlias": "_ri_16dhQq_hostAlias",
+  "btnGhost": "_ri_16dhQq_btnGhost",
+  "formSelect": "_ri_16dhQq_formSelect",
+  "view": "_ri_16dhQq_view",
   "envBadge": "_ri_16dhQq_envBadge",
   "keyBadge": "_ri_16dhQq_keyBadge",
-  "formRowInline": "_ri_16dhQq_formRowInline",
-  "formActions": "_ri_16dhQq_formActions",
-  "hostAlias": "_ri_16dhQq_hostAlias",
-  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
+  "dragging": "_ri_16dhQq_dragging",
+  "explorerHeader": "_ri_16dhQq_explorerHeader",
+  "ok": "_ri_16dhQq_ok",
+  "btn": "_ri_16dhQq_btn",
+  "statePill": "_ri_16dhQq_statePill",
+  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
+  "entryLabel": "_ri_16dhQq_entryLabel",
+  "treeIcon": "_ri_16dhQq_treeIcon",
+  "tabBar": "_ri_16dhQq_tabBar",
+  "tabName": "_ri_16dhQq_tabName",
+  "editorArea": "_ri_16dhQq_editorArea",
+  "editorStatus": "_ri_16dhQq_editorStatus",
+  "placeholder": "_ri_16dhQq_placeholder",
+  "error": "_ri_16dhQq_error",
+  "dialog": "_ri_16dhQq_dialog",
   "dialogTitle": "_ri_16dhQq_dialogTitle",
-  "statusBar": "_ri_16dhQq_statusBar",
-  "stateConnected": "_ri_16dhQq_stateConnected",
+  "entry": "_ri_16dhQq_entry",
+  "formError": "_ri_16dhQq_formError",
+  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
+  "xterm": "_ri_16dhQq_xterm",
   "treeMeta": "_ri_16dhQq_treeMeta",
   "treeCaret": "_ri_16dhQq_treeCaret",
-  "btnGhost": "_ri_16dhQq_btnGhost",
-  "hostName": "_ri_16dhQq_hostName",
-  "tabName": "_ri_16dhQq_tabName",
-  "terminalResize": "_ri_16dhQq_terminalResize",
-  "hostActions": "_ri_16dhQq_hostActions",
-  "explorerBody": "_ri_16dhQq_explorerBody",
-  "hostCard": "_ri_16dhQq_hostCard",
-  "active": "_ri_16dhQq_active",
-  "treeIndent": "_ri_16dhQq_treeIndent",
-  "formRow": "_ri_16dhQq_formRow",
   "hostList": "_ri_16dhQq_hostList",
-  "treeName": "_ri_16dhQq_treeName",
-  "tabClose": "_ri_16dhQq_tabClose",
+  "workbench": "_ri_16dhQq_workbench",
+  "hostCard": "_ri_16dhQq_hostCard",
+  "panel": "_ri_16dhQq_panel",
+  "hostActions": "_ri_16dhQq_hostActions",
   "selected": "_ri_16dhQq_selected",
-  "formInput": "_ri_16dhQq_formInput",
-  "errorText": "_ri_16dhQq_errorText"
+  "hostSelect": "_ri_16dhQq_hostSelect",
+  "overlay": "_ri_16dhQq_overlay",
+  "explorerPath": "_ri_16dhQq_explorerPath",
+  "formRowInline": "_ri_16dhQq_formRowInline"
 }
 /** Idempotent <style> injection (one tag per page). */
 let panelCssInjected = false

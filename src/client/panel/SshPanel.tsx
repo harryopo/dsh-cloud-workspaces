@@ -220,73 +220,13 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
         )}
       </div>
 
-      {!connected ? (
-        /* ---------------------------------------------------- host list */
-        <div className={css.hostList}>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <input
-              className={css.formInput}
-              style={{ flex: 1, minWidth: 160 }}
-              placeholder={t('hosts.search')}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            <button type="button" className={`${css.btn} ${css.btnPrimary}`} onClick={() => { setDialogHost(undefined); setDialogOpen(true) }}>
-              + {t('hosts.add')}
-            </button>
-            <button type="button" className={css.btn} onClick={() => void importConfig()}>
-              {t('hosts.import')}
-            </button>
-          </div>
-          {filteredHosts.length === 0 && (
-            <div className={css.explorerEmpty}>{t('panel.noHosts')}</div>
-          )}
-          {filteredHosts.map(host => (
-            <div key={host.alias} className={css.hostCard}>
-              <div className={css.hostMain}>
-                <div className={css.hostName}>
-                  <span className={css.hostAlias}>{host.alias}</span>
-                  {host.environment !== undefined && host.environment !== '' && (
-                    <span className={css.envBadge}>{host.environment}</span>
-                  )}
-                  <span className={css.keyBadge}>{host.auth === 'key' ? '🔑 key' : '🔒 pwd'}</span>
-                </div>
-                <div className={css.hostDetail}>
-                  {host.user}@{host.host}:{host.port}
-                  {host.proxyJump.length > 0 && ` · ↪ ${host.proxyJump.join(',')}`}
-                  {testResult[host.alias] !== undefined && ` · ${testResult[host.alias]}`}
-                </div>
-              </div>
-              <div className={css.hostActions}>
-                <button
-                  type="button"
-                  className={`${css.btn} ${css.btnPrimary}`}
-                  disabled={status.state === 'connecting'}
-                  onClick={() => void connect(host.alias)}
-                >
-                  {t('panel.connect')}
-                </button>
-                <button
-                  type="button"
-                  className={css.btn}
-                  disabled={testing === host.alias}
-                  onClick={() => void testHost(host.alias)}
-                >
-                  {testing === host.alias ? t('hosts.testing') : t('hosts.test')}
-                </button>
-                <button type="button" className={css.btn} onClick={() => { setDialogHost(host); setDialogOpen(true) }}>
-                  {t('hosts.edit')}
-                </button>
-                <button type="button" className={`${css.btn} ${css.btnDanger}`} onClick={() => void deleteHost(host.alias)}>
-                  {t('hosts.delete')}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* ---------------------------------------------------- workbench */
-        <div className={css.workbench}>
+      {/* ---------------------------------------------------- workbench
+           The IDE shape is permanent: the explorer area hosts the remote
+           tree when connected and the host list when not; the editor area
+           shows a welcome page until a file is opened. */}
+      <div className={css.workbench}>
+        {/* explorer area: remote tree (connected) or host list */}
+        {connected ? (
           <RemoteExplorer
             api={api}
             alias={activeAlias}
@@ -294,66 +234,173 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
             onOpenFile={openFile}
             t={t}
           />
-          <div className={css.mainColumn}>
-            {/* editor tabs */}
-            {openFiles.length > 0 && (
-              <div className={css.tabBar}>
-                {openFiles.map(file => (
-                  <div
-                    key={file.path}
-                    className={`${css.tab}${activeFile === file.path ? ' ' + css.active : ''}`}
-                    onClick={() => setActiveFile(file.path)}
-                  >
-                    <span className={css.tabName} title={file.path}>{basename(file.path)}</span>
-                    <span
-                      className={css.tabClose}
-                      role="button"
-                      onClick={e => {
-                        e.stopPropagation()
-                        closeFile(file.path)
-                      }}
-                    >
-                      ×
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* editor */}
-            <div className={css.editorArea} style={openFiles.length > 0 ? {} : { display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {activeFile !== undefined && openFiles.some(file => file.path === activeFile) ? (
-                <RemoteEditor
-                  key={activeFile}
-                  api={api}
-                  alias={activeAlias}
-                  path={activeFile}
-                  t={t}
-                />
-              ) : openFiles.length === 0 ? (
-                <span className={css.explorerEmpty}>{t('panel.empty')}</span>
-              ) : null}
+        ) : (
+          <div className={css.explorer}>
+            <div className={css.explorerHeader}>
+              <span>{t('hosts.title')}</span>
+              <span className={css.spacer} />
+              <button
+                type="button"
+                className={`${css.btn} ${css.btnGhost}`}
+                title={t('hosts.add')}
+                onClick={() => { setDialogHost(undefined); setDialogOpen(true) }}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className={`${css.btn} ${css.btnGhost}`}
+                title={t('hosts.import')}
+                onClick={() => void importConfig()}
+              >
+                ⇩
+              </button>
             </div>
-            {/* terminals */}
-            {terminals.length > 0 && (
-              <div style={{ flex: 'none' }}>
-                {terminals.map(id => (
-                  <RemoteTerminal
-                    key={id}
-                    id={id}
-                    api={api}
-                    alias={activeAlias}
-                    t={t}
-                    onExited={closeTerminal}
-                  />
-                ))}
+            <div className={css.explorerBody}>
+              <input
+                className={css.formInput}
+                style={{ margin: '2px 8px 6px', width: 'calc(100% - 16px)' }}
+                placeholder={t('hosts.search')}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              {filteredHosts.length === 0 && (
+                <div className={css.explorerEmpty}>
+                  {t('panel.noHosts')}
+                  <br />
+                  <button
+                    type="button"
+                    className={`${css.btn} ${css.btnPrimary}`}
+                    style={{ marginTop: 8 }}
+                    onClick={() => { setDialogHost(undefined); setDialogOpen(true) }}
+                  >
+                    + {t('hosts.add')}
+                  </button>
+                </div>
+              )}
+              {filteredHosts.map(host => (
+                <div key={host.alias} className={css.hostCard}>
+                  <div className={css.hostMain}>
+                    <div className={css.hostName}>
+                      <span className={css.hostAlias}>{host.alias}</span>
+                      {host.environment !== undefined && host.environment !== '' && (
+                        <span className={css.envBadge}>{host.environment}</span>
+                      )}
+                      <span className={css.keyBadge}>{host.auth === 'key' ? '🔑' : '🔒'}</span>
+                    </div>
+                    <div className={css.hostDetail}>
+                      {host.user}@{host.host}:{host.port}
+                      {host.proxyJump.length > 0 && ` · ↪ ${host.proxyJump.join(',')}`}
+                      {testResult[host.alias] !== undefined && ` · ${testResult[host.alias]}`}
+                    </div>
+                  </div>
+                  <div className={css.hostActions}>
+                    <button
+                      type="button"
+                      className={`${css.btn} ${css.btnPrimary}`}
+                      disabled={status.state === 'connecting'}
+                      onClick={() => void connect(host.alias)}
+                    >
+                      {t('panel.connect')}
+                    </button>
+                    <button
+                      type="button"
+                      className={css.btn}
+                      disabled={testing === host.alias}
+                      onClick={() => void testHost(host.alias)}
+                    >
+                      {testing === host.alias ? t('hosts.testing') : t('hosts.test')}
+                    </button>
+                    <button type="button" className={css.btn} onClick={() => { setDialogHost(host); setDialogOpen(true) }}>
+                      {t('hosts.edit')}
+                    </button>
+                    <button type="button" className={`${css.btn} ${css.btnDanger}`} onClick={() => void deleteHost(host.alias)}>
+                      {t('hosts.delete')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className={css.mainColumn}>
+          {/* editor tabs */}
+          {connected && openFiles.length > 0 && (
+            <div className={css.tabBar}>
+              {openFiles.map(file => (
+                <div
+                  key={file.path}
+                  className={`${css.tab}${activeFile === file.path ? ' ' + css.active : ''}`}
+                  onClick={() => setActiveFile(file.path)}
+                >
+                  <span className={css.tabName} title={file.path}>{basename(file.path)}</span>
+                  <span
+                    className={css.tabClose}
+                    role="button"
+                    onClick={e => {
+                      e.stopPropagation()
+                      closeFile(file.path)
+                    }}
+                  >
+                    ×
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* editor */}
+          <div className={css.editorArea} style={openFiles.length > 0 ? {} : { display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {connected && activeFile !== undefined && openFiles.some(file => file.path === activeFile) ? (
+              <RemoteEditor
+                key={activeFile}
+                api={api}
+                alias={activeAlias}
+                path={activeFile}
+                t={t}
+              />
+            ) : (
+              <div className={css.welcome}>
+                <div className={css.welcomeIcon}>🖥️</div>
+                <div className={css.welcomeTitle}>{t('panel.title')}</div>
+                <div className={css.welcomeText}>
+                  {connected
+                    ? `${t('panel.connected')} ${activeAlias} — ${t('panel.empty')}`
+                    : t('panel.empty')}
+                </div>
+                {!connected && hosts.length > 0 && (
+                  <button
+                    type="button"
+                    className={`${css.btn} ${css.btnPrimary}`}
+                    style={{ marginTop: 12 }}
+                    onClick={() => hosts[0] !== undefined && void connect(hosts[0].alias)}
+                  >
+                    {t('panel.connect')} {hosts[0]?.alias}
+                  </button>
+                )}
               </div>
-            )}
-            {terminalError !== undefined && (
-              <div className={css.errorText} style={{ padding: '2px 10px' }}>{terminalError}</div>
             )}
           </div>
+          {/* terminals (connected only) */}
+          {connected && terminals.length > 0 && (
+            <div style={{ flex: 'none' }}>
+              {terminals.map(id => (
+                <RemoteTerminal
+                  key={id}
+                  id={id}
+                  api={api}
+                  alias={activeAlias}
+                  t={t}
+                  onExited={closeTerminal}
+                />
+              ))}
+            </div>
+          )}
+          {terminalError !== undefined && (
+            <div className={css.errorText} style={{ padding: '2px 10px' }}>{terminalError}</div>
+          )}
         </div>
-      )}
+      </div>
+
 
       {/* host dialog */}
       {dialogOpen && (
