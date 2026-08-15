@@ -166,16 +166,24 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 24px;
+  gap: 6px;
+  padding: 28px 24px;
   text-align: center;
   color: var(--ri-muted, #8a8a8a);
   user-select: none;
 }
 
-.welcomeIcon {
-  font-size: 42px;
-  opacity: 0.8;
+.welcomeIconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(0, 122, 204, 0.12);
+  border: 1px solid rgba(0, 122, 204, 0.28);
+  color: #4da3ff;
+  margin-bottom: 8px;
 }
 
 .welcomeTitle {
@@ -188,6 +196,32 @@
   font-size: 12.5px;
   max-width: 280px;
   line-height: 1.6;
+}
+
+.welcomeActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  width: 100%;
+  max-width: 220px;
+}
+
+.welcomeActions .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.welcomeHint {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--ri-muted-dim, #6f6f6f);
+  max-width: 240px;
+  line-height: 1.5;
 }
 
 /* ------------------------------------------------------------- buttons */
@@ -231,6 +265,14 @@
 
 .btnDanger:hover {
   background: #993030;
+}
+
+/* Icon-only button (compact square action). */
+.btnIcon {
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btnGhost {

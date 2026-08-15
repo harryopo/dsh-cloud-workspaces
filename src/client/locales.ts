@@ -18,6 +18,7 @@ export type RemoteIdeKey = {
   'panel.disconnected': string
   'panel.workspace': string
   'panel.home': string
+  'panel.hint': string
   'hosts.title': string
   'hosts.add': string
   'hosts.edit': string
@@ -89,6 +90,7 @@ export const zh: RemoteIdeKey = {
   'panel.disconnected': '未连接',
   'panel.workspace': '远程工作区',
   'panel.home': '主目录',
+  'panel.hint': '连接后即可浏览远程文件、在线编辑并打开 SSH 终端',
   'hosts.title': 'SSH 主机',
   'hosts.add': '添加主机',
   'hosts.edit': '编辑',
@@ -160,6 +162,7 @@ export const en: RemoteIdeKey = {
   'panel.disconnected': 'Disconnected',
   'panel.workspace': 'Remote workspace',
   'panel.home': 'Home',
+  'panel.hint': 'Connect to browse remote files, edit them online, and open an SSH terminal',
   'hosts.title': 'SSH Hosts',
   'hosts.add': 'Add host',
   'hosts.edit': 'Edit',

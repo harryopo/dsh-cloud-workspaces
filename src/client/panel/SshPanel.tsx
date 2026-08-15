@@ -6,7 +6,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SshHostSummary, WorkspaceStatus } from '../../protocol'
 import { pollStatus, type RemoteIdeApi } from '../api'
 import { basename } from './helpers'
-import { ImportIcon, KeyIcon, LockIcon, MonitorIcon } from './icons'
+import {
+  CheckIcon, ImportIcon, KeyIcon, LockIcon, MonitorIcon, PencilIcon, PlugIcon,
+  PlusIcon, ServerIcon, SpinnerIcon, TrashIcon,
+} from './icons'
 import { HostFormDialog } from './HostFormDialog'
 import { RemoteEditor } from './RemoteEditor'
 import { RemoteExplorer } from './RemoteExplorer'
@@ -302,21 +305,32 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
                       disabled={status.state === 'connecting'}
                       onClick={() => void connect(host.alias)}
                     >
-                      {t('panel.connect')}
+                      <PlugIcon size={11} /> {t('panel.connect')}
                     </button>
                     <button
                       type="button"
-                      className={css.btn}
+                      className={`${css.btn} ${css.btnIcon}`}
+                      title={t('hosts.test')}
                       disabled={testing === host.alias}
                       onClick={() => void testHost(host.alias)}
                     >
-                      {testing === host.alias ? t('hosts.testing') : t('hosts.test')}
+                      {testing === host.alias ? <SpinnerIcon size={11} /> : <CheckIcon size={11} />}
                     </button>
-                    <button type="button" className={css.btn} onClick={() => { setDialogHost(host); setDialogOpen(true) }}>
-                      {t('hosts.edit')}
+                    <button
+                      type="button"
+                      className={`${css.btn} ${css.btnIcon}`}
+                      title={t('hosts.edit')}
+                      onClick={() => { setDialogHost(host); setDialogOpen(true) }}
+                    >
+                      <PencilIcon size={11} />
                     </button>
-                    <button type="button" className={`${css.btn} ${css.btnDanger}`} onClick={() => void deleteHost(host.alias)}>
-                      {t('hosts.delete')}
+                    <button
+                      type="button"
+                      className={`${css.btn} ${css.btnIcon} ${css.btnDanger}`}
+                      title={t('hosts.delete')}
+                      onClick={() => void deleteHost(host.alias)}
+                    >
+                      <TrashIcon size={11} />
                     </button>
                   </div>
                 </div>
@@ -360,23 +374,52 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
                 t={t}
               />
             ) : (
+              /* ---------------------------------------------- welcome /
+                 connection hub: layered empty state with primary + secondary
+                 actions instead of a bare text line. */
               <div className={css.welcome}>
-                <div className={css.welcomeIcon}><MonitorIcon size={36} /></div>
-                <div className={css.welcomeTitle}>{t('panel.title')}</div>
+                <div className={css.welcomeIconWrap}>
+                  <ServerIcon size={30} />
+                </div>
+                <div className={css.welcomeTitle}>
+                  {connected ? t('panel.connected') : t('panel.title')}
+                </div>
                 <div className={css.welcomeText}>
                   {connected
-                    ? `${t('panel.connected')} ${activeAlias} — ${t('panel.empty')}`
+                    ? `${activeAlias} — ${t('panel.empty')}`
                     : t('panel.empty')}
                 </div>
-                {!connected && hosts.length > 0 && (
-                  <button
-                    type="button"
-                    className={`${css.btn} ${css.btnPrimary}`}
-                    style={{ marginTop: 12 }}
-                    onClick={() => hosts[0] !== undefined && void connect(hosts[0].alias)}
-                  >
-                    {t('panel.connect')} {hosts[0]?.alias}
-                  </button>
+                {!connected && (
+                  <div className={css.welcomeActions}>
+                    {hosts.length > 0 && (
+                      <button
+                        type="button"
+                        className={`${css.btn} ${css.btnPrimary}`}
+                        onClick={() => hosts[0] !== undefined && void connect(hosts[0].alias)}
+                      >
+                        <PlugIcon size={12} /> {t('panel.connect')} {hosts[0]?.alias}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={css.btn}
+                      onClick={() => { setDialogHost(undefined); setDialogOpen(true) }}
+                    >
+                      <PlusIcon size={12} /> {t('hosts.add')}
+                    </button>
+                    <button
+                      type="button"
+                      className={css.btn}
+                      onClick={() => void importConfig()}
+                    >
+                      <ImportIcon size={12} /> {t('hosts.import')}
+                    </button>
+                  </div>
+                )}
+                {!connected && (
+                  <div className={css.welcomeHint}>
+                    {t('panel.hint')}
+                  </div>
                 )}
               </div>
             )}
