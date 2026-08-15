@@ -70,8 +70,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 
 ## 当前状态与下一步
 
-- ✅ 已完成：SSH 引擎（端到端验证）、5 个远程工具、remote preset 模板、构建/测试通过、4500 实例运行中
-- ⏳ 待验证：**4500 上「服务器开发」preset 是否出现在新会话模式选择器**、agent 用 ssh_exec 操作远程的端到端流程
+- ✅ 已完成：SSH 引擎（端到端验证）、5 个远程工具、remote preset 模板（已装 `~/.dsh/.agent-presets/remote/`）、构建/测试通过、4500 实例运行中、交接文档齐全
+- ⚠️ **待解决（第一任务）**：**「服务器开发」preset 未出现在 4500 新会话的模式选择器**。排查线索见 `memory/project_dsh_remote_ide.md`「遗留问题」：① 确认 app 是否扫描 user preset root（`~/.dsh/.agent-presets`，查 `apps/cli/src/web.ts` 与 `packages/preset/agent-presets/src/mount.ts` 的 roots 组装）；② preset 组合是否 broken（agent.cordis.yml 行 `name: 'dsh-remote-ide/remote-tools'` 的解析）；③ 备选：行直接引用 `name: 'dsh-remote-ide'`
+- ⏳ 待验证：preset 出现后 agent 用 ssh_exec/ssh_read/ssh_write 在远程开发的端到端闭环
 - 🔜 后续候选：ssh_terminal（PTY 工具）、远程后台任务（ctx.jobs）、远程 grep；远期：远程 sandbox 后端（原生 bash 跑远程）
 
 ## 参考资料（本地）
