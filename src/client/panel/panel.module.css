@@ -1,5 +1,33 @@
-/* dsh-remote-ide panel styles. VSCode-like workbench, theme-aware via
-   prefers-color-scheme (the shell currently ships a dark theme by default). */
+/* dsh-remote-ide panel styles.
+   Theme-aware via the DSH official design tokens (--dsw-*): the alias
+   tokens switch with the shell theme (data-ds-dark-theme), so the panel
+   follows the host UI and the ecosystem plugins (better-sidebar et al.)
+   instead of defining its own palette. */
+
+/* Local aliases: map the panel's internal names onto the DSW platform so
+   the components can stay token-agnostic. Defined on the column AND the
+   panel root (the column hosts the tree while the panel owns the rest). */
+[data-dsh-remote-ide-col],
+.panel {
+  --ri-bg: var(--dsw-alias-bg-base, #1e1e1e);
+  --ri-fg: var(--dsw-static-neutral-bluish-900, #d4d4d4);
+  --ri-border: var(--dsw-alias-border-l2, #333);
+  --ri-border-soft: var(--dsw-alias-border-l1, #2a2a2a);
+  --ri-input-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-card-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-toolbar-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-tabbar-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-hover: var(--dsw-alias-bg-overlay, rgba(128, 128, 128, 0.12));
+  --ri-selected: var(--dsw-alias-brand-primary-new-colorprimary-new-color, #4176e6);
+  --ri-muted: var(--dsw-static-neutral-bluish-500, #8a8a8a);
+  --ri-muted-dim: var(--dsw-static-neutral-bluish-400, #6f6f6f);
+  --ri-accent: var(--dsw-alias-brand-primary-new-colorprimary-new-color, #4176e6);
+  --ri-accent-soft: rgba(65, 118, 230, 0.12);
+  --ri-ok: var(--dsw-static-green-500, #22c55e);
+  --ri-danger: var(--dsw-static-red-500, #ef4444);
+  --ri-warn: #d8a13c;
+  --ri-statusbar-bg: var(--dsw-static-deepseek-500, #4176e6);
+}
 
 /* Panel view container inside the right-side IDE column. */
 .view {
@@ -53,12 +81,12 @@
 }
 
 .entry:hover {
-  background: rgba(128, 128, 128, 0.12);
+  background: var(--ri-hover);
 }
 
 .entry[data-active='true'] {
-  background: rgba(80, 160, 255, 0.16);
-  color: #4da3ff;
+  background: var(--ri-accent-soft);
+  color: var(--ri-accent);
 }
 
 .entryIcon {
@@ -131,23 +159,23 @@
 }
 
 .stateConnected {
-  color: #4ec46c;
+  color: var(--ri-ok);
 }
 
 .stateConnecting {
-  color: #d8a13c;
+  color: var(--ri-warn);
 }
 
 .stateDisconnected {
-  color: #9a9a9a;
+  color: var(--ri-muted);
 }
 
 .stateFailed {
-  color: #e06c6c;
+  color: var(--ri-danger);
 }
 
 .errorText {
-  color: #e06c6c;
+  color: var(--ri-danger);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -180,9 +208,9 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: rgba(0, 122, 204, 0.12);
-  border: 1px solid rgba(0, 122, 204, 0.28);
-  color: #4da3ff;
+  background: var(--ri-accent-soft);
+  border: 1px solid var(--ri-accent);
+  color: var(--ri-accent);
   margin-bottom: 8px;
 }
 
@@ -239,7 +267,7 @@
 }
 
 .btn:hover {
-  background: rgba(128, 128, 128, 0.18);
+  background: var(--ri-hover);
 }
 
 .btn:disabled {
@@ -248,23 +276,23 @@
 }
 
 .btnPrimary {
-  border-color: #2d6fc3;
-  background: #1f4d8f;
+  border-color: var(--ri-accent);
+  background: var(--ri-accent);
   color: #fff;
 }
 
 .btnPrimary:hover {
-  background: #2a5fb0;
+  opacity: 0.88;
 }
 
 .btnDanger {
-  border-color: #a33;
-  background: #7a2626;
-  color: #fff;
+  border-color: var(--ri-danger);
+  background: transparent;
+  color: var(--ri-danger);
 }
 
 .btnDanger:hover {
-  background: #993030;
+  background: rgba(239, 68, 68, 0.14);
 }
 
 /* Icon-only button (compact square action). */
@@ -281,7 +309,7 @@
 }
 
 .btnGhost:hover {
-  background: rgba(128, 128, 128, 0.15);
+  background: var(--ri-hover);
 }
 
 /* -------------------------------------------------------------- workbench */
@@ -356,11 +384,11 @@
 }
 
 .treeRow:hover {
-  background: rgba(128, 128, 128, 0.12);
+  background: var(--ri-hover);
 }
 
 .treeRow.selected {
-  background: rgba(80, 160, 255, 0.18);
+  background: var(--ri-accent-soft);
 }
 
 .treeIndent {
@@ -456,7 +484,7 @@
 }
 
 .tabClose:hover {
-  background: rgba(128, 128, 128, 0.3);
+  background: var(--ri-hover);
 }
 
 .tabDirty {
@@ -488,18 +516,18 @@
 }
 
 .editorStatus.error {
-  color: #e06c6c;
+  color: var(--ri-danger);
 }
 
 .editorStatus.ok {
-  color: #4ec46c;
+  color: var(--ri-ok);
 }
 
 /* terminal */
 
 .terminalWrap {
   border-top: 1px solid var(--ri-border, #333);
-  background: #1e1e1e;
+  background: var(--ri-bg);
   display: flex;
   flex-direction: column;
   flex: none;
@@ -569,7 +597,7 @@
 }
 
 .hostCard:hover {
-  border-color: #4a6a8a;
+  border-color: var(--ri-accent);
 }
 
 .hostMain {
@@ -735,35 +763,3 @@
   white-space: nowrap;
 }
 
-/* light theme overrides */
-
-@media (prefers-color-scheme: light) {
-  .panel {
-    --ri-bg: #ffffff;
-    --ri-fg: #1f1f1f;
-    --ri-border: #d4d4d4;
-    --ri-input-bg: #f5f5f5;
-    --ri-card-bg: #fafafa;
-    --ri-tabbar-bg: #f3f3f3;
-    --ri-muted: #6f6f6f;
-  }
-  .terminalWrap,
-  .editorArea {
-    background: #ffffff;
-  }
-  .treeRow:hover {
-    background: rgba(0, 0, 0, 0.05);
-  }
-  .treeRow.selected {
-    background: rgba(80, 160, 255, 0.14);
-  }
-  .stateConnected {
-    background: rgba(35, 134, 54, 0.12);
-  }
-  .stateConnecting {
-    background: rgba(210, 153, 34, 0.14);
-  }
-  .stateFailed {
-    background: rgba(200, 60, 60, 0.12);
-  }
-}

@@ -3,7 +3,28 @@
  * editing src/client/panel/panel.module.css (wired into `pnpm build`).
  */
 /** Scoped CSS text; inject once via ensurePanelCss(). */
-export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
+export const panelCss = `[data-dsh-remote-ide-col], ._ri_16dhQq_panel {
+  --ri-bg: var(--dsw-alias-bg-base, #1e1e1e);
+  --ri-fg: var(--dsw-static-neutral-bluish-900, #d4d4d4);
+  --ri-border: var(--dsw-alias-border-l2, #333);
+  --ri-border-soft: var(--dsw-alias-border-l1, #2a2a2a);
+  --ri-input-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-card-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-toolbar-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-tabbar-bg: var(--dsw-alias-bg-module-platform, #252526);
+  --ri-hover: var(--dsw-alias-bg-overlay, #8080801f);
+  --ri-selected: var(--dsw-alias-brand-primary-new-colorprimary-new-color, #4176e6);
+  --ri-muted: var(--dsw-static-neutral-bluish-500, #8a8a8a);
+  --ri-muted-dim: var(--dsw-static-neutral-bluish-400, #6f6f6f);
+  --ri-accent: var(--dsw-alias-brand-primary-new-colorprimary-new-color, #4176e6);
+  --ri-accent-soft: #4176e61f;
+  --ri-ok: var(--dsw-static-green-500, #22c55e);
+  --ri-danger: var(--dsw-static-red-500, #ef4444);
+  --ri-warn: #d8a13c;
+  --ri-statusbar-bg: var(--dsw-static-deepseek-500, #4176e6);
+}
+
+._ri_16dhQq_view, ._ri_16dhQq_tabHost {
   flex-direction: column;
   height: 100%;
   min-height: 0;
@@ -47,12 +68,12 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_entry:hover {
-  background: #8080801f;
+  background: var(--ri-hover);
 }
 
 ._ri_16dhQq_entry[data-active="true"] {
-  color: #4da3ff;
-  background: #50a0ff29;
+  background: var(--ri-accent-soft);
+  color: var(--ri-accent);
 }
 
 ._ri_16dhQq_entryIcon {
@@ -120,23 +141,23 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_stateConnected {
-  color: #4ec46c;
+  color: var(--ri-ok);
 }
 
 ._ri_16dhQq_stateConnecting {
-  color: #d8a13c;
+  color: var(--ri-warn);
 }
 
 ._ri_16dhQq_stateDisconnected {
-  color: #9a9a9a;
+  color: var(--ri-muted);
 }
 
 ._ri_16dhQq_stateFailed {
-  color: #e06c6c;
+  color: var(--ri-danger);
 }
 
 ._ri_16dhQq_errorText {
-  color: #e06c6c;
+  color: var(--ri-danger);
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 420px;
@@ -161,14 +182,14 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_welcomeIconWrap {
-  color: #4da3ff;
-  background: #007acc1f;
-  border: 1px solid #007acc47;
+  background: var(--ri-accent-soft);
+  border: 1px solid var(--ri-accent);
+  width: 64px;
+  height: 64px;
+  color: var(--ri-accent);
   border-radius: 50%;
   justify-content: center;
   align-items: center;
-  width: 64px;
-  height: 64px;
   margin-bottom: 8px;
   display: flex;
 }
@@ -224,7 +245,7 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_btn:hover {
-  background: #8080802e;
+  background: var(--ri-hover);
 }
 
 ._ri_16dhQq_btn:disabled {
@@ -233,23 +254,23 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_btnPrimary {
+  border-color: var(--ri-accent);
+  background: var(--ri-accent);
   color: #fff;
-  background: #1f4d8f;
-  border-color: #2d6fc3;
 }
 
 ._ri_16dhQq_btnPrimary:hover {
-  background: #2a5fb0;
+  opacity: .88;
 }
 
 ._ri_16dhQq_btnDanger {
-  color: #fff;
-  background: #7a2626;
-  border-color: #a33;
+  border-color: var(--ri-danger);
+  color: var(--ri-danger);
+  background: none;
 }
 
 ._ri_16dhQq_btnDanger:hover {
-  background: #993030;
+  background: #ef444424;
 }
 
 ._ri_16dhQq_btnIcon {
@@ -265,7 +286,7 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_btnGhost:hover {
-  background: #80808026;
+  background: var(--ri-hover);
 }
 
 ._ri_16dhQq_workbench {
@@ -336,11 +357,11 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_treeRow:hover {
-  background: #8080801f;
+  background: var(--ri-hover);
 }
 
 ._ri_16dhQq_treeRow._ri_16dhQq_selected {
-  background: #50a0ff2e;
+  background: var(--ri-accent-soft);
 }
 
 ._ri_16dhQq_treeIndent {
@@ -434,7 +455,7 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_tabClose:hover {
-  background: #8080804d;
+  background: var(--ri-hover);
 }
 
 ._ri_16dhQq_tabDirty {
@@ -465,16 +486,16 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_editorStatus._ri_16dhQq_error {
-  color: #e06c6c;
+  color: var(--ri-danger);
 }
 
 ._ri_16dhQq_editorStatus._ri_16dhQq_ok {
-  color: #4ec46c;
+  color: var(--ri-ok);
 }
 
 ._ri_16dhQq_terminalWrap {
   border-top: 1px solid var(--ri-border, #333);
-  background: #1e1e1e;
+  background: var(--ri-bg);
   flex-direction: column;
   flex: none;
   display: flex;
@@ -541,7 +562,7 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_hostCard:hover {
-  border-color: #4a6a8a;
+  border-color: var(--ri-accent);
 }
 
 ._ri_16dhQq_hostMain {
@@ -701,126 +722,90 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
-}
-
-@media (prefers-color-scheme: light) {
-  ._ri_16dhQq_panel {
-    --ri-bg: #fff;
-    --ri-fg: #1f1f1f;
-    --ri-border: #d4d4d4;
-    --ri-input-bg: #f5f5f5;
-    --ri-card-bg: #fafafa;
-    --ri-tabbar-bg: #f3f3f3;
-    --ri-muted: #6f6f6f;
-  }
-
-  ._ri_16dhQq_terminalWrap, ._ri_16dhQq_editorArea {
-    background: #fff;
-  }
-
-  ._ri_16dhQq_treeRow:hover {
-    background: #0000000d;
-  }
-
-  ._ri_16dhQq_treeRow._ri_16dhQq_selected {
-    background: #50a0ff24;
-  }
-
-  ._ri_16dhQq_stateConnected {
-    background: #2386361f;
-  }
-
-  ._ri_16dhQq_stateConnecting {
-    background: #d2992224;
-  }
-
-  ._ri_16dhQq_stateFailed {
-    background: #c83c3c1f;
-  }
 }`
 /** Scoped class-name map (Lightning CSS CSS modules). */
 export const panelClasses = {
-  "hostName": "_ri_16dhQq_hostName",
-  "welcomeTitle": "_ri_16dhQq_welcomeTitle",
-  "hostAlias": "_ri_16dhQq_hostAlias",
-  "treeRow": "_ri_16dhQq_treeRow",
-  "dragging": "_ri_16dhQq_dragging",
-  "statusBar": "_ri_16dhQq_statusBar",
-  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
-  "hostMain": "_ri_16dhQq_hostMain",
-  "tabDirty": "_ri_16dhQq_tabDirty",
-  "hostActions": "_ri_16dhQq_hostActions",
-  "formInput": "_ri_16dhQq_formInput",
-  "entry": "_ri_16dhQq_entry",
-  "treeMeta": "_ri_16dhQq_treeMeta",
-  "statusItem": "_ri_16dhQq_statusItem",
-  "hostCard": "_ri_16dhQq_hostCard",
-  "envBadge": "_ri_16dhQq_envBadge",
-  "formSelect": "_ri_16dhQq_formSelect",
-  "workbench": "_ri_16dhQq_workbench",
-  "tabBar": "_ri_16dhQq_tabBar",
-  "explorerPath": "_ri_16dhQq_explorerPath",
-  "hostList": "_ri_16dhQq_hostList",
-  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
-  "entryIcon": "_ri_16dhQq_entryIcon",
   "btnIcon": "_ri_16dhQq_btnIcon",
-  "editorArea": "_ri_16dhQq_editorArea",
-  "ok": "_ri_16dhQq_ok",
-  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
-  "statePill": "_ri_16dhQq_statePill",
-  "xterm": "_ri_16dhQq_xterm",
-  "formLabel": "_ri_16dhQq_formLabel",
-  "errorText": "_ri_16dhQq_errorText",
-  "view": "_ri_16dhQq_view",
-  "terminalWrap": "_ri_16dhQq_terminalWrap",
-  "welcomeActions": "_ri_16dhQq_welcomeActions",
-  "btn": "_ri_16dhQq_btn",
-  "btnDanger": "_ri_16dhQq_btnDanger",
-  "treeName": "_ri_16dhQq_treeName",
-  "btnPrimary": "_ri_16dhQq_btnPrimary",
-  "dialog": "_ri_16dhQq_dialog",
-  "dialogTitle": "_ri_16dhQq_dialogTitle",
-  "welcomeIconWrap": "_ri_16dhQq_welcomeIconWrap",
-  "formActions": "_ri_16dhQq_formActions",
-  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
-  "spacer": "_ri_16dhQq_spacer",
+  "formSelect": "_ri_16dhQq_formSelect",
   "hostSelect": "_ri_16dhQq_hostSelect",
-  "stateConnected": "_ri_16dhQq_stateConnected",
-  "mainColumn": "_ri_16dhQq_mainColumn",
-  "welcome": "_ri_16dhQq_welcome",
-  "explorerBody": "_ri_16dhQq_explorerBody",
-  "formRow": "_ri_16dhQq_formRow",
-  "panel": "_ri_16dhQq_panel",
-  "explorerHeader": "_ri_16dhQq_explorerHeader",
-  "stateFailed": "_ri_16dhQq_stateFailed",
-  "editorStatus": "_ri_16dhQq_editorStatus",
-  "terminalBody": "_ri_16dhQq_terminalBody",
-  "overlay": "_ri_16dhQq_overlay",
-  "stateConnecting": "_ri_16dhQq_stateConnecting",
-  "terminalHeader": "_ri_16dhQq_terminalHeader",
-  "treeCaret": "_ri_16dhQq_treeCaret",
-  "placeholder": "_ri_16dhQq_placeholder",
-  "treeIcon": "_ri_16dhQq_treeIcon",
-  "explorer": "_ri_16dhQq_explorer",
-  "tabClose": "_ri_16dhQq_tabClose",
-  "keyBadge": "_ri_16dhQq_keyBadge",
-  "hostDetail": "_ri_16dhQq_hostDetail",
-  "terminalResize": "_ri_16dhQq_terminalResize",
-  "tabName": "_ri_16dhQq_tabName",
-  "active": "_ri_16dhQq_active",
-  "error": "_ri_16dhQq_error",
-  "tabHost": "_ri_16dhQq_tabHost",
-  "entryLabel": "_ri_16dhQq_entryLabel",
-  "welcomeText": "_ri_16dhQq_welcomeText",
-  "formRowInline": "_ri_16dhQq_formRowInline",
-  "toolbar": "_ri_16dhQq_toolbar",
+  "treeRow": "_ri_16dhQq_treeRow",
+  "btn": "_ri_16dhQq_btn",
+  "cm-editor": "_ri_16dhQq_cm-editor",
+  "dialog": "_ri_16dhQq_dialog",
+  "entry": "_ri_16dhQq_entry",
+  "hostMain": "_ri_16dhQq_hostMain",
+  "hostName": "_ri_16dhQq_hostName",
+  "welcomeActions": "_ri_16dhQq_welcomeActions",
   "tab": "_ri_16dhQq_tab",
-  "treeIndent": "_ri_16dhQq_treeIndent",
-  "welcomeHint": "_ri_16dhQq_welcomeHint",
-  "selected": "_ri_16dhQq_selected",
   "formError": "_ri_16dhQq_formError",
+  "statePill": "_ri_16dhQq_statePill",
+  "explorerHeader": "_ri_16dhQq_explorerHeader",
+  "mainColumn": "_ri_16dhQq_mainColumn",
+  "stateFailed": "_ri_16dhQq_stateFailed",
+  "keyBadge": "_ri_16dhQq_keyBadge",
+  "view": "_ri_16dhQq_view",
+  "xterm": "_ri_16dhQq_xterm",
+  "toolbar": "_ri_16dhQq_toolbar",
+  "formLabel": "_ri_16dhQq_formLabel",
+  "formRow": "_ri_16dhQq_formRow",
+  "stateConnected": "_ri_16dhQq_stateConnected",
+  "error": "_ri_16dhQq_error",
+  "tabClose": "_ri_16dhQq_tabClose",
+  "btnDanger": "_ri_16dhQq_btnDanger",
+  "hostCard": "_ri_16dhQq_hostCard",
+  "terminalBody": "_ri_16dhQq_terminalBody",
   "btnGhost": "_ri_16dhQq_btnGhost",
-  "cm-editor": "_ri_16dhQq_cm-editor"
+  "terminalWrap": "_ri_16dhQq_terminalWrap",
+  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
+  "formRowInline": "_ri_16dhQq_formRowInline",
+  "welcomeHint": "_ri_16dhQq_welcomeHint",
+  "panel": "_ri_16dhQq_panel",
+  "explorerPath": "_ri_16dhQq_explorerPath",
+  "placeholder": "_ri_16dhQq_placeholder",
+  "hostActions": "_ri_16dhQq_hostActions",
+  "treeName": "_ri_16dhQq_treeName",
+  "hostList": "_ri_16dhQq_hostList",
+  "treeCaret": "_ri_16dhQq_treeCaret",
+  "errorText": "_ri_16dhQq_errorText",
+  "formActions": "_ri_16dhQq_formActions",
+  "stateConnecting": "_ri_16dhQq_stateConnecting",
+  "welcomeIconWrap": "_ri_16dhQq_welcomeIconWrap",
+  "terminalResize": "_ri_16dhQq_terminalResize",
+  "dialogTitle": "_ri_16dhQq_dialogTitle",
+  "active": "_ri_16dhQq_active",
+  "explorerBody": "_ri_16dhQq_explorerBody",
+  "welcomeText": "_ri_16dhQq_welcomeText",
+  "welcome": "_ri_16dhQq_welcome",
+  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
+  "treeIndent": "_ri_16dhQq_treeIndent",
+  "editorStatus": "_ri_16dhQq_editorStatus",
+  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
+  "explorer": "_ri_16dhQq_explorer",
+  "tabName": "_ri_16dhQq_tabName",
+  "dragging": "_ri_16dhQq_dragging",
+  "terminalHeader": "_ri_16dhQq_terminalHeader",
+  "ok": "_ri_16dhQq_ok",
+  "spacer": "_ri_16dhQq_spacer",
+  "entryIcon": "_ri_16dhQq_entryIcon",
+  "tabBar": "_ri_16dhQq_tabBar",
+  "entryLabel": "_ri_16dhQq_entryLabel",
+  "btnPrimary": "_ri_16dhQq_btnPrimary",
+  "tabDirty": "_ri_16dhQq_tabDirty",
+  "treeMeta": "_ri_16dhQq_treeMeta",
+  "editorArea": "_ri_16dhQq_editorArea",
+  "selected": "_ri_16dhQq_selected",
+  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
+  "statusItem": "_ri_16dhQq_statusItem",
+  "treeIcon": "_ri_16dhQq_treeIcon",
+  "welcomeTitle": "_ri_16dhQq_welcomeTitle",
+  "overlay": "_ri_16dhQq_overlay",
+  "tabHost": "_ri_16dhQq_tabHost",
+  "envBadge": "_ri_16dhQq_envBadge",
+  "hostDetail": "_ri_16dhQq_hostDetail",
+  "formInput": "_ri_16dhQq_formInput",
+  "statusBar": "_ri_16dhQq_statusBar",
+  "hostAlias": "_ri_16dhQq_hostAlias",
+  "workbench": "_ri_16dhQq_workbench"
 }
 /** Idempotent <style> injection (one tag per page). */
 let panelCssInjected = false
