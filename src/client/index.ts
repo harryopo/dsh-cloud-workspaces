@@ -16,7 +16,6 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls the LocaleNamespaceMap merge table.
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { RemoteIdeApi } from './api'
-import { mountBetterSidebar } from './better-sidebar'
 import { IdeLayoutController } from './ide-layout'
 import { en, interpolate, zh, type RemoteIdeKey } from './locales'
 import { mountPanel } from './mount'
@@ -65,25 +64,10 @@ export function apply(ctx: ClientContext): void {
     layout.mount()
     disposers.push(() => layout.dispose())
     disposers.push(mountPanel(layout, api, t))
-    // Integration track: when dsh-better-sidebar is installed, register the
-    // Remote IDE tab in its workbench and make the sidebar entry open THAT
-    // tab (its explorer frame is the local explorer; one resource manager,
-    // no duplicated panels). The standalone column stays mounted as the
-    // fallback when better-sidebar is absent.
-    const betterSidebarDispose = mountBetterSidebar(ctx, api, t)
-    const prefersBetterSidebar = betterSidebarDispose !== undefined
-    if (betterSidebarDispose !== undefined) disposers.push(betterSidebarDispose)
-
     disposers.push(mountSidebarEntry({
       isOpen: () => layout.isOpen(),
       subscribe: (listener) => layout.subscribe(listener),
-      toggle: () => {
-        if (prefersBetterSidebar) {
-          openBetterSidebarTab(ctx)
-        } else {
-          layout.toggle()
-        }
-      },
+      toggle: () => layout.toggle(),
     }, t('entry.label'), t('entry.tooltip')))
   } catch (error) {
     // DOM failures degrade the panel, never the GUI.
@@ -92,10 +76,4 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => () => {
     for (const dispose of disposers.splice(0)) dispose()
   }, 'dsh-remote-ide: ui mounts')
-}
-
-/** Open the Remote IDE tab inside better-sidebar (no-op when absent). */
-function openBetterSidebarTab(ctx: ClientContext): void {
-  const service = (ctx.get('betterSidebar') as { openTab?: (seed: unknown) => void } | undefined)
-  service?.openTab?.({ type: 'dsh-remote-ide:workspace' })
 }
