@@ -3,6 +3,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RemoteDirEntry } from '../../protocol'
+import {
+  ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon,
+  PencilIcon, PlusIcon, RefreshIcon, SpinnerIcon, TrashIcon,
+} from './icons'
 import type { RemoteIdeApi } from '../api'
 import { basename, dirname, joinPath } from './helpers'
 import { ensurePanelCss, panelClasses as css } from './panel-css'
@@ -233,7 +237,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
           title={t('explorer.refresh')}
           onClick={() => void loadDir(root, true)}
         >
-          ↻
+          <RefreshIcon size={12} />
         </button>
         <button
           type="button"
@@ -241,7 +245,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
           title={t('explorer.newFile')}
           onClick={() => void createEntry('file')}
         >
-          +f
+          <PlusIcon size={12} />
         </button>
         <button
           type="button"
@@ -249,7 +253,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
           title={t('explorer.newFolder')}
           onClick={() => void createEntry('dir')}
         >
-          +d
+          <PlusIcon size={12} />
         </button>
       </div>
       <div className={css.explorerPath} title={root}>{root}</div>
@@ -272,10 +276,10 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
           >
             <span className={css.treeCaret}>
               {row.entry.type === 'dir'
-                ? (row.expanded ? '▾' : row.loading ? '…' : '▸')
+                ? (row.expanded ? <ChevronDownIcon size={10} /> : row.loading ? <SpinnerIcon size={10} /> : <ChevronRightIcon size={10} />)
                 : <span className={css.placeholder}>·</span>}
             </span>
-            <span className={css.treeIcon}>{row.entry.type === 'dir' ? '📁' : '📄'}</span>
+            <span className={css.treeIcon}>{row.entry.type === 'dir' ? <FolderIcon size={12} /> : <FileIcon size={12} />}</span>
             {renaming === row.path ? (
               <input
                 className={css.formInput}
@@ -306,7 +310,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
                     setRenameValue(row.name)
                   }}
                 >
-                  ✎
+                  <PencilIcon size={11} />
                 </span>
                 <span
                   className={css.treeMeta}
@@ -317,7 +321,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
                     void deletePath(row.path)
                   }}
                 >
-                  🗑
+                  <TrashIcon size={11} />
                 </span>
               </>
             )}

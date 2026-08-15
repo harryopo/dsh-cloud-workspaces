@@ -81,56 +81,58 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 
 ._ri_16dhQq_toolbar {
   border-bottom: 1px solid var(--ri-border, #333);
+  background: var(--ri-toolbar-bg, #252526);
   flex-wrap: wrap;
   flex: none;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 4px 8px;
   display: flex;
 }
 
 ._ri_16dhQq_toolbarTitle {
+  color: var(--ri-fg, #d4d4d4);
   margin-right: 4px;
   font-weight: 600;
 }
 
 ._ri_16dhQq_hostSelect {
-  border: 1px solid var(--ri-border, #444);
+  border: 1px solid var(--ri-border, #3c3c3c);
   background: var(--ri-input-bg, #252526);
-  min-width: 160px;
-  max-width: 260px;
+  min-width: 150px;
+  max-width: 240px;
   color: inherit;
   font: inherit;
-  border-radius: 4px;
-  padding: 3px 8px;
+  border-radius: 3px;
+  padding: 2px 6px;
   font-size: 12px;
+}
+
+._ri_16dhQq_hostSelect:focus {
+  border-color: #007acc;
+  outline: none;
 }
 
 ._ri_16dhQq_statePill {
   white-space: nowrap;
-  border-radius: 10px;
-  padding: 1px 8px;
+  color: var(--ri-muted, #9a9a9a);
   font-size: 11px;
 }
 
 ._ri_16dhQq_stateConnected {
   color: #4ec46c;
-  background: #23863640;
 }
 
 ._ri_16dhQq_stateConnecting {
   color: #d8a13c;
-  background: #d2992238;
 }
 
 ._ri_16dhQq_stateDisconnected {
   color: #9a9a9a;
-  background: #8080802e;
 }
 
 ._ri_16dhQq_stateFailed {
   color: #e06c6c;
-  background: #c83c3c38;
 }
 
 ._ri_16dhQq_errorText {
@@ -488,12 +490,12 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_hostCard {
-  border: 1px solid var(--ri-border, #333);
+  border: 1px solid var(--ri-border, #2f2f2f);
   background: var(--ri-card-bg, #252526);
-  border-radius: 6px;
+  border-radius: 4px;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 5px 8px;
   display: flex;
 }
 
@@ -637,14 +639,21 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }
 
 ._ri_16dhQq_statusBar {
-  border-top: 1px solid var(--ri-border, #333);
-  color: var(--ri-muted, #8a8a8a);
+  background: var(--ri-statusbar-bg, #007acc);
+  color: #fff;
   flex: none;
   align-items: center;
   gap: 12px;
-  padding: 3px 10px;
+  padding: 2px 10px;
   font-size: 11px;
   display: flex;
+}
+
+@media (prefers-color-scheme: light) {
+  ._ri_16dhQq_statusBar {
+    background: var(--ri-statusbar-bg, #007acc);
+    color: #fff;
+  }
 }
 
 ._ri_16dhQq_statusItem {
@@ -690,84 +699,84 @@ export const panelCss = `._ri_16dhQq_view, ._ri_16dhQq_tabHost {
 }`
 /** Scoped class-name map (Lightning CSS CSS modules). */
 export const panelClasses = {
-  "welcomeText": "_ri_16dhQq_welcomeText",
-  "formActions": "_ri_16dhQq_formActions",
-  "hostMain": "_ri_16dhQq_hostMain",
-  "welcome": "_ri_16dhQq_welcome",
-  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
-  "entryIcon": "_ri_16dhQq_entryIcon",
-  "stateConnecting": "_ri_16dhQq_stateConnecting",
-  "cm-editor": "_ri_16dhQq_cm-editor",
-  "active": "_ri_16dhQq_active",
-  "formInput": "_ri_16dhQq_formInput",
-  "tabHost": "_ri_16dhQq_tabHost",
-  "welcomeIcon": "_ri_16dhQq_welcomeIcon",
-  "treeRow": "_ri_16dhQq_treeRow",
-  "formRow": "_ri_16dhQq_formRow",
-  "errorText": "_ri_16dhQq_errorText",
-  "mainColumn": "_ri_16dhQq_mainColumn",
-  "terminalBody": "_ri_16dhQq_terminalBody",
-  "explorerBody": "_ri_16dhQq_explorerBody",
-  "tab": "_ri_16dhQq_tab",
-  "statusItem": "_ri_16dhQq_statusItem",
-  "hostDetail": "_ri_16dhQq_hostDetail",
-  "formLabel": "_ri_16dhQq_formLabel",
-  "spacer": "_ri_16dhQq_spacer",
-  "treeName": "_ri_16dhQq_treeName",
-  "stateConnected": "_ri_16dhQq_stateConnected",
-  "stateFailed": "_ri_16dhQq_stateFailed",
   "statusBar": "_ri_16dhQq_statusBar",
-  "explorer": "_ri_16dhQq_explorer",
-  "treeIndent": "_ri_16dhQq_treeIndent",
-  "btnDanger": "_ri_16dhQq_btnDanger",
-  "tabDirty": "_ri_16dhQq_tabDirty",
-  "toolbar": "_ri_16dhQq_toolbar",
-  "tabClose": "_ri_16dhQq_tabClose",
-  "welcomeTitle": "_ri_16dhQq_welcomeTitle",
-  "hostName": "_ri_16dhQq_hostName",
-  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
-  "terminalResize": "_ri_16dhQq_terminalResize",
-  "btnPrimary": "_ri_16dhQq_btnPrimary",
-  "terminalWrap": "_ri_16dhQq_terminalWrap",
-  "terminalHeader": "_ri_16dhQq_terminalHeader",
-  "hostAlias": "_ri_16dhQq_hostAlias",
-  "btnGhost": "_ri_16dhQq_btnGhost",
-  "formSelect": "_ri_16dhQq_formSelect",
+  "formRow": "_ri_16dhQq_formRow",
+  "hostList": "_ri_16dhQq_hostList",
+  "stateConnected": "_ri_16dhQq_stateConnected",
   "view": "_ri_16dhQq_view",
-  "envBadge": "_ri_16dhQq_envBadge",
-  "keyBadge": "_ri_16dhQq_keyBadge",
-  "dragging": "_ri_16dhQq_dragging",
-  "explorerHeader": "_ri_16dhQq_explorerHeader",
-  "ok": "_ri_16dhQq_ok",
   "btn": "_ri_16dhQq_btn",
-  "statePill": "_ri_16dhQq_statePill",
-  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
+  "keyBadge": "_ri_16dhQq_keyBadge",
+  "entry": "_ri_16dhQq_entry",
+  "tabHost": "_ri_16dhQq_tabHost",
+  "spacer": "_ri_16dhQq_spacer",
+  "toolbar": "_ri_16dhQq_toolbar",
   "entryLabel": "_ri_16dhQq_entryLabel",
+  "statePill": "_ri_16dhQq_statePill",
+  "hostSelect": "_ri_16dhQq_hostSelect",
+  "btnPrimary": "_ri_16dhQq_btnPrimary",
+  "treeMeta": "_ri_16dhQq_treeMeta",
+  "editorArea": "_ri_16dhQq_editorArea",
   "treeIcon": "_ri_16dhQq_treeIcon",
+  "cm-editor": "_ri_16dhQq_cm-editor",
+  "error": "_ri_16dhQq_error",
+  "hostCard": "_ri_16dhQq_hostCard",
+  "dialog": "_ri_16dhQq_dialog",
+  "formInput": "_ri_16dhQq_formInput",
+  "welcomeTitle": "_ri_16dhQq_welcomeTitle",
+  "tab": "_ri_16dhQq_tab",
+  "ok": "_ri_16dhQq_ok",
+  "panel": "_ri_16dhQq_panel",
+  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
+  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
+  "treeCaret": "_ri_16dhQq_treeCaret",
+  "explorerPath": "_ri_16dhQq_explorerPath",
+  "hostName": "_ri_16dhQq_hostName",
+  "explorerHeader": "_ri_16dhQq_explorerHeader",
+  "welcomeIcon": "_ri_16dhQq_welcomeIcon",
+  "btnDanger": "_ri_16dhQq_btnDanger",
+  "hostMain": "_ri_16dhQq_hostMain",
+  "mainColumn": "_ri_16dhQq_mainColumn",
+  "placeholder": "_ri_16dhQq_placeholder",
+  "terminalResize": "_ri_16dhQq_terminalResize",
+  "welcomeText": "_ri_16dhQq_welcomeText",
+  "welcome": "_ri_16dhQq_welcome",
+  "terminalWrap": "_ri_16dhQq_terminalWrap",
+  "explorerBody": "_ri_16dhQq_explorerBody",
+  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
+  "tabClose": "_ri_16dhQq_tabClose",
+  "treeRow": "_ri_16dhQq_treeRow",
+  "explorer": "_ri_16dhQq_explorer",
+  "treeName": "_ri_16dhQq_treeName",
   "tabBar": "_ri_16dhQq_tabBar",
   "tabName": "_ri_16dhQq_tabName",
-  "editorArea": "_ri_16dhQq_editorArea",
-  "editorStatus": "_ri_16dhQq_editorStatus",
-  "placeholder": "_ri_16dhQq_placeholder",
-  "error": "_ri_16dhQq_error",
-  "dialog": "_ri_16dhQq_dialog",
-  "dialogTitle": "_ri_16dhQq_dialogTitle",
-  "entry": "_ri_16dhQq_entry",
-  "formError": "_ri_16dhQq_formError",
-  "toolbarTitle": "_ri_16dhQq_toolbarTitle",
+  "hostAlias": "_ri_16dhQq_hostAlias",
+  "stateFailed": "_ri_16dhQq_stateFailed",
+  "entryIcon": "_ri_16dhQq_entryIcon",
   "xterm": "_ri_16dhQq_xterm",
-  "treeMeta": "_ri_16dhQq_treeMeta",
-  "treeCaret": "_ri_16dhQq_treeCaret",
-  "hostList": "_ri_16dhQq_hostList",
-  "workbench": "_ri_16dhQq_workbench",
-  "hostCard": "_ri_16dhQq_hostCard",
-  "panel": "_ri_16dhQq_panel",
+  "dialogTitle": "_ri_16dhQq_dialogTitle",
+  "active": "_ri_16dhQq_active",
+  "formLabel": "_ri_16dhQq_formLabel",
   "hostActions": "_ri_16dhQq_hostActions",
+  "formActions": "_ri_16dhQq_formActions",
+  "formSelect": "_ri_16dhQq_formSelect",
+  "terminalHeader": "_ri_16dhQq_terminalHeader",
+  "statusItem": "_ri_16dhQq_statusItem",
+  "formRowInline": "_ri_16dhQq_formRowInline",
+  "dragging": "_ri_16dhQq_dragging",
+  "stateConnecting": "_ri_16dhQq_stateConnecting",
+  "editorStatus": "_ri_16dhQq_editorStatus",
+  "treeIndent": "_ri_16dhQq_treeIndent",
   "selected": "_ri_16dhQq_selected",
-  "hostSelect": "_ri_16dhQq_hostSelect",
+  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
+  "envBadge": "_ri_16dhQq_envBadge",
+  "btnGhost": "_ri_16dhQq_btnGhost",
+  "terminalBody": "_ri_16dhQq_terminalBody",
+  "formError": "_ri_16dhQq_formError",
+  "errorText": "_ri_16dhQq_errorText",
   "overlay": "_ri_16dhQq_overlay",
-  "explorerPath": "_ri_16dhQq_explorerPath",
-  "formRowInline": "_ri_16dhQq_formRowInline"
+  "workbench": "_ri_16dhQq_workbench",
+  "tabDirty": "_ri_16dhQq_tabDirty",
+  "hostDetail": "_ri_16dhQq_hostDetail"
 }
 /** Idempotent <style> injection (one tag per page). */
 let panelCssInjected = false

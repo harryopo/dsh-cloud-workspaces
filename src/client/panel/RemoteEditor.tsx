@@ -16,6 +16,7 @@ import { defaultKeymap } from '@codemirror/commands'
 import type { RemoteFileContent } from '../../protocol'
 import type { RemoteIdeApi } from '../api'
 import { basename } from './helpers'
+import { SaveIcon } from './icons'
 import { ensurePanelCss, panelClasses as css } from './panel-css'
 
 export interface RemoteEditorProps {
@@ -156,7 +157,7 @@ export function RemoteEditor(props: RemoteEditorProps): React.ReactElement {
           style={{ position: 'absolute', top: 8, right: 8, zIndex: 5 }}
           onClick={() => void saveFile()}
         >
-          💾 {t('host.form.save')}
+          <SaveIcon size={12} /> {t('host.form.save')}
         </button>
       )}
     </div>

@@ -8,6 +8,7 @@ import type { RemoteIdeApi } from '../api'
 import type { TerminalClientFrame, TerminalServerFrame } from '../../protocol'
 import { ensurePanelCss, panelClasses as css } from './panel-css'
 import { xtermCss } from './xterm.css'
+import { CloseIcon, TerminalIcon } from './icons'
 
 export interface RemoteTerminalProps {
   api: RemoteIdeApi
@@ -154,7 +155,7 @@ export function RemoteTerminal(props: RemoteTerminalProps): React.ReactElement {
   return (
     <div className={css.terminalWrap} style={{ height: 220 }}>
       <div className={css.terminalHeader}>
-        <span>⛶ {t('terminal.title')} #{id}</span>
+        <span><TerminalIcon size={12} /> {t('terminal.title')} #{id}</span>
         <span className={css.spacer} />
         <button
           type="button"
@@ -162,7 +163,7 @@ export function RemoteTerminal(props: RemoteTerminalProps): React.ReactElement {
           title={t('terminal.close')}
           onClick={() => onExited(id)}
         >
-          ✕
+          <CloseIcon size={11} />
         </button>
       </div>
       <div className={css.terminalBody}>

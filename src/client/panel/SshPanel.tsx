@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SshHostSummary, WorkspaceStatus } from '../../protocol'
 import { pollStatus, type RemoteIdeApi } from '../api'
 import { basename } from './helpers'
+import { ImportIcon, KeyIcon, LockIcon, MonitorIcon } from './icons'
 import { HostFormDialog } from './HostFormDialog'
 import { RemoteEditor } from './RemoteEditor'
 import { RemoteExplorer } from './RemoteExplorer'
@@ -253,7 +254,7 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
                 title={t('hosts.import')}
                 onClick={() => void importConfig()}
               >
-                ⇩
+                <ImportIcon size={12} />
               </button>
             </div>
             <div className={css.explorerBody}>
@@ -286,11 +287,11 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
                       {host.environment !== undefined && host.environment !== '' && (
                         <span className={css.envBadge}>{host.environment}</span>
                       )}
-                      <span className={css.keyBadge}>{host.auth === 'key' ? '🔑' : '🔒'}</span>
+                      <span className={css.keyBadge}>{host.auth === 'key' ? <KeyIcon size={10} /> : <LockIcon size={10} />}</span>
                     </div>
                     <div className={css.hostDetail}>
                       {host.user}@{host.host}:{host.port}
-                      {host.proxyJump.length > 0 && ` · ↪ ${host.proxyJump.join(',')}`}
+                      {host.proxyJump.length > 0 && ` · -> ${host.proxyJump.join(',')}`}
                       {testResult[host.alias] !== undefined && ` · ${testResult[host.alias]}`}
                     </div>
                   </div>
@@ -360,7 +361,7 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
               />
             ) : (
               <div className={css.welcome}>
-                <div className={css.welcomeIcon}>🖥️</div>
+                <div className={css.welcomeIcon}><MonitorIcon size={36} /></div>
                 <div className={css.welcomeTitle}>{t('panel.title')}</div>
                 <div className={css.welcomeText}>
                   {connected

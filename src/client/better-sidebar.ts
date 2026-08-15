@@ -19,6 +19,7 @@ import type { WorkspaceStatus } from '../protocol'
 import type { RemoteIdeApi } from './api'
 import { SshPanel } from './panel/SshPanel'
 import { panelClasses as css } from './panel/panel-css'
+import { MonitorIcon } from './panel/icons'
 
 /** Better-sidebar service shape (avoid depending on its runtime exports). */
 interface BetterSidebarLike {
@@ -59,7 +60,7 @@ export function mountBetterSidebar(
     disposers.push(service.registerTab({
       id: 'dsh-remote-ide:workspace',
       title: () => t('entry.label'),
-      icon: createElement('span', { style: { fontSize: 14 } }, '🖥️'),
+      icon: createElement(MonitorIcon),
       order: 60,
       single: true,
       component: () => createElement(RemoteIdeTab, { api, t }),
