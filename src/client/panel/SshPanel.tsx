@@ -53,8 +53,10 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
 
   useEffect(() => {
     void refreshHosts()
-    // Poll the workspace status (covers reconnects and external disconnects).
-    const stop = pollStatus(api, 5000, setStatus)
+    // Poll the workspace status at a low frequency (covers reconnects and
+    // external disconnects; connection-driven state changes come from the
+    // connect/disconnect responses themselves).
+    const stop = pollStatus(api, 15000, setStatus)
     return stop
   }, [api, refreshHosts])
 

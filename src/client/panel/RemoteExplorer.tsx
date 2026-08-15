@@ -63,10 +63,17 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
     setState(prev => ({ ...prev, version: prev.version + 1 }))
   }, [])
 
+  // Loading bookkeeping lives in a ref: loadDir must be referentially stable
+  // (it feeds a mount effect) — reading state.loading inside the callback
+  // would rebuild the callback on every setState and re-run the effect in a
+  // loop.
+  const loadingRef = useRef(new Set<string>())
+
   /** Load one directory's children (cached; force refreshes). */
   const loadDir = useCallback(async (path: string, force = false): Promise<void> => {
-    if (!force && (childrenCache.current.has(path) || state.loading.has(path))) return
+    if (!force && (childrenCache.current.has(path) || loadingRef.current.has(path))) return
     const seq = ++requestSeq.current
+    loadingRef.current.add(path)
     setState(prev => {
       const loading = new Set(prev.loading)
       loading.add(path)
@@ -78,6 +85,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
       const entries = await api.ls(path, alias)
       if (seq !== requestSeq.current) return
       childrenCache.current.set(path, entries)
+      loadingRef.current.delete(path)
       setState(prev => {
         const loading = new Set(prev.loading)
         loading.delete(path)
@@ -85,6 +93,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
       })
     } catch (error) {
       if (seq !== requestSeq.current) return
+      loadingRef.current.delete(path)
       setState(prev => {
         const loading = new Set(prev.loading)
         loading.delete(path)
@@ -94,7 +103,7 @@ export function RemoteExplorer(props: RemoteExplorerProps): React.ReactElement {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, alias, state.loading])
+  }, [api, alias])
 
   /** Expand or collapse a directory. */
   const toggleDir = useCallback((path: string): void => {

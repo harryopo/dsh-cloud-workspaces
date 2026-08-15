@@ -9,10 +9,17 @@
  *
  * The row is plain DOM (no React tree) so it can never disturb the shell's
  * reconciliation; the panel view it toggles is a separate React root mounted
- * in the right-side IDE column (see mount.tsx).
+ * in the right-side IDE column (see mount.tsx), or a better-sidebar tab when
+ * the integration track is active.
  */
-import type { IdeLayoutController } from './ide-layout'
 import { ensurePanelCss, panelClasses as css } from './panel/panel-css'
+
+/** Toggle surface the entry drives (layout column or better-sidebar tab). */
+export interface SidebarEntryController {
+  isOpen(): boolean
+  subscribe(listener: () => void): () => void
+  toggle(): void
+}
 
 /** Stable data attribute identifying the injected entry row. */
 export const ENTRY_SELECTOR = '[data-dsh-remote-ide-entry]'
@@ -39,7 +46,7 @@ function newSessionButton(root: HTMLElement): HTMLButtonElement | undefined {
 }
 
 /** Build the entry row (a detached button; insert once the shell is up). */
-function createEntry(layout: IdeLayoutController, label: string, tooltip: string): HTMLButtonElement {
+function createEntry(controller: SidebarEntryController, label: string, tooltip: string): HTMLButtonElement {
   const entry = document.createElement('button')
   entry.type = 'button'
   entry.dataset.dshRemoteIdeEntry = ''
@@ -47,7 +54,7 @@ function createEntry(layout: IdeLayoutController, label: string, tooltip: string
   entry.setAttribute('aria-label', label)
   entry.setAttribute('title', tooltip)
   entry.innerHTML = '<span class="' + css.entryIcon + '">' + ICON + '</span><span class="' + css.entryLabel + '">' + label + '</span>'
-  entry.addEventListener('click', () => { layout.toggle() })
+  entry.addEventListener('click', () => { controller.toggle() })
   return entry
 }
 
@@ -73,15 +80,16 @@ function placeEntry(root: HTMLElement, entry: HTMLButtonElement): boolean {
 /**
  * Mount the sidebar entry, waiting for the shell to render and self-healing
  * on later React re-renders.
- * @param layout - the layout controller the entry toggles.
+ * @param controller - the toggle surface (layout column or better-sidebar tab).
  * @param label - entry label text.
  * @param tooltip - entry tooltip text.
  * @returns disposer removing the entry and its observers.
  */
-export function mountSidebarEntry(layout: IdeLayoutController, label: string, tooltip: string): () => void {
-  const entry = createEntry(layout, label, tooltip)
+export function mountSidebarEntry(controller: SidebarEntryController, label: string, tooltip: string): () => void {
+  const entry = createEntry(controller, label, tooltip)
   let root: HTMLElement | undefined
   let placed = false
+  let waitTimer: ReturnType<typeof setInterval> | undefined
 
   const tryPlace = (): void => {
     if (root !== undefined && !root.isConnected) {
@@ -99,12 +107,16 @@ export function mountSidebarEntry(layout: IdeLayoutController, label: string, to
     if (root === undefined) return
     placed = placeEntry(root, entry)
     if (placed) {
+      // The entry is in the tree: stop the discovery poll and let the
+      // root-scoped observer keep it in place (cheap; no body-level
+      // subtree watching that would fire on every chat mutation).
+      if (waitTimer !== undefined) {
+        clearInterval(waitTimer)
+        waitTimer = undefined
+      }
       rootObserver.observe(root, { childList: true, subtree: true })
     }
   }
-
-  const waitObserver = new MutationObserver(() => { tryPlace() })
-  waitObserver.observe(document.body, { childList: true, subtree: true })
 
   const rootObserver = new MutationObserver(() => {
     if (root === undefined || !root.isConnected) {
@@ -118,16 +130,20 @@ export function mountSidebarEntry(layout: IdeLayoutController, label: string, to
   })
 
   const syncActive = (): void => {
-    if (layout.isOpen()) entry.dataset.active = 'true'
+    if (controller.isOpen()) entry.dataset.active = 'true'
     else delete entry.dataset.active
   }
-  const unsubscribe = layout.subscribe(syncActive)
+  const unsubscribe = controller.subscribe(syncActive)
   syncActive()
 
+  // Poll for the sidebar shell instead of observing document.body: the shell
+  // re-renders constantly while a session streams, and a subtree observer
+  // would run on every mutation. Once placed, the poll stops (see tryPlace).
   tryPlace()
+  waitTimer = setInterval(tryPlace, 500)
 
   return () => {
-    waitObserver.disconnect()
+    if (waitTimer !== undefined) clearInterval(waitTimer)
     rootObserver.disconnect()
     unsubscribe()
     entry.remove()

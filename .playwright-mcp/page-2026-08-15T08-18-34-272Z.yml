@@ -1,0 +1,66 @@
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - button "新建会话" [ref=e9] [cursor=pointer]
+        - button "收起侧边栏" [ref=e31] [cursor=pointer]
+      - button "新建会话" [ref=e34] [cursor=pointer]:
+        - generic [ref=e37]: 新会话
+      - button "远程 IDE" [ref=e38] [cursor=pointer]
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - generic [ref=e50]: 工作区
+          - generic [ref=e52]:
+            - button "搜索会话" [ref=e53] [cursor=pointer]
+            - textbox "搜索会话…"
+          - generic [ref=e57]:
+            - button "视图选项" [ref=e59] [cursor=pointer]
+            - button "添加工作区" [ref=e62] [cursor=pointer]
+        - tree "会话" [ref=e68]:
+          - generic [ref=e69]:
+            - treeitem "linux ide" [expanded] [ref=e71] [cursor=pointer]
+            - treeitem "你好 4小时" [ref=e79] [cursor=pointer]:
+              - generic [ref=e81]: 你好
+              - generic [ref=e82]: 4小时
+            - treeitem "新会话" [selected] [ref=e84] [cursor=pointer]
+          - treeitem "deepseek harness" [ref=e89] [cursor=pointer]
+          - treeitem "三下乡" [ref=e97] [cursor=pointer]
+      - button "设置" [ref=e106] [cursor=pointer]
+    - generic [ref=e120]:
+      - generic [ref=e123]:
+        - generic [ref=e127]: 探索未至之境
+        - generic [ref=e128]: 预览版
+      - generic [ref=e129]:
+        - button "选择工作区" [ref=e130] [cursor=pointer]:
+          - generic [ref=e134]: linux ide
+        - button "标准模式" [ref=e139] [cursor=pointer]
+      - generic [ref=e149]:
+        - textbox "描述你想要构建的内容" [active] [ref=e152]
+        - generic [ref=e153]:
+          - generic [ref=e154]:
+            - button "命令" [ref=e155] [cursor=pointer]
+            - button "访问模式，当前：Full access" [ref=e160] [cursor=pointer]:
+              - generic [ref=e166]: Full access
+          - generic [ref=e170]:
+            - button "选择模型" [ref=e173] [cursor=pointer]
+            - button "发送消息" [disabled] [ref=e177]
+    - generic [ref=e181]:
+      - generic [ref=e182]:
+        - generic: 详情
+        - button "关闭详情" [ref=e183] [cursor=pointer]
+      - generic [ref=e186]: 点击消息流中的工具行查看详情
+    - option "未连接" [selected]
+  - generic:
+    - generic [ref=e188]:
+      - button "展开底部面板" [ref=e189] [cursor=pointer]
+      - button "折叠侧边栏" [ref=e193] [cursor=pointer]
+    - generic [ref=e201]:
+      - generic [ref=e203]:
+        - generic "Explorer" [ref=e204] [cursor=pointer]:
+          - button "关闭" [ref=e209]
+        - button "新建标签页" [ref=e213] [cursor=pointer]
+      - generic [ref=e218]:
+        - generic [ref=e219]:
+          - generic "D:\\ai\\deepseek harness\\linux ide" [ref=e220]: linux ide
+          - button "刷新" [ref=e221] [cursor=pointer]
+        - generic [ref=e224]: linux ide
