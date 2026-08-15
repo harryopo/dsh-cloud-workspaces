@@ -57,9 +57,9 @@ export function trackPx(track: string): number {
 }
 
 /** Width knobs. */
-export const DEFAULT_IDE_WIDTH_PX = 480
-export const MIN_IDE_WIDTH_PX = 320
-export const MAX_IDE_WIDTH_PX = 900
+export const DEFAULT_IDE_WIDTH_PX = 640
+export const MIN_IDE_WIDTH_PX = 400
+export const MAX_IDE_WIDTH_PX = 1000
 export const IDE_HANDLE_WIDTH = 12
 const WIDTH_STORAGE_KEY = 'dsh-remote-ide:width'
 

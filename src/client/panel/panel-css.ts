@@ -701,21 +701,69 @@ export const panelCss = `[data-dsh-remote-ide-col], ._ri_16dhQq_panel {
 }
 
 ._ri_16dhQq_statusBar {
-  background: var(--ri-statusbar-bg, #007acc);
+  background: var(--ri-statusbar-bg, #4176e6);
   color: #fff;
   flex: none;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 2px 10px;
   font-size: 11px;
   display: flex;
 }
 
-@media (prefers-color-scheme: light) {
-  ._ri_16dhQq_statusBar {
-    background: var(--ri-statusbar-bg, #007acc);
-    color: #fff;
-  }
+._ri_16dhQq_stateDot {
+  border-radius: 50%;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+}
+
+._ri_16dhQq_stateDot._ri_16dhQq_stateConnected {
+  background: var(--ri-ok);
+}
+
+._ri_16dhQq_stateDot._ri_16dhQq_stateConnecting {
+  background: var(--ri-warn);
+}
+
+._ri_16dhQq_stateDot._ri_16dhQq_stateDisconnected {
+  background: var(--ri-muted);
+}
+
+._ri_16dhQq_stateDot._ri_16dhQq_stateFailed {
+  background: var(--ri-danger);
+}
+
+._ri_16dhQq_statusBtn {
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  display: inline-flex;
+}
+
+._ri_16dhQq_statusBtn:hover {
+  background: #ffffff2e;
+}
+
+._ri_16dhQq_statusBtn:disabled {
+  opacity: .6;
+  cursor: default;
+}
+
+._ri_16dhQq_statusBar ._ri_16dhQq_hostSelect {
+  color: #fff;
+  background: #ffffff1f;
+  border-color: #ffffff59;
+  max-width: 180px;
 }
 
 ._ri_16dhQq_statusItem {
@@ -725,87 +773,89 @@ export const panelCss = `[data-dsh-remote-ide-col], ._ri_16dhQq_panel {
 }`
 /** Scoped class-name map (Lightning CSS CSS modules). */
 export const panelClasses = {
-  "btnIcon": "_ri_16dhQq_btnIcon",
-  "formSelect": "_ri_16dhQq_formSelect",
-  "hostSelect": "_ri_16dhQq_hostSelect",
-  "treeRow": "_ri_16dhQq_treeRow",
-  "btn": "_ri_16dhQq_btn",
-  "cm-editor": "_ri_16dhQq_cm-editor",
-  "dialog": "_ri_16dhQq_dialog",
-  "entry": "_ri_16dhQq_entry",
-  "hostMain": "_ri_16dhQq_hostMain",
   "hostName": "_ri_16dhQq_hostName",
-  "welcomeActions": "_ri_16dhQq_welcomeActions",
-  "tab": "_ri_16dhQq_tab",
-  "formError": "_ri_16dhQq_formError",
-  "statePill": "_ri_16dhQq_statePill",
-  "explorerHeader": "_ri_16dhQq_explorerHeader",
-  "mainColumn": "_ri_16dhQq_mainColumn",
-  "stateFailed": "_ri_16dhQq_stateFailed",
-  "keyBadge": "_ri_16dhQq_keyBadge",
-  "view": "_ri_16dhQq_view",
-  "xterm": "_ri_16dhQq_xterm",
-  "toolbar": "_ri_16dhQq_toolbar",
-  "formLabel": "_ri_16dhQq_formLabel",
-  "formRow": "_ri_16dhQq_formRow",
-  "stateConnected": "_ri_16dhQq_stateConnected",
-  "error": "_ri_16dhQq_error",
-  "tabClose": "_ri_16dhQq_tabClose",
-  "btnDanger": "_ri_16dhQq_btnDanger",
-  "hostCard": "_ri_16dhQq_hostCard",
-  "terminalBody": "_ri_16dhQq_terminalBody",
-  "btnGhost": "_ri_16dhQq_btnGhost",
-  "terminalWrap": "_ri_16dhQq_terminalWrap",
   "toolbarTitle": "_ri_16dhQq_toolbarTitle",
-  "formRowInline": "_ri_16dhQq_formRowInline",
-  "welcomeHint": "_ri_16dhQq_welcomeHint",
-  "panel": "_ri_16dhQq_panel",
-  "explorerPath": "_ri_16dhQq_explorerPath",
-  "placeholder": "_ri_16dhQq_placeholder",
-  "hostActions": "_ri_16dhQq_hostActions",
-  "treeName": "_ri_16dhQq_treeName",
-  "hostList": "_ri_16dhQq_hostList",
-  "treeCaret": "_ri_16dhQq_treeCaret",
-  "errorText": "_ri_16dhQq_errorText",
   "formActions": "_ri_16dhQq_formActions",
-  "stateConnecting": "_ri_16dhQq_stateConnecting",
-  "welcomeIconWrap": "_ri_16dhQq_welcomeIconWrap",
-  "terminalResize": "_ri_16dhQq_terminalResize",
-  "dialogTitle": "_ri_16dhQq_dialogTitle",
-  "active": "_ri_16dhQq_active",
-  "explorerBody": "_ri_16dhQq_explorerBody",
-  "welcomeText": "_ri_16dhQq_welcomeText",
-  "welcome": "_ri_16dhQq_welcome",
-  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
-  "treeIndent": "_ri_16dhQq_treeIndent",
-  "editorStatus": "_ri_16dhQq_editorStatus",
-  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
-  "explorer": "_ri_16dhQq_explorer",
-  "tabName": "_ri_16dhQq_tabName",
-  "dragging": "_ri_16dhQq_dragging",
-  "terminalHeader": "_ri_16dhQq_terminalHeader",
-  "ok": "_ri_16dhQq_ok",
-  "spacer": "_ri_16dhQq_spacer",
-  "entryIcon": "_ri_16dhQq_entryIcon",
-  "tabBar": "_ri_16dhQq_tabBar",
-  "entryLabel": "_ri_16dhQq_entryLabel",
-  "btnPrimary": "_ri_16dhQq_btnPrimary",
-  "tabDirty": "_ri_16dhQq_tabDirty",
-  "treeMeta": "_ri_16dhQq_treeMeta",
-  "editorArea": "_ri_16dhQq_editorArea",
-  "selected": "_ri_16dhQq_selected",
-  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
-  "statusItem": "_ri_16dhQq_statusItem",
-  "treeIcon": "_ri_16dhQq_treeIcon",
-  "welcomeTitle": "_ri_16dhQq_welcomeTitle",
-  "overlay": "_ri_16dhQq_overlay",
-  "tabHost": "_ri_16dhQq_tabHost",
-  "envBadge": "_ri_16dhQq_envBadge",
-  "hostDetail": "_ri_16dhQq_hostDetail",
-  "formInput": "_ri_16dhQq_formInput",
   "statusBar": "_ri_16dhQq_statusBar",
+  "terminalBody": "_ri_16dhQq_terminalBody",
+  "explorerBody": "_ri_16dhQq_explorerBody",
+  "terminalResize": "_ri_16dhQq_terminalResize",
+  "keyBadge": "_ri_16dhQq_keyBadge",
+  "hostList": "_ri_16dhQq_hostList",
+  "formSelect": "_ri_16dhQq_formSelect",
+  "entry": "_ri_16dhQq_entry",
+  "tabName": "_ri_16dhQq_tabName",
+  "hostDetail": "_ri_16dhQq_hostDetail",
+  "statusBtn": "_ri_16dhQq_statusBtn",
+  "cm-editor": "_ri_16dhQq_cm-editor",
+  "treeName": "_ri_16dhQq_treeName",
+  "terminalWrap": "_ri_16dhQq_terminalWrap",
+  "btnIcon": "_ri_16dhQq_btnIcon",
+  "treeCaret": "_ri_16dhQq_treeCaret",
+  "btnPrimary": "_ri_16dhQq_btnPrimary",
+  "terminalOverlay": "_ri_16dhQq_terminalOverlay",
+  "btnGhost": "_ri_16dhQq_btnGhost",
+  "welcomeActions": "_ri_16dhQq_welcomeActions",
+  "view": "_ri_16dhQq_view",
+  "treeMeta": "_ri_16dhQq_treeMeta",
+  "treeRow": "_ri_16dhQq_treeRow",
+  "welcomeIconWrap": "_ri_16dhQq_welcomeIconWrap",
+  "treeIcon": "_ri_16dhQq_treeIcon",
+  "hostCard": "_ri_16dhQq_hostCard",
+  "stateDot": "_ri_16dhQq_stateDot",
+  "explorerHeader": "_ri_16dhQq_explorerHeader",
+  "editorArea": "_ri_16dhQq_editorArea",
+  "editorStatus": "_ri_16dhQq_editorStatus",
+  "welcomeTitle": "_ri_16dhQq_welcomeTitle",
+  "panel": "_ri_16dhQq_panel",
+  "formRow": "_ri_16dhQq_formRow",
+  "hostSelect": "_ri_16dhQq_hostSelect",
+  "treeIndent": "_ri_16dhQq_treeIndent",
+  "tabHost": "_ri_16dhQq_tabHost",
+  "tabDirty": "_ri_16dhQq_tabDirty",
+  "hostActions": "_ri_16dhQq_hostActions",
+  "envBadge": "_ri_16dhQq_envBadge",
+  "btnDanger": "_ri_16dhQq_btnDanger",
+  "spacer": "_ri_16dhQq_spacer",
   "hostAlias": "_ri_16dhQq_hostAlias",
-  "workbench": "_ri_16dhQq_workbench"
+  "dialogTitle": "_ri_16dhQq_dialogTitle",
+  "statusItem": "_ri_16dhQq_statusItem",
+  "overlay": "_ri_16dhQq_overlay",
+  "xterm": "_ri_16dhQq_xterm",
+  "placeholder": "_ri_16dhQq_placeholder",
+  "dialog": "_ri_16dhQq_dialog",
+  "tabClose": "_ri_16dhQq_tabClose",
+  "formLabel": "_ri_16dhQq_formLabel",
+  "stateFailed": "_ri_16dhQq_stateFailed",
+  "explorerEmpty": "_ri_16dhQq_explorerEmpty",
+  "welcome": "_ri_16dhQq_welcome",
+  "formRowInline": "_ri_16dhQq_formRowInline",
+  "workbench": "_ri_16dhQq_workbench",
+  "stateDisconnected": "_ri_16dhQq_stateDisconnected",
+  "formInput": "_ri_16dhQq_formInput",
+  "statePill": "_ri_16dhQq_statePill",
+  "active": "_ri_16dhQq_active",
+  "welcomeText": "_ri_16dhQq_welcomeText",
+  "explorer": "_ri_16dhQq_explorer",
+  "tabBar": "_ri_16dhQq_tabBar",
+  "ok": "_ri_16dhQq_ok",
+  "terminalHeader": "_ri_16dhQq_terminalHeader",
+  "formError": "_ri_16dhQq_formError",
+  "stateConnecting": "_ri_16dhQq_stateConnecting",
+  "entryIcon": "_ri_16dhQq_entryIcon",
+  "entryLabel": "_ri_16dhQq_entryLabel",
+  "errorText": "_ri_16dhQq_errorText",
+  "hostMain": "_ri_16dhQq_hostMain",
+  "selected": "_ri_16dhQq_selected",
+  "tab": "_ri_16dhQq_tab",
+  "toolbar": "_ri_16dhQq_toolbar",
+  "error": "_ri_16dhQq_error",
+  "dragging": "_ri_16dhQq_dragging",
+  "stateConnected": "_ri_16dhQq_stateConnected",
+  "mainColumn": "_ri_16dhQq_mainColumn",
+  "welcomeHint": "_ri_16dhQq_welcomeHint",
+  "explorerPath": "_ri_16dhQq_explorerPath",
+  "btn": "_ri_16dhQq_btn"
 }
 /** Idempotent <style> injection (one tag per page). */
 let panelCssInjected = false

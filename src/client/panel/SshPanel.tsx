@@ -8,7 +8,7 @@ import { pollStatus, type RemoteIdeApi } from '../api'
 import { basename } from './helpers'
 import {
   CheckIcon, ImportIcon, KeyIcon, LockIcon, MonitorIcon, PencilIcon, PlugIcon,
-  PlusIcon, ServerIcon, SpinnerIcon, TrashIcon,
+  PlusIcon, ServerIcon, SpinnerIcon, TerminalIcon, TrashIcon, UnplugIcon,
 } from './icons'
 import { HostFormDialog } from './HostFormDialog'
 import { RemoteEditor } from './RemoteEditor'
@@ -187,47 +187,12 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
 
   return (
     <div className={css.panel}>
-      {/* toolbar */}
-      <div className={css.toolbar}>
-        <span className={css.toolbarTitle}>{t('panel.title')}</span>
-        <select
-          className={css.hostSelect}
-          value={status.alias}
-          onChange={e => { if (e.target.value !== '') void connect(e.target.value) }}
-        >
-          <option value="">— {t('panel.disconnected')} —</option>
-          {hosts.map(host => <option key={host.alias} value={host.alias}>{host.alias}</option>)}
-        </select>
-        {connected ? (
-          <button type="button" className={`${css.btn} ${css.btnDanger}`} onClick={() => void disconnect()}>
-            {t('panel.disconnect')}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={`${css.btn} ${css.btnPrimary}`}
-            disabled={status.alias === '' || status.state === 'connecting'}
-            onClick={() => status.alias !== '' && void connect(status.alias)}
-          >
-            {t('panel.connect')}
-          </button>
-        )}
-        <span className={`${css.statePill} ${stateClass}`}>{stateLabel}</span>
-        {status.error !== undefined && status.state === 'failed' && (
-          <span className={css.errorText} title={status.error}>{status.error}</span>
-        )}
-        <span className={css.spacer} />
-        {connected && (
-          <button type="button" className={`${css.btn} ${css.btnGhost}`} onClick={newTerminal}>
-            + {t('terminal.newTab')}
-          </button>
-        )}
-      </div>
-
       {/* ---------------------------------------------------- workbench
            The IDE shape is permanent: the explorer area hosts the remote
            tree when connected and the host list when not; the editor area
-           shows a welcome page until a file is opened. */}
+           shows a welcome page until a file is opened. No top toolbar —
+           connection controls live in the explorer header and the status
+           bar (VSCode-style). */}
       <div className={css.workbench}>
         {/* explorer area: remote tree (connected) or host list */}
         {connected ? (
@@ -241,6 +206,7 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
         ) : (
           <div className={css.explorer}>
             <div className={css.explorerHeader}>
+              <span className={`${css.stateDot} ${stateClass}`} />
               <span>{t('hosts.title')}</span>
               <span className={css.spacer} />
               <button
@@ -460,11 +426,47 @@ export function SshPanel(props: SshPanelProps): React.ReactElement {
         />
       )}
 
-      {/* status bar */}
+      {/* status bar: connection state left, host switch + actions right */}
       <div className={css.statusBar}>
+        <span className={`${css.stateDot} ${stateClass}`} />
         <span className={css.statusItem}>
-          {connected ? `${t('panel.workspace')}: ${activeAlias}@${status.home ?? '/'}` : t('panel.disconnected')}
+          {status.error !== undefined && status.state === 'failed'
+            ? status.error
+            : connected
+              ? `${activeAlias}@${status.home ?? '/'}`
+              : stateLabel}
         </span>
+        <span className={css.spacer} />
+        {connected ? (
+          <>
+            <button type="button" className={`${css.statusBtn}`} onClick={newTerminal}>
+              <TerminalIcon size={12} /> {t('terminal.newTab')}
+            </button>
+            <button type="button" className={`${css.statusBtn}`} onClick={() => void disconnect()}>
+              <UnplugIcon size={12} /> {t('panel.disconnect')}
+            </button>
+          </>
+        ) : (
+          <>
+            <select
+              className={css.hostSelect}
+              value={status.alias}
+              onChange={e => { if (e.target.value !== '') void connect(e.target.value) }}
+            >
+              <option value="">{t('panel.disconnected')}</option>
+              {hosts.map(host => <option key={host.alias} value={host.alias}>{host.alias}</option>)}
+            </select>
+            <button
+              type="button"
+              className={css.statusBtn}
+              disabled={status.alias === '' || status.state === 'connecting'}
+              onClick={() => status.alias !== '' && void connect(status.alias)}
+            >
+              {status.state === 'connecting' ? <SpinnerIcon size={12} /> : <PlugIcon size={12} />}
+              {t('panel.connect')}
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
