@@ -16,6 +16,7 @@
 8. **全树 MutationObserver 卡 UI**：聊天流渲染时每次 DOM 变更触发回调 → 用轻量轮询（挂载成功后停止）+ 根级 observer
 9. **GLM-4V-Flash 返回不满足 modlens vision schema**（layout.regions 缺 type）——直接调 GLM API 可看图；modlens 官方推荐 gemini-api/anthropic
 10. **modlens 在 Windows 找不到 claude**（spawn 不解析 .cmd）——claude-cli provider 在 Windows 不可用
+11. **⚠️ 绝不要重启承载当前会话的 dsh web 实例**：4500 就是会话宿主，`Stop-Process` 它 = 中断自己（工具调用被记录但无结果，用户看到"崩溃"）。host 半改动需要重启时：① 让用户手动重启；② 或先完成所有代码工作后一次性请用户重启。这条已在 AGENTS.md 列为铁律。
 
 ## 技术要点（LEARNINGS）
 

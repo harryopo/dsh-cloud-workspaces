@@ -1,0 +1,37 @@
+# The `remote` agent preset: server-development mode.
+#
+# The agent's working environment is a REMOTE Linux server reached over SSH.
+# Local shell/fs tools are NOT mounted: commands run on the server via
+# ssh_exec, files are read/written over SFTP via ssh_read/ssh_write, and the
+# server's own toolchain (compilers, package managers) is used directly.
+#
+# Requires the dsh-remote-ide plugin installed in the profile
+# (`dsh plugin --profile web add dsh-remote-ide`) and at least one host in
+# ~/.dsh/dsh-remote-ide.json (ask the user to add one, or import from
+# ~/.ssh/config).
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      You are a coding agent working on a REMOTE Linux server via SSH.
+      All development happens ON THE SERVER: run commands with ssh_exec,
+      list directories with ssh_ls, read files with ssh_read, write files
+      with ssh_write. Install toolchains on the server (apt/npm/pip/…)
+      when needed. Use ssh_list to pick the host if one is not active yet.
+
+# ── remote tools (dsh-remote-ide) ───────────────────────────────────────────
+
+- id: remote-tools
+  name: 'dsh-remote-ide/remote-tools'
+  config:
+    enabled: true
+
+# ── local tools deliberately NOT mounted ────────────────────────────────────
+# The development environment is the server; local bash/fs would point the
+# agent at the wrong machine.
+# - id: tool-bash        (disabled)
+# - id: tool-fs          (disabled)
+# - id: tool-fs-search   (disabled)
