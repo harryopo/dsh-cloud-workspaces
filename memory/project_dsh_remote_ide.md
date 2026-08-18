@@ -24,6 +24,147 @@
 - `AGENTS.md` + `CLAUDE.md`：交接文档（任何 AI 可接手）
 - `memory/` + `docs/`：记忆与两份调研报告
 
+## 方案书 v0.2 + 开源调研（2026-08-15 晚）
+
+- **方案定稿**：`docs/03-方案书-服务器开发Agent模式.md` v0.2——用户拍板**直接方案 B（执行层）**：remote preset 在 isolate realm 自包含远程执行层（ssh-connection/ssh-fs/ssh-shell/ssh-terminal/tool-ssh-bash/tool-ssh-editor/persona），provider 替换 `ctx.shell`/`ctx.subprocess`/`ctx.fs`；对话界面不变
+- **决策全记录**（用户确认）：连接=首次对话输入（贴 `ssh user@host` 或 agent 分项询问，都支持）；工具边界=纯远程；验证=真实 Linux 服务器；终端=持久 PTY；编辑器=str_replace；cwd=默认+可指定
+- **开源调研归档**：`docs/04-调研报告-开源远程开发方案对比.md`——四条路线：① 服务端部署型（Trae/Cursor Remote-SSH，需远程装服务端，仅借鉴连接交互）；② **执行后端替换型（DSH e2b、OpenHands RemoteSandboxService）★ 与方案 B 同构，双份官方先例**；③ 工具拦截+Mutagen 同步（claude-remote 家族，有同步坑，不采用）；④ 单命令转发（反例）
+- **里程碑**：M0=解决 preset 显示遗留问题（前置阻塞）→ M1 fs → M2 shell → M3 持久终端 → M4 编辑器 → M5 真实服务器验收
+- **下一步**：等用户审阅方案书 → 进入 M0（排查 preset 未显示）
+
+## M0 前置调研完成（2026-08-15，读官方 e2b + 盘点引擎资产）
+
+### 官方 E2BRuntime 连接生命周期设计（packages/e2b/e2b/src/index.ts，ctx.e2b 范本）
+- **Service 形态**：`E2BRuntime extends Service`，`super(ctx, 'e2b')` 注册；`declare module '@deepseek-ai/cordis' { interface Context { e2b: E2BRuntime } }` 类型合并
+- **Config**：`static Config: z<Config> = z.object({...})`（Schemastery）
+- **构造即启动**：`this.ready = this.open()` + `void this.ready.catch(() => {})`——eager 初始化，失败可观察（getSandbox 仍返回错误）
+- **handle 获取双检查**：`getSandbox()` 在 await ready **前后**各检查一次 `disposed`（await 让出事件循环，dispose 可能插入）
+- **teardown 用 ctx.effect**：disposed=true → await ready → kill；`SandboxNotFoundError` 视为 quiescence（他人已删），其余错误向上抛
+- **open() 顺序**：创建 → 建 cwd + runtimeRoot → 验证 runtimeRoot 是真目录（非 symlink）→ chmod 700 → 失败 rollback(kill)
+- **runtimeRoot** = `cwd/.dsh-e2b`：adapter 私有状态目录（进程组/终端状态）
+- **环境隔离**：`e2bControlEnvs()` 随机 HOME（`/.dsh-e2b-control-${randomUUID()}`）防 login shell 读用户 profile
+- **shell 参数转义**：`quoteE2BShellArg()`（单引号 + `'"'"'`）防 `/bin/bash -l -c` 插值
+- **adapter 注入**（fs-e2b）：`E2BFileSystem extends FileSystem`（官方抽象类）+ `static inject = ['e2b']`，消费 `this.ctx.e2b.getSandbox()`；每次操作先 assertNotAborted，错误统一 mapError 到 FS_* 码，控制命令统一带随机 HOME envs
+
+### 我们 engine.ts 资产盘点（SshEngine，src/engine.ts 661 行）
+- **已有**：per-alias 连接池（Map\<PoolRecord\>）、ProxyJump（connectHops）、exec（超时/截断/代理对安全）、PTY shell（openShell）、SFTP 懒加载（getSftp + ls/readFile/writeFile/mkdir/remove/rename）、sweep 空闲回收、dispose
+- **差距**：① 普通类非 Cordis Service（无 ctx.effect teardown/Config/ready 模式）；② per-alias 多连接 vs 方案 B「单会话单远程世界」语义；③ broken 连接不自动重建（ensureConnection 只查标记）；④ client 'error' 监听在 connectClient 有全局空监听（防进程崩溃，好习惯）
+
+### M0 骨架设计（SshRuntime extends Service，ctx.\<ssh\>）
+- 包装/重构 SshEngine → `src/ssh-service.ts`；`super(ctx, 'ssh')`
+- 惰性连接（与 e2b 不同：SSH 连接目标由会话首轮用户输入决定，不能构造即连）→ 提供 `connect(spec)` 建立 ready；provider 经 `getConnection()`（类比 getSandbox，双检查 disposed）
+- 复用 engine.ts 全部资产；补齐 broken 自动重建、ctx.effect teardown、Config schema
+- 参照 e2b 测试模式：vi.mock ssh2 Client + fakeConnection fixture（vitest）
+
+### 下一步
+- 用户确认骨架设计 → 写 `src/ssh-service.ts` 类型骨架（typecheck 通过）→ M1（fs-ssh）
+
+## M0 框架先行产物落地（2026-08-16，src/ssh-service.ts）
+
+- **SshRuntime extends Service 已实现**（`src/ssh-service.ts`，注册名 `ctx.<ssh>`）：完全复刻官方 E2BRuntime 模式
+  - `static Config: z<Config>`（引擎旋钮 + storeFile）；`declare module` 类型合并
+  - **惰性连接**：SSH 目标由会话首轮模型决策决定 → `connect(alias)` 建立 ready（与 e2b 构造即连的差异）
+  - **单会话单目标**：`getConnection()` 返回隐藏 alias 的稳定句柄 `SshConnection`（exec/openShell/ls/readFile/writeFile/mkdir/remove/rename + alias/home getter），消费者看不到 alias
+  - **getConnection 双检查 disposed** + **broken 自动重建**（`ready === undefined || engine.isBroken(activeAlias)` → 重开）
+  - **teardown**：ctx.effect → disposed=true → await ready → engine.dispose()
+  - host store 透传：listHosts/getHost/upsertHost/removeHost/importSshConfig
+- **engine.ts 新增两个公开方法**：`isBroken(alias)`（重建判定）、`resolveHome(alias)`（home 懒解析，重建后复用）
+- **测试落地**（`tests/ssh-service.test.ts`，参照 e2b.spec.ts 的 vi.mock('ssh2') + FakeClient 模式）：6 用例全过——初始无连接拒绝/connect 建立+句柄复用同一引用+单一底层连接/dispose 后拒绝（竞态）/broken 自动重建（instances 1→2）/未知主机 failed/切换目标。`pnpm typecheck` + `pnpm test`（19 全过）+ `pnpm build` 均通过
+- **踩坑**：本地 npm schemastery 3.x 无 `.optional()`（官方用 @deepseek-ai/schemastery 有）→ 沿用官方惯例 `z.string().default('')` 表达缺省
+- **遗留**：broken 重建成功后 engine state 仍 'failed'（state 只在 engine.connect 更新）——M1 统一状态语义时处理；ssh-service.ts 尚未接入 src/index.ts（tsdown entry 不含它），M1/M2 接入
+- **下一步 M1（fs-ssh）**：前置调研 fs-e2b 剩余部分（120-582 行）+ `@deepseek-ai/dsh-fs` 抽象类完整 13 方法签名 + fs-local 实现参考 → 定 fs-ssh 类型骨架
+
+## M1（fs-ssh）完成（2026-08-16，框架先行 + 接线）
+
+### 前置调研结论（定案）
+- **以已发布 d.ts 为准**：npm `@deepseek-ai/dsh-fs@0.1.0-rc.6` 的 writeText/editText 是 **5 参**（含可选 `sandboxPolicy?: SandboxExecutionPolicy`），`.research/` 下 fs-e2b 源码是 4 参 → fs-ssh 按 5 参接收、SSH 是 bare backend 忽略该参数
+- **官方 fs-e2b adapter 范式**：`extends FileSystem` + `static inject = ['ssh']`；每操作 `await this.ctx.ssh.getConnection()`；`mapError` 统一映射 6 个 FsErrorCode；`withLock`（尾 promise FIFO）串行化读→守→写窗口；`writeAtomic`（staging 目录 chmod 700 + `ln -T` 守卫 / rename）；`canonicalPath` 用 `realpath -mz | base64 -w0`；`entryVersion` 从 metadata/type/size/mode/mtime/symlinkTarget 哈希
+- **ctx.fs 填充机制**：`FileSystem extends Service`（dsh-fs 的 cordis 类型合并 `ctx.fs: FileSystem`），**装载插件即填充 ctx.fs**（fs-local README 同义）
+
+### 产物
+- **`src/fs-ssh.ts`（SshFileSystem 完整实现）**：13 个抽象方法 + withLock + writeAtomic + canonicalPath + probe + requireRegular + checkWriteIntent + readForDiff/readForEdit + mapError + sftpCall/sftpCallVoid + entryVersion + literalEdit；顶部 8 个工具函数（decodeText 含 NUL+UTF-8 fatal、decodeCanonicalPath base64+NUL 帧、quotePosixArg、restoreLineEndings 等）
+  - **SSH 适配差异**：resolve 基准目录用连接句柄 home（动态）；createIfAbsent 提交后先 `unlink(temporary)` 再 `rmdir(stagingDirectory)`（e2b remove 递归，ssh rmdir 只删空目录）；readBytes 双保险（stat 预检 + 事后 size 校验）；sandboxPolicy 契约接收但忽略
+- **`tests/fs-ssh.test.ts`（20 用例全过）**：vi.mock('ssh2') + 内存 FakeSftp（nodes/symlinks Map + 单调节拍 mtime）+ FakeExec 脚本分发（$HOME/realpath/chmod/ln 守卫精确匹配）——覆盖全部 13 方法 + 全部 FsErrorCode 分支 + 并发写串行化 + 未连接 FS_IO_ERROR
+- **接线（预设作用域，非全局）**：tsdown entry 增 `ssh-service`/`fs-ssh`；package.json exports 增 `./ssh-service`/`./fs-ssh` + peerDeps 补 `@deepseek-ai/dsh-fs`；**agent.cordis.yml 增两行挂载**（ssh-service 先行，fs-ssh 后行因 inject ['ssh']）→ 仅「服务器开发」会话 ctx.fs 变远程，普通会话保持本地 fs
+- **`src/engine.ts`/`src/ssh-service.ts`**：`getSftp` 改 public；`SshConnection` 增 `getSftp()` 句柄（对应 e2b 的 sandbox.files）
+
+### 验证
+- `pnpm typecheck` ✓ / `pnpm test`（39/39）✓ / `pnpm build` ✓（12 文件，含 fs-ssh.js 22KB、ssh-service.js 5.9KB）
+
+### 踩坑
+- **sftpCall 回调签名**：ssh2 `Callback` 是 `(err: Error | null | undefined) => void`，写 `(error?: Error) => void` 逆变不兼容 → 统一用 `Error | null | undefined`
+- **FakeSftp mtime 同毫秒碰撞**：`Date.now()` 导致两次快速写入 version 相同 → replaceIfVersion 守卫失效 → 改单调递增 tick
+- **测试 bug**：`fs.stat(stale)` 是实时查询永远等于当前版本 → 应先记录 v1 后版本再写 v2 再断言 FS_STALE_VERSION
+- **resolve 错误包装**：`getConnection()` 抛普通 Error 未过 mapError → 移入 try 块统一包装 FS_IO_ERROR
+- **TRAE 沙箱**：`shellSandbox.enable=false`（用户又设了「完全访问」）后 pnpm 安装畅通
+
+### 遗留 → M2/M3
+- M2：subprocess-ssh（3 方法 resolveExecutable/spawn/spawnTerminal，前置调研 subprocess-e2b 全部源码）
+- M3：preset 组合完善（isolate realm + persona 细节）→ 复制 `agent-presets/remote/` 到 `~/.dsh/.agent-presets/remote/`
+- M4：真实 Linux 服务器验收（agent 远程读写文件成功）
+- M0 遗留①：broken 重建成功后 engine state 仍 'failed'
+
+## M2（subprocess-ssh）完成（2026-08-16，wrapper 协议 + 测试全绿 + 接线）
+
+### 设计定案（对比 subprocess-e2b 逐行）
+- **传输层替换**：E2B SDK 命令流 → `SshExecChannel`（ssh2 Channel 实时 Buffer 流，stderr 走 extended-data 天然分离）；退出码无需 status 文件，channel close 事件直接携带 (exitCode, signal)
+- **远端 wrapper 只依赖 bash/coreutils**（不依赖远端 node，与 e2b 的 node 编码器不同）：`env -i` 重放 scrubbed 远程环境 + `setsid --wait` 起独立会话组长 + pid 文件发布 pgid（SFTP 轮询等待）
+- **远程 state 目录**：`/tmp/dsh-ssh-processes/<uuid>`（pid/environment 文件），不依赖远程 $HOME 解析时序
+- **输出 spill 本地化**：host 已收到全部字节 → 有界 tail（maxBytes）+ 本地临时 spill 文件（超 maxBytes 时保留全文路径供 lossy 消费者）
+- **PTY 终端**：openShell 注入 `printf marker; printf '%s\n' "$$" > pid; exec <argv>`，BootstrapOutputFilter 过滤到 marker 为止；会话级清理（ps 解析 sid → TERM → KILL 升级 → shell.close → rm -rf stateDir）
+- **环境传输**：`getent passwd` 取 home + `env -0 | base64 -w0` 防 SSH 通道 chunk 破坏 UTF-8；scrub DSH_*/敏感名；spec.env 经 wrapper `env -i` 重放（undefined = tombstone 删除）
+- **安全护栏**：pgid/sid 拒绝 <=1（防 `kill -- -1` 全体）；SIGKILL 拒绝自杀式（前台组=shell 自身时）；resolveExecutable 拒绝相对路径（SSH 无共享 cwd）
+
+### 产物与验证
+- `src/subprocess-ssh.ts`（1426 行）：SshSubprocessRuntime extends SubprocessRuntime（static inject=['ssh']）+ SshSubprocessHandle + SshTerminalHandle + SshOutputReader/DeferredStdin/BootstrapOutputFilter；engine 增 `execChannel` 低层流式句柄 + openShell 注入支持
+- `tests/subprocess-ssh.test.ts`（13 用例全过）：resolveExecutable 3 + spawn 校验 2 + spawn 主流程 5（输出收集/非零码/stderr 分离/spill/TERM 组杀/abort 未发布回滚）+ spawnTerminal 3（marker 边界/会话清理/inspectForeground+自杀式拒绝）
+- 接线：tsdown entry + package.json exports `./subprocess-ssh` + peerDeps 补 `@deepseek-ai/dsh-subprocess`（external 同步）+ agent.cordis.yml 挂载 `dsh-remote-ide/subprocess-ssh`（fs-ssh 之后）→ 已复制到 `~/.dsh/.agent-presets/remote/`（热发现）
+- `pnpm typecheck` ✓ / `pnpm test`（52/52）✓ / `pnpm build` ✓（16 文件，subprocess-ssh.js 44KB）
+
+### 踩坑（重要）
+- **JS 字符串 `\n` 是换行不是字面 `\\n`**：注入命令 `printf '%s\n'` 若写 `'\n'` 会把真实换行塞进命令文本 → 必须写 `'\\n'` 让远端 shell 收到标准转义（marker 行残留换行、pid 正则错乱均由此引起）
+- **BootstrapOutputFilter 要吞 marker 行自身换行**（marker 后的首个 0x0a），否则消费者看到私有 marker 行残留
+- **并行 Edit 同一文件会相互覆盖**：多个 Edit 同一消息发往同一文件时部分修改丢失（本次 waitForChannel getter 与吞换行逻辑丢失，重跑测试才发现）→ 同文件修改必须串行
+- **测试断言注意 quoteShellArg 双重转义**：execCalls 里的原始命令是 `exec bash -c 'PATH='\''/opt/bin'\'' ...'`，字符串匹配用 `includes('command -v') && includes('custom-tool')` 而非精确子串
+- **异步 push 竞态**：collect 输出 push 是 async（写 spill），close 事件可能先到 → 测试需 `vi.waitFor(() => expect(collected.size).toBe(N))` 再 close
+- **waitForChannel 返回 closed 要用 getter**（`get closed() { return stream.destroyed }`），快照在 close 前为 false
+
+### 下一步 M3
+- preset 组合完善（isolate realm + persona 细节）→ M4 真实 Linux 服务器验收（agent 远程跑 bash/PTY/写文件）
+
+## 方案书 v1.0 定稿 + 目录整理（2026-08-15）
+
+- **完整方案书定稿**：`docs/03-方案书-服务器开发Agent模式.md` v1.0——整合全部调研（01-06）：需求/可行性论证（四重背书）/e2b 式三层技术方案（ctx.\<ssh\> + fs-ssh + subprocess-ssh + 官方消费者零改造）/接口契约（ctx.fs 13 方法 + ctx.subprocess 3 方法）/preset 蓝图/安全设计/交互/里程碑（M0-M4）/风险/开发规范
+- **目录整理**：新增 `docs/README.md` 文档索引（方案书=唯一纲领，06=开发依据，01/02/04/05=支撑材料）；开发路线速览
+- **开发宗旨确认**：先调研后开发——每个 M 阶段前置调研官方源码/文档 → 先定接口类型骨架（框架先行，typecheck 通过）→ 填充实现 → 验证
+- **下一步**：进入 **M0**（引擎与连接池 ctx.\<ssh\>）：先读 `packages/e2b/e2b/` 源码 + engine.ts 现状，定连接池 API 类型骨架
+
+## 方向调整 + 方案书 v0.3（2026-08-15 用户拍板）
+
+- **用户指示**：① 遗留问题（preset 未显示）**忽略/删除**——用户用 DSH 自身开发时的问题（DSH 无法跳出自身开发自己、易崩溃），不排查不修复；② **聚焦 agent 能力开发**——一开始想做 IDE 小插件，**现在做大做这个**（完整的「服务器开发 Agent 模式」）
+- **方案书升级 v0.3**（docs/03）：架构对齐官方 e2b 式三层 = `dsh-ssh`（ctx.\<ssh\> 连接池，类比 ctx.e2b）+ `fs-ssh`（ctx.fs 13 方法，替代 dsh-fs-local 位置）+ `subprocess-ssh`（ctx.subprocess 3 方法）+ **官方消费者零改造**（bash-local/terminal-bash/tool-fs/lsp-stdio 自动跟随远程）；**不实现 ctx.shell/ctx.sandbox**
+- **里程碑重排**（M0→M4）：M0=引擎与连接池（ctx.\<ssh\>，复用 engine.ts）→ M1=fs-ssh → M2=subprocess-ssh（exec/PTY）→ M3=preset 组合完善 → M4=真实服务器验收
+- **下一步**：从 M0 开始开发（连接池 ctx.\<ssh\> 服务）
+
+## TDSF 项目群知识吸收（2026-08-15，docs/05）
+
+- 调研对象：`D:\ai\linux教学一体`（TDSF-Linux 项目群：45+ 调研报告 + 8 份源码分析 + 18 个 clone 项目 + 复用清单）
+- **同构背书**：OpenHands SandboxService 抽象 + Remote 实现（HTTP/X-API-Key/session_api_key）源码级验证「执行后端替换」路线；反衬 SSH 直连差异化（免远程服务端）
+- **选型交叉验证**：TDSF 的 SSH 生态调研（ssh2/ssh2-sftp-client/webssh2/xterm.js/node-pty/Tabby/JumpServer/safeStorage）与 dsh-remote-ide 已用栈逐项吻合
+- **机制灵感**：① 风险分级+人工确认断点（CapabilityMode 四档/高危命令确认/操作留痕）→ 建议方案书新增安全章节；② 证据可核验（ground_check）；③ 会话录制回放（JumpServer）；④ 命令片段库（远期）
+- **纪律借鉴**：开源复用 4 级分级 + License 首行核实 + Borrowed from 注释（TDSF 复用清单方法论）
+- 归档：`docs/05-调研报告-TDSF项目群知识吸收.md`；不引入 TDSF 任何代码依赖（知识层价值）
+
+## DSH 开发方法论调研（2026-08-15，docs/06）
+
+- 调研来源：官方文档站（develop/basic 三页已抓）+ 本地源码 docs/ 权威文档 + packages/e2b 官方远程先例 + cordis-api；两个 search 子代理深挖了 seam 契约与 preset 机制
+- **核心发现 1（seam 替换）**：能力 seam 三件套 = Service Definition → Provider → Consumer；provider 每 context 单实例（加载第二个 throw）→ 替换 = 放 local 实现的位置。`docs/architecture.md` 明言"fs/subprocess 指向远程沙箱，Bash/PTY/LSP 全部跟随，无 provider fork"
+- **核心发现 2（官方远程先例）**：e2b 家族 = `ctx.e2b`（共享沙箱生命周期）+ `fs-e2b`（ctx.fs）+ `subprocess-e2b`（ctx.subprocess）→ 方案 B 复刻此骨架；**ctx.sandbox 不需要实现**（远程执行是 whole-capability-seam 兄弟实现，非 sandbox provider）
+- **接口清单**：ctx.fs 13 个抽象方法、ctx.subprocess 3 个（resolveExecutable/spawn/spawnTerminal）、ctx.terminals 注册表、ctx.shell（不用实现，bash-local 消费 subprocess）
+- **工具开发契约**：defineTool（parameters 自动校验 + output.schema canonical value + render 纯投影 + exec.signal）；注册 effect 化；UI 卡纯函数（禁止 I/O/时钟/随机）；后台用 ctx.jobs.start
+- **preset 机制**：agent.cordis.yml 必填（PRESET_ID 正则）；roots = 配置 roots + `$DSH_HOME/.agent-presets`（includeUserRoot 默认 true）；服务行必须 isolate realm（leakedServices 校验）；**roster 只做形状校验不解析包名 → 包名解析失败 ≠ 不显示**
+- 归档：`docs/06-DSH插件开发方法论.md`（八章：定位/架构/技术栈/四步开发/seam 开发/preset 开发/工程实践/方案 B 映射）
+
 ### 环境（用户机器）
 - web profile：`@liustack/modlens@3.16.6` + `dsh-remote-ide`（link: `C:\Users\Lenovo\dsh-remote-ide-dev` junction → 本仓库）
 - dsh 实例：4500 端口（latest dsh，承载当前对话，**绝不可重启**）
@@ -33,7 +174,9 @@
 
 **「服务器开发」preset 未出现在 4500 的新会话模式选择器中**（用户确认"没了"）。
 
-排查线索（供参考）：
+**✅ 已忽略（2026-08-15 用户指示）**：该问题是用户用 DSH 自身开发时遇到的（DSH 无法跳出自身开发自己、易崩溃）。**当前项目遗留问题删除/忽略，不排查不修复**。根因分析（docs/06 §6.4）仅作知识留存，不再跟进。
+
+排查线索（历史，已废弃）：
 1. 确认 `~/.dsh/.agent-presets/` 是否被 app 的 preset roots 扫描（discovery 的 roots 由 app 组装——查 `apps/cli/src/web.ts` 或 `packages/preset/agent-presets/src/mount.ts` 是否默认包含 user root `~/.dsh/.agent-presets`，还是需要配置）
 2. preset 组合是否 broken：`agent.cordis.yml` 里行 `name: 'dsh-remote-ide/remote-tools'` 需要解析到 `C:\Users\Lenovo\dsh-remote-ide-dev\node_modules\dsh-remote-ide`（link 包）——检查该子路径在 profile 的解析（package.json exports `./remote-tools` 已加）；broken 的 preset 会显示为 broken 行而非隐藏，用户说"没了"→ 更可能 roots 没扫到或 UI 不显示 user preset
 3. 可用 `dsh --profile web --dump-config` 或直接查 preset 发现 API/日志
