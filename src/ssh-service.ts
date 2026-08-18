@@ -99,7 +99,7 @@ export interface SshConnection {
 export class SshRuntime extends Service {
   static Config: z<Config> = Config
 
-  private readonly engine: SshEngine
+  private readonly engine_: SshEngine
   private readonly store: HostStore
   /** 当前激活目标（'' = 未连接）。 */
   private activeAlias = ''
@@ -112,7 +112,7 @@ export class SshRuntime extends Service {
     // schemastery 在构造前已填充默认值；类型不编码该步骤。
     const storeFile = config.storeFile === '' ? undefined : config.storeFile
     this.store = new HostStore(storeFile)
-    this.engine = new SshEngine(this.store, {
+    this.engine_ = new SshEngine(this.store, {
       idleTimeoutMs: config.idleTimeoutMs,
       connectTimeoutMs: config.connectTimeoutMs,
       keepaliveIntervalMs: config.keepaliveIntervalMs,
@@ -128,17 +128,25 @@ export class SshRuntime extends Service {
       } catch {
         // 连接未建立或已失败，无需处置。
       }
-      this.engine.dispose()
+      this.engine_.dispose()
     }, 'ssh runtime teardown')
   }
 
   // ------------------------------------------------------------ connection
 
+  /**
+   * 底层引擎只读句柄（供 ssh_* 工具消费：连接池 / ProxyJump / exec / SFTP
+   * 全量能力。所有适配器仍经 getConnection() 走单目标语义，二者共享同一引擎）。
+   */
+  get engine(): SshEngine {
+    return this.engine_
+  }
+
   /** 将某个已存主机设为当前激活目标并建立连接（可重复调用以切换）。 */
   async connect(alias: string): Promise<WorkspaceStatus> {
     if (this.disposed) throw new Error('ssh runtime is disposing')
     this.activeAlias = alias
-    const status = await this.engine.connect(alias)
+    const status = await this.engine_.connect(alias)
     this.ready = this.openConnection()
     // 失败的连接保持可观察；getConnection() 仍返回该错误（或下次重连）。
     void this.ready.catch(() => {})
@@ -149,12 +157,12 @@ export class SshRuntime extends Service {
   disconnect(): WorkspaceStatus {
     this.activeAlias = ''
     this.ready = undefined
-    return this.engine.disconnect()
+    return this.engine_.disconnect()
   }
 
   /** 当前连接状态快照（ssh_status 数据源）。 */
   status(): WorkspaceStatus {
-    return this.engine.status()
+    return this.engine_.status()
   }
 
   /**
@@ -165,7 +173,7 @@ export class SshRuntime extends Service {
   async getConnection(): Promise<SshConnection> {
     if (this.disposed) throw new Error('ssh runtime is disposing')
     // 句柄缺失或底层连接已 broken → 重新建立。
-    if (this.ready === undefined || this.engine.isBroken(this.activeAlias)) {
+    if (this.ready === undefined || this.engine_.isBroken(this.activeAlias)) {
       this.ready = this.openConnection()
     }
     const connection = await this.ready
@@ -178,27 +186,27 @@ export class SshRuntime extends Service {
 
   /** 已存主机（secret-free 摘要）。 */
   listHosts(query?: string) {
-    return this.engine.list(query)
+    return this.engine_.list(query)
   }
 
   /** 单个主机摘要。 */
   getHost(alias: string) {
-    return this.engine.get(alias)
+    return this.engine_.get(alias)
   }
 
   /** 创建或更新主机。 */
   upsertHost(payload: HostPayload, existingAlias?: string) {
-    return this.engine.upsertHost(payload, existingAlias)
+    return this.engine_.upsertHost(payload, existingAlias)
   }
 
   /** 删除主机（若为激活目标则先断开）。 */
   removeHost(alias: string): boolean {
-    return this.engine.removeHost(alias)
+    return this.engine_.removeHost(alias)
   }
 
   /** 从 ~/.ssh/config 导入主机。 */
   importSshConfig() {
-    return this.engine.importSshConfig()
+    return this.engine_.importSshConfig()
   }
 
   // -------------------------------------------------------------- internal
@@ -207,8 +215,8 @@ export class SshRuntime extends Service {
   private async openConnection(): Promise<SshConnection> {
     const alias = this.activeAlias
     if (alias === '') throw new Error('ssh runtime: no active connection; call connect(alias) first')
-    await this.engine.ensureConnection(alias)
-    await this.engine.resolveHome(alias)
+    await this.engine_.ensureConnection(alias)
+    await this.engine_.resolveHome(alias)
     return this.wrap(alias)
   }
 

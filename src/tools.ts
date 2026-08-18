@@ -4,12 +4,16 @@
  * (agent-presets/remote) mounts this package so the agent's working
  * environment IS the remote server — commands run over SSH, files read and
  * written over SFTP.
+ *
+ * The tools consume the shared SshRuntime (ctx.ssh, host plane) rather than a
+ * private engine: fs-ssh / subprocess-ssh in the preset's isolate realm inject
+ * the same runtime, so one connection serves tools and capability adapters.
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { SshEngine } from './engine'
 import type { ExecResult, RemoteDirEntry, SshHostSummary } from './protocol'
+import type { SshRuntime } from './ssh-service'
 
 /** One text content block (the only render shape these tools emit). */
 function text(value: string): ContentBlock[] {
@@ -61,16 +65,16 @@ function renderEntries(entries: RemoteDirEntry[]): string {
 }
 
 /** Resolve the target alias: explicit wins, else the active connection. */
-function resolveAlias(engine: SshEngine, alias: string | undefined): string {
+function resolveAlias(runtime: SshRuntime, alias: string | undefined): string {
   const explicit = alias?.trim()
   if (explicit !== undefined && explicit !== '') return explicit
-  const active = engine.status().alias
+  const active = runtime.engine.status().alias
   if (active !== '') return active
   throw new Error('no alias given and no active connection — pick one from ssh_list')
 }
 
 /** The host-list tool. */
-export function sshListTool(engine: SshEngine) {
+export function sshListTool(runtime: SshRuntime) {
   return defineTool({
     name: 'ssh_list',
     description: 'List configured SSH hosts (alias, host, user, auth, environment, tags, description). Use ssh_exec etc. with the alias. ' +
@@ -108,13 +112,13 @@ export function sshListTool(engine: SshEngine) {
       render: (_args, value) => text(renderHosts(value.hosts)),
     },
     async execute(args: { query?: string }) {
-      return { hosts: engine.list(args.query) }
+      return { hosts: runtime.engine.list(args.query) }
     },
   })
 }
 
 /** Run a shell command on the remote server. */
-export function sshExecTool(engine: SshEngine) {
+export function sshExecTool(runtime: SshRuntime) {
   return defineTool({
     name: 'ssh_exec',
     description: 'Run a shell command on the remote Linux server over SSH and return stdout/stderr/exit code. ' +
@@ -143,8 +147,8 @@ export function sshExecTool(engine: SshEngine) {
       render: (_args, value) => text(renderExec(value)),
     },
     async execute(args: { command: string; alias?: string; timeoutMs?: number }) {
-      const alias = resolveAlias(engine, args.alias)
-      const result = await engine.exec(alias, args.command, { timeoutMs: args.timeoutMs })
+      const alias = resolveAlias(runtime, args.alias)
+      const result = await runtime.engine.exec(alias, args.command, { timeoutMs: args.timeoutMs })
       // The output schema models exitCode as optional (undefined when the
       // channel died without one); the engine reports null for that case.
       return { ...result, exitCode: result.exitCode ?? undefined }
@@ -153,7 +157,7 @@ export function sshExecTool(engine: SshEngine) {
 }
 
 /** List a remote directory. */
-export function sshLsTool(engine: SshEngine) {
+export function sshLsTool(runtime: SshRuntime) {
   return defineTool({
     name: 'ssh_ls',
     description: 'List a directory on the remote server (entries sorted: directories first, then files, alphabetically). ' +
@@ -187,14 +191,14 @@ export function sshLsTool(engine: SshEngine) {
       render: (_args, value) => text(`${value.path}:\n${renderEntries(value.entries)}`),
     },
     async execute(args: { path: string; alias?: string }) {
-      const alias = resolveAlias(engine, args.alias)
-      return { path: args.path, entries: await engine.ls(alias, args.path) }
+      const alias = resolveAlias(runtime, args.alias)
+      return { path: args.path, entries: await runtime.engine.ls(alias, args.path) }
     },
   })
 }
 
 /** Read a remote file (text, capped at 2 MiB). */
-export function sshReadTool(engine: SshEngine) {
+export function sshReadTool(runtime: SshRuntime) {
   return defineTool({
     name: 'ssh_read',
     description: 'Read a text file on the remote server over SFTP and return its content (cap: 2 MiB; binary files are refused). ' +
@@ -220,15 +224,15 @@ export function sshReadTool(engine: SshEngine) {
         : `${value.path} (${value.size} bytes):\n${value.content}`),
     },
     async execute(args: { path: string; alias?: string }) {
-      const alias = resolveAlias(engine, args.alias)
-      const file = await engine.readFile(alias, args.path)
+      const alias = resolveAlias(runtime, args.alias)
+      const file = await runtime.engine.readFile(alias, args.path)
       return { path: args.path, ...file }
     },
   })
 }
 
 /** Write a remote file (text over SFTP). */
-export function sshWriteTool(engine: SshEngine) {
+export function sshWriteTool(runtime: SshRuntime) {
   return defineTool({
     name: 'ssh_write',
     description: 'Write text content to a file on the remote server over SFTP (overwrites; parent directories are NOT auto-created). ' +
@@ -251,8 +255,8 @@ export function sshWriteTool(engine: SshEngine) {
       render: (_args, value) => text(`wrote ${value.path} (${value.size} bytes)`),
     },
     async execute(args: { path: string; content: string; alias?: string }) {
-      const alias = resolveAlias(engine, args.alias)
-      const stat = await engine.writeFile(alias, args.path, args.content)
+      const alias = resolveAlias(runtime, args.alias)
+      const stat = await runtime.engine.writeFile(alias, args.path, args.content)
       return { path: args.path, ...stat }
     },
   })

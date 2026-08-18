@@ -132,6 +132,39 @@
 ### 下一步 M3
 - preset 组合完善（isolate realm + persona 细节）→ M4 真实 Linux 服务器验收（agent 远程跑 bash/PTY/写文件）
 
+## M3（preset 组合：isolate realm + persona）完成（2026-08-18）
+
+### 调研结论（定案，源码级验证）
+- **isolate 机制**（vendor/loader/src/config/isolate.ts + vendor/cordis/src/reflect.ts）：
+  - `isolate: { label: true }` → **LocalRealm**（`Symbol(name#entryId)`，每 entry 私有）；字符串 label → GlobalRealm（同 label 共享）。**isolate 配置写在 group 行上**，子行 entry.ctx 经 `setPrototypeOf` 重接到 group ctx → 整组子行沿原型链共享 group 行的 realm symbol
+  - 服务 provide 时用 `ctx[Context.isolate][name]` 取 realm symbol 做 store key（`reflect.ts:287-292`）；属性访问沿 fiber 链上溯，每步检查父 ctx 的 realm symbol 相同（`fiber.parent[isolate][prop] !== key` 停止）
+  - **跨子行服务解析**靠装载期注入快照（fiber._checkImpl → 全局 store 按同 realm symbol 命中）
+- **官方先例（minimal preset）**：`isolate: { fs: true }` group 里同放 `fs-local`（provide 'fs'）+ `str-replace-editor`（消费 ctx.fs）——「隔离重定向 fs」的标准范式，remote preset 直接复刻
+- **工具注册分层**（packages/core/tools + dsh-scope）：scope key 存 ctx 的 `[kScope]` own property，**沿原型链传播**（extend=Object.create）→ group 内工具行仍注册进 standing layer，agent 可见；executor 闭包捕获的 ctx（组内 ctx）决定 ctx.fs/ctx.subprocess 解析 → 命中组内 isolate 服务
+- **官方工具依赖表**（决定 remote preset 组合内容）：tool-fs inject `['tools','fs','systemPrompt']`（解析 ctx.fs）；tool-fs-search inject `['tools','systemPrompt','subprocess']`（解析 ctx.subprocess.spawn，**刻意不含 fs**）；terminal-bash inject `['terminals','sandboxPolicy','subprocess']`（**spawnTerminal 走 ctx.subprocess** → 远程 PTY 可行）；**tool-bash 需 ctx.shell（无远程实现）→ 不放**
+
+### 产物（4 文件）
+- **`src/index.ts`**：apply 改 async——`await ctx.plugin(SshRuntime, {...})` 替代自建 engine（**host plane 共享连接所有者**，removed 重复 engine dispose effect）；5 个 ssh_* 工具改收 `ctx.ssh`
+- **`src/ssh-service.ts`**：私有字段 `engine_` + 公开 `get engine()`（工具消费连接池/exec/SFTP 全量能力；适配器仍走 getConnection 单目标语义，二者共享同一引擎）
+- **`src/tools.ts`**：5 工厂签名 `(engine: SshEngine)` → `(runtime: SshRuntime)`，execute 里 `runtime.engine`；resolveAlias 收 runtime
+- **`agent-presets/remote/agent.cordis.yml`**：重写——
+  - persona 完善（`{{model}}` 模板 + 远程工具说明 + 标准工具重定向说明 + 首步建连指引）
+  - **`remote-caps` isolate group**（`isolate: { fs: true, subprocess: true, terminals: true }`）：fs-ssh + subprocess-ssh + tool-fs + tool-fs-search + str-replace-editor + pty + terminal-bash
+  - **ssh-service 移出 preset**（host 提供，preset 不再挂 → 无 leakedServices、无双引擎）；tool-bash 故意不放（ctx.shell 无远程实现）
+  - 头部注释完整说明连接关系（host tools + preset adapters + isolate realm 语义）
+
+### 验证
+- `pnpm typecheck` ✓ / `pnpm test`（52/52）✓ / `pnpm build` ✓；已同步 `~/.dsh/.agent-presets/remote/agent.cordis.yml`（热发现）
+- git 提交：`feat: remote preset isolate realm — shared SshRuntime + SSH-backed tools`（4 文件）
+
+### 关键决策
+- **连接所有权收敛 host plane**：ssh_* 工具与 fs-ssh/subprocess-ssh 必须共享同一 SshRuntime（此前双引擎会连接状态不同步）
+- **isolate label 用 true（LocalRealm）**：组内兄弟行共享 group 行 realm 即可，无需 GlobalRealm 字符串
+- **注入出组沿 fiber 链解析**：`ssh`/`sandboxPolicy`/`systemPrompt`/`tools` 均 host 提供，组内可解析（不隔离这些 name）
+
+### 下一步 M4
+- 真实 Linux 服务器验收：4500 新会话选「服务器开发」→ agent 远程跑 bash/PTY/写文件；确认 preset 组合真实挂载不抛 leakedServices
+
 ## 方案书 v1.0 定稿 + 目录整理（2026-08-15）
 
 - **完整方案书定稿**：`docs/03-方案书-服务器开发Agent模式.md` v1.0——整合全部调研（01-06）：需求/可行性论证（四重背书）/e2b 式三层技术方案（ctx.\<ssh\> + fs-ssh + subprocess-ssh + 官方消费者零改造）/接口契约（ctx.fs 13 方法 + ctx.subprocess 3 方法）/preset 蓝图/安全设计/交互/里程碑（M0-M4）/风险/开发规范

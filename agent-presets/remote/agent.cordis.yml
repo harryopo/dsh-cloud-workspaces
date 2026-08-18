@@ -1,41 +1,103 @@
 # The `remote` agent preset: server-development mode.
 #
 # The agent's working environment is a REMOTE Linux server reached over SSH.
-# Local shell/fs tools are NOT mounted: commands run on the server via
-# ssh_exec, files are read/written over SFTP via ssh_read/ssh_write, and the
-# server's own toolchain (compilers, package managers) is used directly.
+# Local shell/fs tools are NOT mounted: commands run on the server, files are
+# read/written over SFTP, and the server's own toolchain (compilers, package
+# managers) is used directly.
 #
-# The remote tools themselves are registered globally by the dsh-remote-ide
-# plugin (profile bundle; see cordis.patch.yml) — their schemas reach every
-# agent's prompt automatically, so this preset does NOT re-mount the plugin
-# (re-applying it in the agent plane would double-register the tools).
+# ── how the pieces connect ──────────────────────────────────────────────────
 #
-# This composition mounts the remote capability services instead: ssh-service
-# owns the shared SSH connection (ctx.ssh), fs-ssh re-targets ctx.fs at the
-# remote server (so the agent's file reads/writes/edits land on the server).
-# Both are preset-scoped — ordinary sessions keep their local fs.
+# * The ssh_* tools (ssh_list / ssh_exec / ssh_ls / ssh_read / ssh_write) and
+#   the shared SshRuntime (ctx.ssh) live in the HOST composition (plugin row in
+#   cordis.patch.yml; see src/index.ts). They are global — every agent sees the
+#   tools, and the runtime owns the ONE connection pool.
 #
+# * The capability adapters (fs-ssh / subprocess-ssh) and the model-facing
+#   tools that consume them are PRESET-scoped. A service row in an agent-plane
+#   composition MUST sit inside a group carrying an `isolate` realm — without
+#   one it publishes into the root realm (process-global) and `dsh-agent-presets`
+#   rejects the mount. `true` means an entry-local realm: one private instance
+#   per mounted session, invisible to ordinary sessions (they keep the local
+#   sandboxed fs / subprocess on the host).
+#
+# * Rows inside one `isolate` group share its realm: fs-ssh provides `fs`,
+#   subprocess-ssh provides `subprocess`, pty provides `terminals`, and the
+#   tools mounted beside them resolve THOSE instances. Injections that leave
+#   the realm (`ssh`, `sandboxPolicy`, `systemPrompt`, `tools`) resolve up the
+#   fiber chain to the host plane. So `read_file`/`write`/`edit`/grep/glob/
+#   `str_replace_editor`/persistent terminals all land on the remote server.
+#
+# * tool-bash is deliberately NOT mounted: its executor consumes `ctx.shell`,
+#   for which no remote implementation exists yet — the model's shell on the
+#   server is ssh_exec instead.
+
 # ── identity ────────────────────────────────────────────────────────────────
 
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
     text: >-
-      You are a coding agent working on a REMOTE Linux server via SSH.
-      All development happens ON THE SERVER: run commands with ssh_exec,
-      list directories with ssh_ls, read files with ssh_read, write files
-      with ssh_write. Install toolchains on the server (apt/npm/pip/…)
-      when needed. Use ssh_list to pick a host when one is not active yet.
+      You are a coding agent powered by the {{model}} model, working on a
+      REMOTE Linux server via SSH. Your working environment IS the server —
+      there is no local filesystem to edit, and commands do not run on your
+      own machine.
 
-# ── remote capability services ──────────────────────────────────────────────
-# Order matters: fs-ssh injects ctx.ssh, so ssh-service must mount first.
-# The agent decides the target host in its first turn (ssh_list / ssh_exec).
+      Primary remote tools (always available): ssh_list lists configured
+      hosts (pick one when no connection is active); ssh_exec runs shell
+      commands on the server — build, install toolchains (apt/npm/pip),
+      run tests, inspect processes; ssh_ls / ssh_read / ssh_write browse,
+      read, and write server files over SFTP.
 
-- id: ssh-service
-  name: 'dsh-remote-ide/ssh-service'
+      Standard development tools also target the server through SSH-backed
+      adapters: file reads/writes/edits, grep/glob search, and persistent
+      terminals all operate on the remote filesystem and shell.
 
-- id: fs-ssh
-  name: 'dsh-remote-ide/fs-ssh'
+      Begin by calling ssh_list or ssh_exec to establish the connection when
+      none is active, then work directly on the server.
 
-- id: subprocess-ssh
-  name: 'dsh-remote-ide/subprocess-ssh'
+# ── remote capability realm ────────────────────────────────────────────────
+# Services + their consumers share one entry-local realm per mounted session.
+# Order matters for clarity only — the loader wires inject dependencies.
+
+- id: remote-caps
+  name: cordis:group
+  group: true
+  isolate:
+    fs: true
+    subprocess: true
+    terminals: true
+  config:
+    - id: fs-ssh
+      name: 'dsh-remote-ide/fs-ssh'
+
+    - id: subprocess-ssh
+      name: 'dsh-remote-ide/subprocess-ssh'
+
+    # Model-facing tools that resolve the SSH-backed adapters above.
+    - id: tool-fs
+      name: '@deepseek-ai/dsh-tool-fs'
+
+    - id: tool-fs-search
+      name: '@deepseek-ai/dsh-tool-fs-search'
+      config:
+        sampleOverCapGlobResults: false
+
+    - id: str-replace-editor
+      name: '@deepseek-ai/dsh-tool-str-replace-editor'
+      config:
+        maxOutputChars: 16000
+
+    # Persistent terminals: the PTY registry is agent-owned, and its bash
+    # backend spawns through the SSH subprocess adapter (remote PTY shells).
+    - id: pty
+      name: '@deepseek-ai/dsh-terminal'
+
+    - id: terminal-bash
+      name: '@deepseek-ai/dsh-terminal-bash'
+      config:
+        pollIntervalMs: 25
+        exactProbeAfterMs: 150
+        idleSilenceMs: 2000
+        handoffGraceMs: 500
+        timeoutMs: 5000
+        disposeGraceMs: 1000

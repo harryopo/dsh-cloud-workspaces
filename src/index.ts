@@ -16,8 +16,7 @@ import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-sett
 import z from 'schemastery'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { SshEngine } from './engine'
-import { HostStore } from './store'
+import SshRuntime from './ssh-service'
 import { sshExecTool, sshListTool, sshLsTool, sshReadTool, sshWriteTool } from './tools'
 
 /** Stable cordis plugin name. */
@@ -60,11 +59,17 @@ export const REMOTE_GUIDANCE = '本机已安装 dsh-remote-ide（服务器开发
 const SECTION_ORDER = 150
 
 /**
- * Mount the SSH engine and the remote-development tools.
+ * Mount the shared SSH runtime and the remote-development tools.
+ *
+ * The SshRuntime (ctx.ssh) is the ONE connection owner on the host plane: the
+ * ssh_* tools registered here and the preset-scoped adapters (fs-ssh /
+ * subprocess-ssh, mounted by agent-presets/remote in an isolate realm that
+ * injects `ssh`) all consume the same engine, so a connection established by
+ * one is visible to the others.
  * @param ctx - host plugin context carrying tools/systemPrompt.
  * @param config - resolved plugin config (schema defaults applied by the loader).
  */
-export function apply(ctx: Context, config?: Config): void {
+export async function apply(ctx: Context, config?: Config): Promise<void> {
   // The live source the surfaces read: the settings section once the web
   // settings surface is served, the composition entry otherwise.
   let current: () => Config = () => config ?? {}
@@ -74,16 +79,15 @@ export function apply(ctx: Context, config?: Config): void {
     announceToAgent: current().announceToAgent ?? DEFAULT_ANNOUNCE,
   })
 
-  const store = new HostStore()
-  const engine = new SshEngine(store, { maxReadBytes: resolve().maxReadBytes })
-  ctx.effect(() => () => { engine.dispose() }, 'dsh-remote-ide: engine')
+  // Host-plane shared SSH runtime; its own effect owns engine disposal.
+  await ctx.plugin(SshRuntime, { maxReadBytes: resolve().maxReadBytes })
 
   const tools = [
-    sshListTool(engine),
-    sshExecTool(engine),
-    sshLsTool(engine),
-    sshReadTool(engine),
-    sshWriteTool(engine),
+    sshListTool(ctx.ssh),
+    sshExecTool(ctx.ssh),
+    sshLsTool(ctx.ssh),
+    sshReadTool(ctx.ssh),
+    sshWriteTool(ctx.ssh),
   ]
   let disposeTools: (() => void) | undefined
   let disposeSection: (() => void) | undefined
