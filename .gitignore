@@ -3,6 +3,7 @@ lib/
 dist/
 *.tgz
 .research/
+.pnpm-store-local/
 .env
 .DS_Store
 *.log

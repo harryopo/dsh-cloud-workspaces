@@ -63,6 +63,32 @@ interface PoolRecord {
   inFlight: number
 }
 
+/**
+ * Low-level streaming command channel: raw duplex access to one SSH exec
+ * channel without collection, timeouts, or exit-code normalization. The
+ * subprocess adapter (subprocess-ssh) builds its wrapper protocol and
+ * tree-scoped termination on top of this seam.
+ *
+ * stdout/stderr are delivered as distinct Buffer streams (ssh2 keeps the
+ * remote stderr on an extended-data channel); the close event carries the
+ * remote exit-status (code) or, for a signal death, null plus the signal
+ * name — matching the Node child-process vocabulary the subprocess seam uses.
+ */
+export interface SshExecChannel {
+  /** Register a stdout-data listener (Buffer chunks, delivery order). */
+  onStdout(listener: (chunk: Buffer) => void): void
+  /** Register a stderr-data listener (Buffer chunks, delivery order). */
+  onStderr(listener: (chunk: Buffer) => void): void
+  /** Register a close listener: `(code)` on normal exit, `(null, signal)` on signal death. */
+  onClose(listener: (code: number | null, signal: string | null) => void): void
+  /** Write bytes to the channel's stdin. */
+  write(data: Buffer | string): void
+  /** Send EOF on stdin (the remote child sees `read(0)` return 0). */
+  end(): void
+  /** Close the channel immediately without waiting for the remote side. */
+  close(): void
+}
+
 /** A live PTY shell session. */
 export interface ShellSession {
   /** Assign to receive remote output. */
@@ -307,6 +333,24 @@ export class SshEngine {
     return hops
   }
 
+  /** Whether the pooled connection for a host is marked broken (rebuild decision). */
+  isBroken(alias: string): boolean {
+    return this.pool.get(alias)?.broken ?? false
+  }
+
+  /** Resolve (or reuse) the remote $HOME of a connection. */
+  async resolveHome(alias: string): Promise<string | undefined> {
+    const record = await this.ensureConnection(alias)
+    if (record.home !== undefined) return record.home
+    try {
+      const home = await this.exec(alias, 'printf %s "$HOME"', { timeoutMs: 10_000 })
+      record.home = home.stdout.trim() || undefined
+    } catch {
+      // Non-fatal: home stays undefined.
+    }
+    return record.home
+  }
+
   /** The current IDE workspace status. */
   status(): WorkspaceStatus {
     const active = this.activeAlias === '' ? undefined : this.pool.get(this.activeAlias)
@@ -360,6 +404,88 @@ export class SshEngine {
   }
 
   // ---------------------------------------------------------------- exec
+
+  /**
+   * Open a streaming exec channel without collection, timeouts, or exit-code
+   * normalization. Data flows as soon as the channel resolves; listeners
+   * registered later still receive every event because pre-resolution events
+   * are buffered until the first listener appears.
+   */
+  async openChannel(alias: string, command: string, options?: { cwd?: string }): Promise<SshExecChannel> {
+    const record = await this.ensureConnection(alias)
+    record.inFlight += 1
+    record.idleAt = Date.now()
+    return await new Promise<SshExecChannel>((resolve, reject) => {
+      const prefix = options?.cwd ? `cd ${quoteSh(options.cwd)} && ` : ''
+      record.client.exec(prefix + command, (error, stream) => {
+        if (error) {
+          record.inFlight -= 1
+          record.idleAt = Date.now()
+          reject(error)
+          return
+        }
+        const stdoutListeners: Array<(chunk: Buffer) => void> = []
+        const stderrListeners: Array<(chunk: Buffer) => void> = []
+        const closeListeners: Array<(code: number | null, signal: string | null) => void> = []
+        const pending: { stdout: Buffer[]; stderr: Buffer[] } = { stdout: [], stderr: [] }
+        let pendingClose: readonly [number | null, string | null] | undefined
+        const release = (): void => {
+          record.inFlight -= 1
+          record.idleAt = Date.now()
+        }
+        stream.on('data', (chunk: Buffer) => {
+          if (stdoutListeners.length === 0) pending.stdout.push(chunk)
+          else for (const listener of stdoutListeners) listener(chunk)
+        })
+        stream.stderr.on('data', (chunk: Buffer) => {
+          if (stderrListeners.length === 0) pending.stderr.push(chunk)
+          else for (const listener of stderrListeners) listener(chunk)
+        })
+        stream.on('close', (code: number | null, signal: string | null) => {
+          release()
+          if (closeListeners.length === 0) pendingClose = [code, signal]
+          else for (const listener of closeListeners) listener(code, signal)
+        })
+        // A transport error surfaces through close; keep the stream safe from
+        // an unhandled 'error' event.
+        stream.on('error', () => {})
+        resolve({
+          onStdout(listener) {
+            stdoutListeners.push(listener)
+            if (pending.stdout.length > 0) {
+              const buffered = pending.stdout.splice(0)
+              for (const chunk of buffered) listener(chunk)
+            }
+          },
+          onStderr(listener) {
+            stderrListeners.push(listener)
+            if (pending.stderr.length > 0) {
+              const buffered = pending.stderr.splice(0)
+              for (const chunk of buffered) listener(chunk)
+            }
+          },
+          onClose(listener) {
+            if (pendingClose !== undefined) {
+              const [code, signal] = pendingClose
+              pendingClose = undefined
+              listener(code, signal)
+              return
+            }
+            closeListeners.push(listener)
+          },
+          write(data) {
+            if (!stream.destroyed) stream.write(data)
+          },
+          end() {
+            if (!stream.destroyed && !stream.writableEnded) stream.end()
+          },
+          close() {
+            stream.close()
+          },
+        })
+      })
+    })
+  }
 
   /** Run one command on a host with a timeout and output caps. */
   async exec(alias: string, command: string, options?: { timeoutMs?: number; cwd?: string }): Promise<ExecResult> {
@@ -475,7 +601,7 @@ export class SshEngine {
   // ------------------------------------------------------------------ sftp
 
   /** Get (and lazily open) the SFTP subsystem of a connection. */
-  private async getSftp(alias: string): Promise<import('ssh2').SFTPWrapper> {
+  async getSftp(alias: string): Promise<import('ssh2').SFTPWrapper> {
     const record = await this.ensureConnection(alias)
     if (record.sftp !== undefined) return record.sftp
     record.sftpReady ??= new Promise<import('ssh2').SFTPWrapper>((resolve, reject) => {

@@ -21,6 +21,18 @@
       "types": "./lib/types/tools.d.ts",
       "default": "./lib/tools.js"
     },
+    "./ssh-service": {
+      "types": "./lib/types/ssh-service.d.ts",
+      "default": "./lib/ssh-service.js"
+    },
+    "./fs-ssh": {
+      "types": "./lib/types/fs-ssh.d.ts",
+      "default": "./lib/fs-ssh.js"
+    },
+    "./subprocess-ssh": {
+      "types": "./lib/types/subprocess-ssh.d.ts",
+      "default": "./lib/subprocess-ssh.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -33,14 +45,21 @@
     "ssh2": "^1.16.0"
   },
   "peerDependencies": {
+    "@deepseek-ai/dsh-fs": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-brand": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
     "@deepseek-ai/dsh-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox": "0.1.0-rc.6",
     "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess": "0.1.0-rc.6",
     "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
     "@types/node": "^22.20.0",

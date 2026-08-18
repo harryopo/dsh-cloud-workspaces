@@ -9,10 +9,12 @@
 # plugin (profile bundle; see cordis.patch.yml) — their schemas reach every
 # agent's prompt automatically, so this preset does NOT re-mount the plugin
 # (re-applying it in the agent plane would double-register the tools).
-# This composition only sets the persona and deliberately omits the local
-# tool rows (tool-bash / tool-fs / tool-fs-search) that the standard preset
-# mounts.
-
+#
+# This composition mounts the remote capability services instead: ssh-service
+# owns the shared SSH connection (ctx.ssh), fs-ssh re-targets ctx.fs at the
+# remote server (so the agent's file reads/writes/edits land on the server).
+# Both are preset-scoped — ordinary sessions keep their local fs.
+#
 # ── identity ────────────────────────────────────────────────────────────────
 
 - id: persona
@@ -24,3 +26,16 @@
       list directories with ssh_ls, read files with ssh_read, write files
       with ssh_write. Install toolchains on the server (apt/npm/pip/…)
       when needed. Use ssh_list to pick a host when one is not active yet.
+
+# ── remote capability services ──────────────────────────────────────────────
+# Order matters: fs-ssh injects ctx.ssh, so ssh-service must mount first.
+# The agent decides the target host in its first turn (ssh_list / ssh_exec).
+
+- id: ssh-service
+  name: 'dsh-remote-ide/ssh-service'
+
+- id: fs-ssh
+  name: 'dsh-remote-ide/fs-ssh'
+
+- id: subprocess-ssh
+  name: 'dsh-remote-ide/subprocess-ssh'

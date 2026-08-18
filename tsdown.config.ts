@@ -1,8 +1,10 @@
 /**
  * Build config for dsh-remote-ide (host-only edition): ESM node bundles for
- * the plugin entry (index), the invariant companion, and the remote-tools
- * subpath (consumed by the `remote` agent preset). SDK peers resolve from the
- * dsh profile at runtime, never bundled.
+ * the plugin entry (index), the invariant companion, the remote-tools subpath
+ * (consumed by the `remote` agent preset), and the remote capability services
+ * (ssh-service / fs-ssh / subprocess-ssh — mounted by the preset composition,
+ * never globally, so ctx.fs / ctx.subprocess stay local in ordinary sessions).
+ * SDK peers resolve from the dsh profile at runtime, never bundled.
  */
 import { defineConfig } from 'tsdown'
 
@@ -12,6 +14,9 @@ export default defineConfig({
     index: './src/index.ts',
     invariant: './src/invariant.ts',
     tools: './src/tools.ts',
+    'ssh-service': './src/ssh-service.ts',
+    'fs-ssh': './src/fs-ssh.ts',
+    'subprocess-ssh': './src/subprocess-ssh.ts',
   },
   outDir: 'lib',
   format: ['esm'],
@@ -30,5 +35,7 @@ export default defineConfig({
     '@deepseek-ai/dsh-system-prompt',
     '@deepseek-ai/dsh-tools',
     '@deepseek-ai/dsh-llm',
+    '@deepseek-ai/dsh-fs',
+    '@deepseek-ai/dsh-subprocess',
   ],
 })
