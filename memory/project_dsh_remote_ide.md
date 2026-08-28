@@ -1,6 +1,37 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-28（占位工作区）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-08-28（设置卡片）· **Category**: project · **Source**: conversation + git history
+
+## 2026-08-28 深夜：SSH 主机设置卡片（client 半）上线
+
+### 背景（用户反馈驱动）
+- 用户：不要开普通会话说，用功能时弹设置窗口先设置 SSH 连接，参考开源方案 UI
+- 决定：恢复 client 半（仅设置面板），走官方 settings.section slot + Typert remote 双通道
+
+### 实现（commit dbcd520 + d7462e4）
+- **`src/host-settings.ts`**：settings namespace `dsh-remote-ide-hosts`（kebab-case）+ HostConfig schema（hosts dict 保 write-only 密码 + role('secret') + applies live）
+- **`src/typert.ts`**：SshRemoteService（普通 Service + bindTypertRemote 绑定）+ HOST_TYPERT_CONTRIBUTION（face:'host' + invocations 严格描述符，ctx.typert.register）——7 端点：listHosts/saveHost/deleteHost/testConnection/listRemoteDir/createPlaceholder/listPlaceholders
+- **`src/engine.ts`**：`testConfig(cfg)`（表单直连探测，不走 store）+ `testEntry` 抽取
+- **`client/index.js`**（手写自包含 ModuleLoader 格式，React createElement 非 JSX）：settings.section slot（id 'ssh-hosts'，label「SSH 连接」）+ 主机 CRUD UI + 测试连接 + 远端目录浏览 → 占位工作区创建；样式 --dsw-alias-* token
+- **桥接**：saveHost/deleteHost 同步 upsert/remove HostStore → ssh_* 工具与占位路由立即可用
+- package.json：exports './client' + dsh.client.platform 'web' + peer/devDep dsh-typert-protocol
+
+### 踩坑（重要，每条都是血泪）
+1. **typert-protocol 0.1.1-rc.2 的 host 半注册 API**：`ctx.typert.register(contribution)`（dsh-typert-registry 提供，类型未导出需 module augmentation）；**不是**装饰器（@Remote/TypertRemoteService 是 SRC 扫描范式，tsdown/rolldown-oxc 不转译 standard decorators → 产物残留 @Remote 语法 Node 崩）
+2. **端点必须返回裸业务值**：gateway 已用 {ok,value} 表达调用成败；端点再自包 EndpointResult → client 收到双层 {ok,value:{ok,value}}，unwrap 只解一层 → 列表永不显示（browser_use 真机抓到）
+3. **deleteHost 必须 settings.mutate 单键 unset**（scope.update 是递归 merge 删不掉键；mutate 在 provider 级 ctx.settings 不在 scope）
+4. **client 半不用 JSX**：web 端 ModuleLoader 直接执行 bundle 不转译 → 必须 React.createElement；ModuleLoader.load id 必须是**包名**（'dsh-remote-ide'，带 #client 后缀会 "loaded without registering"）
+5. **namespace 服务访问用 ctx.get('remote.ssh-remote')**：ctx.remote['ssh-remote'] 属性访问触发 cordis inject 检查（同 host 半 ssh 问题）
+6. **同文件并行 Edit 相互覆盖再犯**（exports['./client'] 丢了，client-modules 报错）——同文件修改必须串行
+7. **slot 注册**：`ctx.slots.inject(key, () => ctx.slots.register({name,id,order,label,inject}, Component))`；label 是函数；inject 返回体 hooks 值须 {getSnapshot, subscribe}
+
+### 验证（browser_use 真机三轮）
+- 设置页「SSH 连接」区块出现；添加主机 → 卡片（口令✓）→ 测试（显示错误不白屏）→ 删除（确认+消失+下拉同步）全流程通过；控制台无插件错误；侧边栏「服务器开发」preset 可见
+
+### 用户操作流（对标 dsh-ssh 30 秒上手）
+1. 设置 → SSH 连接 → 添加主机（host/port/user/密钥或口令）→ 保存
+2. 保存后主机即被 ssh_list 看到、ssh_* 工具可用（桥接 store）
+3. 远端工作区：选主机浏览目录 → 绑定 → 新会话选本地占位路径 → 全远程
 
 ## 2026-08-28 晚：占位工作区（placeholder workspace）落地
 
