@@ -143,6 +143,12 @@ window.__ModuleLoader__.load({
         transition: border-color 0.15s ease, box-shadow 0.15s ease; outline: none; }
       .dri-field input:focus, .dri-field select:focus { border-color: var(--dsw-alias-brand-primary, #0071e3);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary, #0071e3) 18%, transparent); }
+      .dri-pwWrap { position: relative; display: flex; align-items: center; }
+      .dri-pwWrap input { width: 100%; padding-right: 34px; }
+      .dri-eye { position: absolute; right: 6px; display: inline-flex; align-items: center; justify-content: center;
+        width: 24px; height: 24px; border: none; background: transparent; cursor: pointer; border-radius: 6px;
+        color: var(--dsw-alias-label-tertiary, #86868b); padding: 0; transition: color 0.15s ease, background 0.15s ease; }
+      .dri-eye:hover { color: var(--dsw-alias-label-primary, #1d1d1f); background: var(--dsw-alias-interactive-bg-hover, #f5f5f7); }
       .dri-field .dri-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary, #86868b); }
       .dri-formActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
       .dri-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -185,7 +191,7 @@ window.__ModuleLoader__.load({
           : { ok: false, message: (value && value.error) || resError(res, '连接失败') })
         setTesting(false)
       }, [onTest])
-      const authLabel = host.authType === 'password' ? (hasSecret ? '口令 ✓' : '口令') : '密钥'
+      const authLabel = host.authType === 'password' ? (hasSecret ? '密码已保存' : '密码') : '密钥'
       const children = [
         h('div', { className: 'dri-cardHead' },
           h('div', null,
@@ -211,6 +217,7 @@ window.__ModuleLoader__.load({
         name: '', host: '', port: '22', user: '', authType: 'key', privateKeyPath: '', password: '',
       })
       const [error, setError] = useState(null)
+      const [showPw, setShowPw] = useState(false)
       const set = (key) => (e) => setForm({ ...form, [key]: e.target.value })
       const submit = () => {
         if (!form.host.trim()) { setError('主机名/IP 必填'); return }
@@ -218,7 +225,7 @@ window.__ModuleLoader__.load({
         const port = Number.parseInt(form.port, 10)
         if (!Number.isInteger(port) || port < 1 || port > 65535) { setError('端口须为 1–65535'); return }
         if (form.authType === 'key' && !form.privateKeyPath.trim()) {
-          setError('请填写私钥路径，或改用口令认证'); return
+          setError('请填写私钥路径，或改用密码认证'); return
         }
         onSave({
           name: form.name.trim() || undefined,
@@ -230,6 +237,28 @@ window.__ModuleLoader__.load({
           password: form.authType === 'password' ? form.password : undefined,
         })
       }
+      // 小眼睛：显示/隐藏密码（纯 SVG，无 emoji）。
+      const eyeIcon = h('svg', {
+        width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+        strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
+      }, showPw
+        ? h('g', null,
+            h('path', { d: 'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94' }),
+            h('path', { d: 'M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19' }),
+            h('line', { x1: 1, y1: 1, x2: 23, y2: 23 }))
+        : h('g', null,
+            h('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z' }),
+            h('circle', { cx: 12, cy: 12, r: 3 })))
+      const passwordInput = h('div', { className: 'dri-pwWrap' },
+        h('input', {
+          type: showPw ? 'text' : 'password',
+          value: form.password, onChange: set('password'), placeholder: '••••••••',
+          autoComplete: 'new-password',
+        }),
+        h('button', {
+          type: 'button', className: 'dri-eye', onClick: () => setShowPw(!showPw),
+          'aria-label': showPw ? '隐藏密码' : '显示密码', title: showPw ? '隐藏密码' : '显示密码',
+        }, eyeIcon))
       const field = (label, child) => h('div', { className: 'dri-field' }, h('label', null, label), child)
       return h('div', { className: 'dri-form', role: 'form' },
         error ? h('p', { className: 'dri-error', role: 'alert' }, error) : null,
@@ -239,11 +268,11 @@ window.__ModuleLoader__.load({
           field('端口', h('input', { value: form.port, onChange: set('port'), placeholder: '22' })),
           field('登录用户 *', h('input', { value: form.user, onChange: set('user'), placeholder: 'root' }))),
         field('认证方式', h('select', { value: form.authType, onChange: set('authType') },
-          h('option', { value: 'key' }, '密钥（私钥路径；留空走 ssh-agent）'),
-          h('option', { value: 'password' }, '口令'))),
+          h('option', { value: 'key' }, '密钥认证（私钥路径；留空走 ssh-agent）'),
+          h('option', { value: 'password' }, '密码认证（账号密码登录）'))),
         form.authType === 'key'
           ? field('私钥路径', h('input', { value: form.privateKeyPath, onChange: set('privateKeyPath'), placeholder: 'C:\\Users\\you\\.ssh\\id_ed25519 或 ~/.ssh/id_ed25519' }))
-          : field('口令' + (initial ? '（留空保持已保存）' : ''), h('input', { type: 'password', value: form.password, onChange: set('password'), placeholder: '••••••••' })),
+          : field('密码' + (initial ? '（留空保持已保存）' : ''), passwordInput),
         h('div', { className: 'dri-formActions' },
           h('button', { className: 'dri-btn', onClick: onCancel }, '取消'),
           h('button', { className: 'dri-btn dri-btn-primary', onClick: submit }, '保存')))

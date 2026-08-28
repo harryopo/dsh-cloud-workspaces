@@ -1,6 +1,15 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-28（设置卡片）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-08-28（苹果风 UI）· **Category**: project · **Source**: conversation + git history
+
+## 2026-08-28 深夜二：设置卡片苹果风重设计（commit b6435e6）
+
+- 用户反馈「SSH 的 UI 太丑，不够苹果风」→ 重写 client/index.js 的 CSS（保持 DOM/逻辑不动）
+- **视觉语言**：24px 大圆角对话框、10-16px 圆角控件、多层柔和阴影、-apple-system/PingFang 系统字体栈、半透明卡片（color-mix 88%+透明）、品牌蓝主按钮、hover 微上浮/scale(0.97) 按压反馈、focus 蓝色光环
+- **去 emoji**：📁 → › 目录符号 + · 文件符号；口令 pill 用 CSS 圆点 + dri-pill-ok 绿色态（文本「口令已保存」）
+- **⚠️ 深色模式坑（浏览器实测抓到）**：`--dsw-alias-button-primary-fill` 在 DSH 深色主题解析为近白 #f9fafb，按钮硬编码白字 → 白底白字不可见；修复：文字色改用配套 token `--dsw-alias-label-primary-foreground`（明暗自适应）
+- **验收**（browser_use 计算样式审计）：深色下接近 macOS 系统设置原生面板（#2c2c2e 面板 + 24px 圆角 + 柔和阴影 + 系统字体），无 emoji，控制台无 JS 错误
+- 通用原则：DSH 插件 UI 的明暗自适应必须用**成对 token**（fill + label-primary-foreground），不能硬编码文字色
 
 ## 2026-08-28 深夜：SSH 主机设置卡片（client 半）上线
 
