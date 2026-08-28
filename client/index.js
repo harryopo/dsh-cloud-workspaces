@@ -2,7 +2,8 @@
  * dsh-remote-ide — client half: SSH 主机设置卡片（设置页 → 「SSH 连接」）。
  *
  * 官方 client 插件形态（window.__ModuleLoader__.load({id, factory(require)})，
- * factory 自包含，require 只解析 web 模块映射：react 等）。
+ * factory 自包含，require 只解析 web 模块映射：react 等；**不使用 JSX**——
+ * web 端 ModuleLoader 直接执行 bundle，JSX 需自行转 createElement）。
  * - 注册 settings.section slot（id 'ssh-hosts'）——DSH 设置页的自定义区块；
  * - 主机 CRUD / 测试连接 / 远端目录浏览 / 占位工作区创建全部经 Typert
  *   remote（ctx.remote.ssh-remote.<method>，host 半 SshRemoteService 实现）；
@@ -14,10 +15,11 @@
  *   createPlaceholder(hostId, remotePath) / listPlaceholders()
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-remote-ide#client',
+  id: 'dsh-remote-ide',
   factory(require) {
     const React = require('react')
     const { useState, useEffect, useCallback } = React
+    const h = React.createElement
 
     // ------------------------------------------------------------ typert
 
@@ -139,12 +141,14 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-state-success-primary, #2ba471); word-break: break-all; }
       .dri-wsRow { font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #f0f0f0); }
       .dri-wsRow code { font-family: var(--dsw-font-family, monospace); }
+      .dri-code { font-family: var(--dsw-font-family, monospace); }
+      .dri-hint { font-size: 12px; color: var(--dsw-alias-label-tertiary, #888); }
     `
 
     // ---------------------------------------------------------- component
 
     /** 主机行：名称/地址/认证 + 测试/编辑/删除。 */
-    function HostRow({ host, hasSecret, t, onTest, onEdit, onDelete }) {
+    function HostRow({ host, hasSecret, onTest, onEdit, onDelete }) {
       const [testing, setTesting] = useState(false)
       const [result, setResult] = useState(null) // { ok, message } | null
       const run = useCallback(async () => {
@@ -153,38 +157,31 @@ window.__ModuleLoader__.load({
         const value = unwrap(res, null)
         setResult(value && value.ok
           ? { ok: true, message: '连接成功（' + value.latencyMs + 'ms）' }
-          : { ok: false, message: resError(res, '连接失败') })
+          : { ok: false, message: (value && value.error) || resError(res, '连接失败') })
         setTesting(false)
       }, [onTest])
-      const authLabel = host.authType === 'password'
-        ? (hasSecret ? '口令 ✓' : '口令')
-        : '密钥'
-      return (
-        <li className="dri-card">
-          <div className="dri-cardHead">
-            <div>
-              <div className="dri-cardTitle">{host.name || host.id}</div>
-              <div className="dri-cardSub">{host.user}@{host.host}:{host.port}</div>
-            </div>
-            <div className="dri-actions">
-              <span className="dri-pill">{authLabel}</span>
-              <button className="dri-btn" disabled={testing} onClick={run}>{testing ? '测试中…' : '测试'}</button>
-              <button className="dri-btn" onClick={onEdit}>编辑</button>
-              <button className="dri-btn dri-btn-danger" onClick={onDelete}>删除</button>
-            </div>
-          </div>
-          {result && (
-            <div className={'dri-testResult ' + (result.ok ? 'dri-testOk' : 'dri-testFail')}>
-              <span>{result.message}</span>
-              <button className="dri-close" onClick={() => setResult(null)} aria-label="关闭">×</button>
-            </div>
-          )}
-        </li>
-      )
+      const authLabel = host.authType === 'password' ? (hasSecret ? '口令 ✓' : '口令') : '密钥'
+      const children = [
+        h('div', { className: 'dri-cardHead' },
+          h('div', null,
+            h('div', { className: 'dri-cardTitle' }, host.name || host.id),
+            h('div', { className: 'dri-cardSub' }, host.user + '@' + host.host + ':' + host.port)),
+          h('div', { className: 'dri-actions' },
+            h('span', { className: 'dri-pill' }, authLabel),
+            h('button', { className: 'dri-btn', disabled: testing, onClick: run }, testing ? '测试中…' : '测试'),
+            h('button', { className: 'dri-btn', onClick: onEdit }, '编辑'),
+            h('button', { className: 'dri-btn dri-btn-danger', onClick: onDelete }, '删除'))),
+      ]
+      if (result) {
+        children.push(h('div', { className: 'dri-testResult ' + (result.ok ? 'dri-testOk' : 'dri-testFail') },
+          h('span', null, result.message),
+          h('button', { className: 'dri-close', onClick: () => setResult(null), 'aria-label': '关闭' }, '×')))
+      }
+      return h('li', { className: 'dri-card' }, ...children)
     }
 
     /** 主机表单（添加/编辑）。 */
-    function HostForm({ initial, onCancel, onSave, t }) {
+    function HostForm({ initial, onCancel, onSave }) {
       const [form, setForm] = useState(initial || {
         name: '', host: '', port: '22', user: '', authType: 'key', privateKeyPath: '', password: '',
       })
@@ -206,233 +203,141 @@ window.__ModuleLoader__.load({
           authType: form.authType,
           privateKeyPath: form.authType === 'key' ? form.privateKeyPath.trim() : undefined,
           password: form.authType === 'password' ? form.password : undefined,
-        }, form)
+        })
       }
-      return (
-        <div className="dri-form" role="form">
-          {error && <p className="dri-error" role="alert">{error}</p>}
-          <div className="dri-grid2">
-            <div className="dri-field">
-              <label>显示名</label>
-              <input value={form.name} onChange={set('name')} placeholder="例如 web-1 生产机" />
-            </div>
-            <div className="dri-field">
-              <label>主机名 / IP *</label>
-              <input value={form.host} onChange={set('host')} placeholder="1.2.3.4 或 host.example.com" />
-            </div>
-            <div className="dri-field">
-              <label>端口</label>
-              <input value={form.port} onChange={set('port')} placeholder="22" />
-            </div>
-            <div className="dri-field">
-              <label>登录用户 *</label>
-              <input value={form.user} onChange={set('user')} placeholder="root" />
-            </div>
-          </div>
-          <div className="dri-field">
-            <label>认证方式</label>
-            <select value={form.authType} onChange={set('authType')}>
-              <option value="key">密钥（私钥路径；留空走 ssh-agent）</option>
-              <option value="password">口令</option>
-            </select>
-          </div>
-          {form.authType === 'key' ? (
-            <div className="dri-field">
-              <label>私钥路径</label>
-              <input value={form.privateKeyPath} onChange={set('privateKeyPath')} placeholder="C:\Users\you\.ssh\id_ed25519 或 ~/.ssh/id_ed25519" />
-            </div>
-          ) : (
-            <div className="dri-field">
-              <label>口令{initial ? '（留空保持已保存）' : ''}</label>
-              <input type="password" value={form.password} onChange={set('password')} placeholder="••••••••" />
-            </div>
-          )}
-          <div className="dri-formActions">
-            <button className="dri-btn" onClick={onCancel}>取消</button>
-            <button className="dri-btn dri-btn-primary" onClick={submit}>保存</button>
-          </div>
-        </div>
-      )
+      const field = (label, child) => h('div', { className: 'dri-field' }, h('label', null, label), child)
+      return h('div', { className: 'dri-form', role: 'form' },
+        error ? h('p', { className: 'dri-error', role: 'alert' }, error) : null,
+        h('div', { className: 'dri-grid2' },
+          field('显示名', h('input', { value: form.name, onChange: set('name'), placeholder: '例如 web-1 生产机' })),
+          field('主机名 / IP *', h('input', { value: form.host, onChange: set('host'), placeholder: '1.2.3.4 或 host.example.com' })),
+          field('端口', h('input', { value: form.port, onChange: set('port'), placeholder: '22' })),
+          field('登录用户 *', h('input', { value: form.user, onChange: set('user'), placeholder: 'root' }))),
+        field('认证方式', h('select', { value: form.authType, onChange: set('authType') },
+          h('option', { value: 'key' }, '密钥（私钥路径；留空走 ssh-agent）'),
+          h('option', { value: 'password' }, '口令'))),
+        form.authType === 'key'
+          ? field('私钥路径', h('input', { value: form.privateKeyPath, onChange: set('privateKeyPath'), placeholder: 'C:\\Users\\you\\.ssh\\id_ed25519 或 ~/.ssh/id_ed25519' }))
+          : field('口令' + (initial ? '（留空保持已保存）' : ''), h('input', { type: 'password', value: form.password, onChange: set('password'), placeholder: '••••••••' })),
+        h('div', { className: 'dri-formActions' },
+          h('button', { className: 'dri-btn', onClick: onCancel }, '取消'),
+          h('button', { className: 'dri-btn dri-btn-primary', onClick: submit }, '保存')))
     }
 
     /** 设置页区块：主机列表 + 添加/编辑 + 远端目录 → 工作区。 */
     function SshHostsSection(props) {
       const { useSshHosts, load, saveHost, deleteHost, testConnection, listRemoteDir, createPlaceholder, reloadPlaceholders } = props
       const state = useSshHosts((snap) => snap)
-      const [editing, setEditing] = useState(null) // null | { mode:'create' } | { mode:'edit', host }
-      const [pendingDelete, setPendingDelete] = useState(null) // hostId
+      const [editing, setEditing] = useState(null)
+      const [pendingDelete, setPendingDelete] = useState(null)
       const [browser, setBrowser] = useState(null) // { hostId, path, entries, loading }
-      const [created, setCreated] = useState(null) // { localPath }
+      const [created, setCreated] = useState(null)
 
       useEffect(() => { void load() }, [load])
 
       if (state.status === 'error') {
-        return (
-          <div className="dri-section">
-            <p className="dri-error" role="alert">{state.error}</p>
-            <button className="dri-btn" onClick={load}>重试</button>
-          </div>
-        )
+        return h('div', { className: 'dri-section' },
+          h('p', { className: 'dri-error', role: 'alert' }, state.error),
+          h('button', { className: 'dri-btn', onClick: load }, '重试'))
       }
       const hosts = Object.values(state.hosts)
-      return (
-        <div className="dri-section">
-          <h2>SSH 连接</h2>
-          <p className="dri-intro">
-            配置远程开发主机。保存后可在「服务器开发」模式中通过
-            <code> ssh_workspace </code>把服务器目录绑定为工作区（或在本页
-            「远端目录」直接创建）；会话工作区落在占位目录时，文件 / 搜索 /
-            编辑 / 终端全部在该主机上执行。
-          </p>
-          <div className="dri-head">
-            {state.error && <p className="dri-error" role="alert">{state.error}</p>}
-            <span />
-            <button className="dri-btn dri-btn-primary" onClick={() => setEditing({ mode: 'create' })}>+ 添加主机</button>
-          </div>
 
-          {hosts.length === 0 ? (
-            <div className="dri-empty">
-              还没有配置主机。<br />点击「+ 添加主机」开始。
-            </div>
-          ) : (
-            <ul className="dri-cards">
-              {hosts.map((host) => (
-                <HostRow key={host.id} host={host} hasSecret={!!state.secrets[host.id]}
-                  t={() => {}}
-                  onTest={() => testConnection(host)}
-                  onEdit={() => setEditing({ mode: 'edit', host })}
-                  onDelete={() => setPendingDelete(host.id)} />
-              ))}
-            </ul>
-          )}
+      const browseTo = async (hostId, nextPath) => {
+        setBrowser({ hostId, path: nextPath, entries: [], loading: true })
+        const res = await listRemoteDir(hostId, nextPath)
+        setBrowser({ hostId, path: nextPath, entries: unwrap(res, []) || [], loading: false })
+      }
 
-          {editing && (
-            <HostForm
-              initial={editing.mode === 'edit' ? {
-                name: editing.host.name || '', host: editing.host.host, port: String(editing.host.port),
-                user: editing.host.user, authType: editing.host.authType || 'key',
-                privateKeyPath: editing.host.privateKeyPath || '', password: '',
-              } : null}
-              t={() => {}}
-              onCancel={() => setEditing(null)}
-              onSave={async (patch) => {
-                const id = editing.mode === 'edit' ? editing.host.id : (patch.name || patch.host || 'host').replace(/[^A-Za-z0-9._-]/g, '-')
-                const res = await saveHost(id, patch)
-                if (!res || res.ok !== true) {
-                  // 端点失败信息在 res.error.message；HostForm 内部 setError 无法触达，回显到区块错误
-                  store.set({ error: resError(res, '保存失败') })
-                } else {
-                  setEditing(null)
-                  await load()
-                }
-              }}
-            />
-          )}
+      return h('div', { className: 'dri-section' },
+        h('h2', null, 'SSH 连接'),
+        h('p', { className: 'dri-intro' },
+          '配置远程开发主机。保存后可在「服务器开发」模式中通过 ssh_workspace 把服务器目录绑定为工作区（或在本页「远端工作区」直接创建）；会话工作区落在占位目录时，文件 / 搜索 / 编辑 / 终端全部在该主机上执行。'),
+        h('div', { className: 'dri-head' },
+          state.error ? h('p', { className: 'dri-error', role: 'alert' }, state.error) : null,
+          h('span', null),
+          h('button', { className: 'dri-btn dri-btn-primary', onClick: () => setEditing({ mode: 'create' }) }, '+ 添加主机')),
 
-          {pendingDelete && (
-            <div className="dri-testResult dri-testFail" role="alert">
-              <span>删除主机「{state.hosts[pendingDelete] ? (state.hosts[pendingDelete].name || pendingDelete) : pendingDelete}」？仅移除本机配置，远端不受影响。</span>
-              <span>
-                <button className="dri-btn" onClick={() => setPendingDelete(null)}>取消</button>{' '}
-                <button className="dri-btn dri-btn-danger" onClick={async () => {
-                  await deleteHost(pendingDelete)
-                  setPendingDelete(null)
-                  await load()
-                }}>确认删除</button>
-              </span>
-            </div>
-          )}
+        hosts.length === 0
+          ? h('div', { className: 'dri-empty' }, '还没有配置主机。', h('br', null), '点击「+ 添加主机」开始。')
+          : h('ul', { className: 'dri-cards' }, hosts.map((host) => h(HostRow, {
+              key: host.id, host, hasSecret: !!state.secrets[host.id],
+              onTest: () => testConnection(host),
+              onEdit: () => setEditing({ mode: 'edit', host }),
+              onDelete: () => setPendingDelete(host.id),
+            }))),
 
-          <h2 style={{ marginTop: 22 }}>远端工作区</h2>
-          <p className="dri-intro">
-            选择一个已配置主机，浏览远端目录并绑定为 DSH 工作区；绑定后到
-            「选择工作区」里选返回的本地路径即可。
-          </p>
-          {hosts.length === 0 ? null : (
-            <div className="dri-dirBrowser">
-              <div className="dri-field" style={{ marginBottom: 8 }}>
-                <label>主机</label>
-                <select value={browser ? browser.hostId : ''} onChange={async (e) => {
-                  const hostId = e.target.value
-                  if (!hostId) { setBrowser(null); return }
-                  setBrowser({ hostId, path: '/', entries: [], loading: true })
-                  const res = await listRemoteDir(hostId, '/')
-                  const entries = unwrap(res, [])
-                  setBrowser({ hostId, path: '/', entries: entries || [], loading: false })
-                }}>
-                  <option value="">选择主机…</option>
-                  {hosts.map((h) => <option key={h.id} value={h.id}>{h.name || h.id}</option>)}
-                </select>
-              </div>
-              {browser && (
-                <div>
-                  <div className="dri-dirPath">当前目录：{browser.path}</div>
-                  <div className="dri-dirList">
-                    {browser.path !== '/' && (
-                      <div className="dri-dirRow" onClick={async () => {
-                        const parent = browser.path.split('/').slice(0, -1).join('/') || '/'
-                        setBrowser({ ...browser, path: parent, loading: true })
-                        const res = await listRemoteDir(browser.hostId, parent)
-                        setBrowser({ hostId: browser.hostId, path: parent, entries: unwrap(res, []), loading: false })
-                      }}>
-                        <span>..</span>
-                      </div>
-                    )}
-                    {(browser.entries || []).filter((e) => e.type === 'dir').map((e) => (
-                      <div key={e.name} className="dri-dirRow" onClick={async () => {
-                        const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
-                        setBrowser({ ...browser, path: next, loading: true })
-                        const res = await listRemoteDir(browser.hostId, next)
-                        setBrowser({ hostId: browser.hostId, path: next, entries: unwrap(res, []), loading: false })
-                      }}>
-                        <span>📁 {e.name}</span>
-                      </div>
-                    ))}
-                    {(browser.entries || []).filter((e) => e.type === 'file').map((e) => (
-                      <div key={e.name} className="dri-dirRow" style={{ cursor: 'default' }}>
-                        <span>{e.name}</span>
-                        <span className="dri-dirSize">{e.size}</span>
-                      </div>
-                    ))}
-                    {browser.loading && <div className="dri-dirRow" style={{ cursor: 'default' }}>加载中…</div>}
-                  </div>
-                  <div className="dri-dirActions">
-                    <button className="dri-btn dri-btn-primary" onClick={async () => {
-                      const res = await createPlaceholder(browser.hostId, browser.path)
-                      const value = unwrap(res, null)
-                      if (value) {
-                        setCreated({ localPath: value.localPath })
-                        await reloadPlaceholders()
-                      } else {
-                        store.set({ error: resError(res, '创建工作区失败') })
-                      }
-                    }}>将当前目录绑定为工作区</button>
-                    <span className="dri-hint" style={{ fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #888)' }}>
-                      {browser.loading ? '连接中…' : (browser.entries || []).length + ' 项'}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {created && (
-                <div className="dri-created">
-                  工作区已创建，本地占位路径：<br /><code>{created.localPath}</code>
-                  <br />在 DSH「选择工作区」中选中它，会话即在该主机该目录运行。
-                </div>
-              )}
-              {state.placeholders.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary, #666)', marginBottom: 4 }}>已绑定：</div>
-                  {state.placeholders.map((w) => (
-                    <div key={w.localPath} className="dri-wsRow">
-                      <code>{w.hostId}</code> → <code>{w.remotePath}</code>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )
+        editing ? h(HostForm, {
+          initial: editing.mode === 'edit' ? {
+            name: editing.host.name || '', host: editing.host.host, port: String(editing.host.port),
+            user: editing.host.user, authType: editing.host.authType || 'key',
+            privateKeyPath: editing.host.privateKeyPath || '', password: '',
+          } : null,
+          onCancel: () => setEditing(null),
+          onSave: async (patch) => {
+            const id = editing.mode === 'edit' ? editing.host.id : (patch.name || patch.host || 'host').replace(/[^A-Za-z0-9._-]/g, '-')
+            const res = await saveHost(id, patch)
+            if (!res || res.ok !== true) store.set({ error: resError(res, '保存失败') })
+            else { setEditing(null); await load() }
+          },
+        }) : null,
+
+        pendingDelete ? h('div', { className: 'dri-testResult dri-testFail', role: 'alert' },
+          h('span', null, '删除主机「' + (state.hosts[pendingDelete] ? (state.hosts[pendingDelete].name || pendingDelete) : pendingDelete) + '」？仅移除本机配置，远端不受影响。'),
+          h('span', null,
+            h('button', { className: 'dri-btn', onClick: () => setPendingDelete(null) }, '取消'),
+            ' ',
+            h('button', { className: 'dri-btn dri-btn-danger', onClick: async () => {
+              await deleteHost(pendingDelete); setPendingDelete(null); await load()
+            } }, '确认删除'))) : null,
+
+        h('h2', { style: { marginTop: 22 } }, '远端工作区'),
+        h('p', { className: 'dri-intro' },
+          '选择一个已配置主机，浏览远端目录并绑定为 DSH 工作区；绑定后到「选择工作区」里选返回的本地路径即可。'),
+
+        hosts.length === 0 ? null : h('div', { className: 'dri-dirBrowser' },
+          h('div', { className: 'dri-field', style: { marginBottom: 8 } },
+            h('label', null, '主机'),
+            h('select', { value: browser ? browser.hostId : '', onChange: (e) => {
+              const hostId = e.target.value
+              if (hostId) void browseTo(hostId, '/')
+              else setBrowser(null)
+            } },
+              h('option', { value: '' }, '选择主机…'),
+              hosts.map((host) => h('option', { key: host.id, value: host.id }, host.name || host.id)))),
+          browser ? h('div', null,
+            h('div', { className: 'dri-dirPath' }, '当前目录：' + browser.path),
+            h('div', { className: 'dri-dirList' },
+              browser.path !== '/' ? h('div', { className: 'dri-dirRow', onClick: () => {
+                const parent = browser.path.split('/').slice(0, -1).join('/') || '/'
+                void browseTo(browser.hostId, parent)
+              } }, h('span', null, '..')) : null,
+              (browser.entries || []).filter((e) => e.type === 'dir').map((e) => h('div', { key: e.name, className: 'dri-dirRow', onClick: () => {
+                const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
+                void browseTo(browser.hostId, next)
+              } }, h('span', null, '📁 ' + e.name))),
+              (browser.entries || []).filter((e) => e.type === 'file').map((e) => h('div', { key: e.name, className: 'dri-dirRow', style: { cursor: 'default' } },
+                h('span', null, e.name),
+                h('span', { className: 'dri-dirSize' }, String(e.size)))),
+              browser.loading ? h('div', { className: 'dri-dirRow', style: { cursor: 'default' } }, '加载中…') : null),
+            h('div', { className: 'dri-dirActions' },
+              h('button', { className: 'dri-btn dri-btn-primary', onClick: async () => {
+                const res = await createPlaceholder(browser.hostId, browser.path)
+                const value = unwrap(res, null)
+                if (value) { setCreated({ localPath: value.localPath }); await reloadPlaceholders() }
+                else store.set({ error: resError(res, '创建工作区失败') })
+              } }, '将当前目录绑定为工作区'),
+              h('span', { className: 'dri-hint' }, browser.loading ? '连接中…' : ((browser.entries || []).length + ' 项')))) : null,
+          created ? h('div', { className: 'dri-created' },
+            '工作区已创建，本地占位路径：', h('br', null),
+            h('code', { className: 'dri-code' }, created.localPath),
+            h('br', null), '在 DSH「选择工作区」中选中它，会话即在该主机该目录运行。') : null,
+          state.placeholders.length > 0 ? h('div', { style: { marginTop: 12 } },
+            h('div', { className: 'dri-hint', style: { marginBottom: 4 } }, '已绑定：'),
+            state.placeholders.map((w) => h('div', { key: w.localPath, className: 'dri-wsRow' },
+              h('code', { className: 'dri-code' }, w.hostId),
+              ' → ',
+              h('code', { className: 'dri-code' }, w.remotePath))),
+          ) : null))
     }
 
     // -------------------------------------------------------------- apply
@@ -445,70 +350,51 @@ window.__ModuleLoader__.load({
       ctx.effect(() => () => { styleEl.remove() }, 'dsh-remote-ide: settings css')
 
       let mounted = false
-      ctx.effect(async () => {
-        const disposer = await ctx.remote.$mount(CLIENT_TYPERT_REMOTE)
-        mounted = true
-        // 挂载完成后立即拉一次数据，组件首帧即有内容。
-        await refresh()
-        return disposer
-      }, 'dsh-remote-ide: typert mount')
+      // namespace 服务 remote.ssh-remote：用 ctx.get 读取（无 inject 要求——
+      // 直接 ctx.remote['ssh-remote'] 属性访问会被 cordis 的 inject 检查拒绝）。
+      const remote = () => ctx.get('remote.ssh-remote')
 
       const refresh = async () => {
         if (!mounted) return
         const [hostsRes, phRes] = await Promise.all([
-          ctx.remote['ssh-remote'].listHosts(),
-          ctx.remote['ssh-remote'].listPlaceholders(),
+          remote().listHosts(),
+          remote().listPlaceholders(),
         ])
         const value = unwrap(hostsRes, null)
-        if (value) {
-          store.set({ status: 'ready', hosts: value.hosts || {}, secrets: value.secrets || {}, error: null })
-        } else {
-          store.set({ status: 'error', error: resError(hostsRes, '无法读取主机配置') })
-        }
-        const ph = unwrap(phRes, [])
-        store.set({ placeholders: ph || [] })
+        if (value) store.set({ status: 'ready', hosts: value.hosts || {}, secrets: value.secrets || {}, error: null })
+        else store.set({ status: 'error', error: resError(hostsRes, '无法读取主机配置') })
+        store.set({ placeholders: unwrap(phRes, []) || [] })
       }
+
+      ctx.effect(async () => {
+        const disposer = await ctx.remote.$mount(CLIENT_TYPERT_REMOTE)
+        mounted = true
+        await refresh()
+        return disposer
+      }, 'dsh-remote-ide: typert mount')
 
       const load = () => refresh()
       const reloadPlaceholders = async () => {
         if (!mounted) return
-        const res = await ctx.remote['ssh-remote'].listPlaceholders()
-        store.set({ placeholders: unwrap(res, []) || [] })
+        store.set({ placeholders: unwrap(await remote().listPlaceholders(), []) || [] })
       }
-      const saveHost = (id, patch) => ctx.remote['ssh-remote'].saveHost(id, patch)
-      const deleteHost = (id) => ctx.remote['ssh-remote'].deleteHost(id)
-      const testConnection = (host) => {
-        const cfg = {
-          host: host.host,
-          port: host.port,
-          user: host.user,
-          authType: host.authType || 'key',
-          privateKeyPath: host.privateKeyPath,
-        }
-        return ctx.remote['ssh-remote'].testConnection(cfg)
-      }
-      const listRemoteDir = (hostId, path) => ctx.remote['ssh-remote'].listRemoteDir(hostId, path)
-      const createPlaceholder = (hostId, remotePath) => ctx.remote['ssh-remote'].createPlaceholder(hostId, remotePath)
+      const saveHost = (id, patch) => remote().saveHost(id, patch)
+      const deleteHost = (id) => remote().deleteHost(id)
+      const testConnection = (host) => remote().testConnection({
+        host: host.host, port: host.port, user: host.user,
+        authType: host.authType || 'key', privateKeyPath: host.privateKeyPath,
+      })
+      const listRemoteDir = (hostId, path) => remote().listRemoteDir(hostId, path)
+      const createPlaceholder = (hostId, remotePath) => remote().createPlaceholder(hostId, remotePath)
 
-      // 数据刷新：settings 变更 + 连接重置。
       ctx.effect(() => {
-        const disposers = [
-          ctx.remote.$on('settings/document-updated', () => { void refresh() }),
-        ]
+        const disposers = [ctx.remote.$on('settings/document-updated', () => { void refresh() })]
         return () => { for (const dispose of disposers) dispose() }
       }, 'dsh-remote-ide: settings refresh')
 
       const injected = () => ({
-        hooks: {
-          sshHosts: { getSnapshot: store.getSnapshot, subscribe: store.subscribe },
-        },
-        load,
-        reloadPlaceholders,
-        saveHost,
-        deleteHost,
-        testConnection,
-        listRemoteDir,
-        createPlaceholder,
+        hooks: { sshHosts: { getSnapshot: store.getSnapshot, subscribe: store.subscribe } },
+        load, reloadPlaceholders, saveHost, deleteHost, testConnection, listRemoteDir, createPlaceholder,
       })
 
       ctx.slots.inject('settings.section', () => ctx.slots.register({
