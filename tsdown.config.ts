@@ -38,5 +38,6 @@ export default defineConfig({
     '@deepseek-ai/dsh-fs',
     '@deepseek-ai/dsh-subprocess',
     '@deepseek-ai/dsh-typert-protocol',
+    '@deepseek-ai/dsh-workspace',
   ],
 })

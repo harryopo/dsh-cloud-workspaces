@@ -22,6 +22,10 @@ import type { SettingsProvider, SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { SshRuntime } from './ssh-service'
 import { HOSTS_NAMESPACE, hostsOf, redactHosts, secretFlags, toHostPayload, type SshHostConfig } from './host-settings'
 import { createPlaceholderDir, listPlaceholders } from './workspace'
+import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
+
+/** ctx.workspaceRegistry 的形状（可选服务，经 ctx.get 读取，无 inject 要求）。 */
+type WorkspaceRegistryLike = Pick<WorkspaceRegistry, 'create'> | undefined
 
 /** npm 包名（描述符 id 前缀）。 */
 export const REMOTE_PACKAGE = 'dsh-remote-ide'
@@ -75,6 +79,8 @@ export const HOST_TYPERT_CONTRIBUTION: HostTypertContribution = {
     hostInvocation('deleteHost', ['id']),
     hostInvocation('testConnection', ['hostId', 'cfg']),
     hostInvocation('listRemoteDir', ['hostId', 'path']),
+    hostInvocation('mkdirRemote', ['hostId', 'path']),
+    hostInvocation('removeRemote', ['hostId', 'path']),
     hostInvocation('createPlaceholder', ['hostId', 'remotePath']),
     hostInvocation('listPlaceholders', []),
   ],
@@ -97,6 +103,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
  */
 export class SshRemoteService extends Service {
   private readonly runtime: SshRuntime
+  /** 宿主 ctx（workspaceRegistry 等可选服务经 ctx.get 读取）。 */
+  private readonly runtimeCtx: Context
   private settingsScope: SettingsScope<{ hosts: Record<string, SshHostConfig> }> | undefined
   /** provider 级句柄（scope 无 mutate；单键 unset 需 ctx.settings.mutate）。 */
   private readonly settingsProvider: SettingsProvider
@@ -106,6 +114,7 @@ export class SshRemoteService extends Service {
   constructor(ctx: Context, runtime: SshRuntime) {
     super(ctx, REMOTE_SERVICE)
     this.runtime = runtime
+    this.runtimeCtx = ctx
     this.settingsProvider = ctx.settings
     this.typertRemote = bindTypertRemote(this, REMOTE_SERVICE)
   }
@@ -226,10 +235,35 @@ export class SshRemoteService extends Service {
     return this.runtime.engine.ls(hostId, path)
   }
 
+  /** 在远端创建目录（递归创建父级）。 */
+  async mkdirRemote(hostId: string, path: string): Promise<{ path: string }> {
+    this.syncStore()
+    await this.runtime.engine.mkdir(hostId, path)
+    return { path }
+  }
+
+  /** 删除远端文件或空目录（非空目录请先清空内容）。 */
+  async removeRemote(hostId: string, path: string): Promise<{ path: string }> {
+    this.syncStore()
+    await this.runtime.engine.remove(hostId, path)
+    return { path }
+  }
+
   /** 创建占位工作区（返回本地占位路径，供用户选为 DSH 工作区）。 */
   async createPlaceholder(hostId: string, remotePath: string): Promise<{ localPath: string; hostId: string; remotePath: string }> {
     this.syncStore()
-    return createPlaceholderDir({ hostId, remotePath })
+    const created = await createPlaceholderDir({ hostId, remotePath })
+    // 注册进 DSH 工作区注册表 → 「选择工作区」对话框直接出现该占位目录。
+    try {
+      const registry = this.runtimeCtx.get('workspaceRegistry')
+      if (registry !== undefined && typeof registry.create === 'function') {
+        const basename = remotePath.split('/').filter(Boolean).pop() || 'root'
+        await registry.create(created.localPath, `${hostId} / ${basename}`)
+      }
+    } catch {
+      // 注册失败不影响占位目录本身（用户仍可手动添加路径）。
+    }
+    return created
   }
 
   /** 列出全部占位工作区。 */

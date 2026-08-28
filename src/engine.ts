@@ -119,6 +119,9 @@ function buildConnectConfig(entry: SshHostEntry, sock?: ConnectConfig['sock']): 
     keepaliveCountMax: 3,
   }
   if (sock !== undefined) config.sock = sock
+  // 开启 keyboard-interactive：配合 connectClient 的回应回调覆盖
+  // Ubuntu/PAM 常见「仅 keyboard-interactive」服务器。
+  config.tryKeyboard = true
   if (entry.auth.kind === 'password') {
     config.password = entry.auth.password
   } else {
@@ -135,7 +138,7 @@ function buildConnectConfig(entry: SshHostEntry, sock?: ConnectConfig['sock']): 
 }
 
 /** Connect one ssh2 client (resolve on ready, reject on error/close). */
-function connectClient(config: ConnectConfig): Promise<Client> {
+function connectClient(config: ConnectConfig, password?: string): Promise<Client> {
   return new Promise((resolve, reject) => {
     const client = new Client()
     // Permanent guard: an ssh2 Client whose 'error' event has no listener
@@ -153,6 +156,13 @@ function connectClient(config: ConnectConfig): Promise<Client> {
       if (settled) return
       settled = true
       reject(error instanceof Error ? error : new Error(String(error)))
+    })
+    // keyboard-interactive 认证（Ubuntu/PAM 服务器常见：sshd 可能只提供
+    // keyboard-interactive 而非 password 方法）：用同一密码回应所有提示。
+    // 没有 tryKeyboard 时 ssh2 只试 password，遇到仅 keyboard-interactive
+    // 的服务器会报 "All configured authentication methods failed"。
+    client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
+      finish(prompts.map(() => password ?? ''))
     })
     try {
       client.connect(config)
@@ -274,13 +284,14 @@ export class SshEngine {
     let client: Client | undefined
     try {
       const config = buildConnectConfig(entry)
+      const password = entry.auth.kind === 'password' ? entry.auth.password : undefined
       if (entry.proxyJump.length > 0) {
         const hops = await this.connectHops(entry)
         config.sock = hops[hops.length - 1]!.sock
-        client = await connectClient(config)
+        client = await connectClient(config, password)
         for (const hop of hops) hop.client.end()
       } else {
-        client = await connectClient(config)
+        client = await connectClient(config, password)
       }
       const ok = await new Promise<boolean>((resolve) => {
         client!.exec('echo dsh-remote-ide-ping', (error, stream) => {
@@ -324,7 +335,7 @@ export class SshEngine {
         config.sock = hops[hops.length - 1]!.sock
         record.hops = hops.map(h => h.client)
       }
-      const client = await connectClient(config)
+      const client = await connectClient(config, entry.auth.kind === 'password' ? entry.auth.password : undefined)
       record.client = client
       client.on('error', (error) => {
         record.broken = true
@@ -357,7 +368,7 @@ export class SshEngine {
       if (hop === undefined) throw new Error(`jump host not found: ${hopAlias}`)
       const config = buildConnectConfig(hop)
       if (hops.length > 0) config.sock = hops[hops.length - 1]!.sock
-      const client = await connectClient(config)
+      const client = await connectClient(config, hop.auth.kind === 'password' ? hop.auth.password : undefined)
       const sock = (client as unknown as { sock: import('node:net').Socket }).sock
       hops.push({ client, sock })
     }

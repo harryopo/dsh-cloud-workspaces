@@ -49,8 +49,10 @@ window.__ModuleLoader__.load({
         desc('listHosts', [], 'ListHostsResult'),
         desc('saveHost', ['id', 'patch'], 'SaveHostResult'),
         desc('deleteHost', ['id'], 'DeleteHostResult'),
-        desc('testConnection', ['cfg'], 'TestConnectionResult'),
+        desc('testConnection', ['hostId', 'cfg'], 'TestConnectionResult'),
         desc('listRemoteDir', ['hostId', 'path'], 'ListRemoteDirResult'),
+        desc('mkdirRemote', ['hostId', 'path'], 'MkdirRemoteResult'),
+        desc('removeRemote', ['hostId', 'path'], 'RemoveRemoteResult'),
         desc('createPlaceholder', ['hostId', 'remotePath'], 'CreatePlaceholderResult'),
         desc('listPlaceholders', [], 'ListPlaceholdersResult'),
       ],
@@ -165,6 +167,15 @@ window.__ModuleLoader__.load({
       .dri-dirRow .dri-dirSize { color: var(--dsw-alias-label-tertiary, #999); font-size: 12px; }
       .dri-dirIcon { display: inline-flex; align-items: center; justify-content: center; width: 20px; margin-right: 6px;
         color: var(--dsw-alias-label-tertiary, #86868b); font-size: 12px; }
+      .dri-dirDel { border: none; background: transparent; color: var(--dsw-alias-label-tertiary, #86868b); cursor: pointer;
+        font-size: 14px; padding: 0 4px; border-radius: 6px; opacity: 0; transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease; }
+      .dri-dirRow:hover .dri-dirDel { opacity: 1; }
+      .dri-dirDel:hover { color: var(--dsw-alias-state-error-primary, #d70015); background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #d70015) 8%, transparent); }
+      .dri-newDir { font-size: 13px; padding: 6px 12px; border-radius: 10px; flex: 1;
+        border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12)); background: var(--dsw-alias-bg-base, #fff);
+        color: var(--dsw-alias-label-primary, #1d1d1f); outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+      .dri-newDir:focus { border-color: var(--dsw-alias-brand-primary, #0071e3);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary, #0071e3) 18%, transparent); }
       .dri-dirActions { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
       .dri-created { margin-top: 12px; font-size: 12px; padding: 10px 12px; border-radius: 12px;
         background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #1d9d6e) 10%, transparent);
@@ -280,12 +291,10 @@ window.__ModuleLoader__.load({
 
     /** 设置页区块：主机列表 + 添加/编辑 + 远端目录 → 工作区。 */
     function SshHostsSection(props) {
-      const { useSshHosts, load, saveHost, deleteHost, testConnection, listRemoteDir, createPlaceholder, reloadPlaceholders } = props
+      const { useSshHosts, load, saveHost, deleteHost, testConnection, listRemoteDir, mkdirRemote, removeRemote, createPlaceholder, reloadPlaceholders } = props
       const state = useSshHosts((snap) => snap)
       const [editing, setEditing] = useState(null)
       const [pendingDelete, setPendingDelete] = useState(null)
-      const [browser, setBrowser] = useState(null) // { hostId, path, entries, loading }
-      const [created, setCreated] = useState(null)
 
       useEffect(() => { void load() }, [load])
 
@@ -295,12 +304,6 @@ window.__ModuleLoader__.load({
           h('button', { className: 'dri-btn', onClick: load }, '重试'))
       }
       const hosts = Object.values(state.hosts)
-
-      const browseTo = async (hostId, nextPath) => {
-        setBrowser({ hostId, path: nextPath, entries: [], loading: true })
-        const res = await listRemoteDir(hostId, nextPath)
-        setBrowser({ hostId, path: nextPath, entries: unwrap(res, []) || [], loading: false })
-      }
 
       return h('div', { className: 'dri-section' },
         h('h2', null, 'SSH 连接'),
@@ -344,54 +347,119 @@ window.__ModuleLoader__.load({
               await deleteHost(pendingDelete); setPendingDelete(null); await load()
             } }, '确认删除'))) : null,
 
-        h('h2', { style: { marginTop: 22 } }, '远端工作区'),
+        h('h2', { className: 'dri-subtitle' }, '远端工作区'),
         h('p', { className: 'dri-intro' },
           '选择一个已配置主机，浏览远端目录并绑定为 DSH 工作区；绑定后到「选择工作区」里选返回的本地路径即可。'),
 
-        hosts.length === 0 ? null : h('div', { className: 'dri-dirBrowser' },
-          h('div', { className: 'dri-field', style: { marginBottom: 8 } },
-            h('label', null, '主机'),
-            h('select', { value: browser ? browser.hostId : '', onChange: (e) => {
-              const hostId = e.target.value
-              if (hostId) void browseTo(hostId, '/')
-              else setBrowser(null)
+        h(DirBrowserSection, {
+          hosts,
+          placeholders: state.placeholders,
+          listRemoteDir, mkdirRemote, removeRemote, createPlaceholder, reloadPlaceholders,
+        }),
+      )
+    }
+
+    /** 远端目录浏览器：浏览 / 新建 / 删除 / 绑定工作区。 */
+    function DirBrowserSection({ hosts, placeholders, listRemoteDir, mkdirRemote, removeRemote, createPlaceholder, reloadPlaceholders }) {
+      const [browser, setBrowser] = useState(null) // { hostId, path, entries, loading }
+      const [created, setCreated] = useState(null)
+      const [newDir, setNewDir] = useState('')
+
+      const browseTo = async (hostId, nextPath) => {
+        setBrowser({ hostId, path: nextPath, entries: [], loading: true })
+        const res = await listRemoteDir(hostId, nextPath)
+        setBrowser({ hostId, path: nextPath, entries: unwrap(res, []) || [], loading: false })
+      }
+
+      const createDir = async () => {
+        const name = newDir.trim()
+        if (!name || !browser) return
+        const next = (browser.path === '/' ? '' : browser.path) + '/' + name
+        const res = await mkdirRemote(browser.hostId, next)
+        if (!res || res.ok !== true) store.set({ error: resError(res, '新建文件夹失败') })
+        else { setNewDir(''); await browseTo(browser.hostId, browser.path) }
+      }
+
+      const doRemove = async (hostId, fullPath) => {
+        if (!window.confirm('删除远端 ' + fullPath + '？\n（仅删除空目录或文件，非空目录请先清空）')) return
+        const res = await removeRemote(hostId, fullPath)
+        if (!res || res.ok !== true) store.set({ error: resError(res, '删除失败') })
+        else if (browser) await browseTo(hostId, browser.path)
+      }
+
+      const bindWorkspace = async () => {
+        const res = await createPlaceholder(browser.hostId, browser.path)
+        const value = unwrap(res, null)
+        if (value) { setCreated({ localPath: value.localPath }); await reloadPlaceholders() }
+        else store.set({ error: resError(res, '创建工作区失败') })
+      }
+
+      if (hosts.length === 0) return null
+
+      const dirRows = []
+      if (browser) {
+        if (browser.path !== '/') {
+          dirRows.push(h('div', { key: '..', className: 'dri-dirRow', onClick: () => {
+            const parent = browser.path.split('/').slice(0, -1).join('/') || '/'
+            void browseTo(browser.hostId, parent)
+          } }, h('span', null, '..')))
+        }
+        for (const e of browser.entries || []) {
+          if (e.type === 'dir') {
+            dirRows.push(h('div', { key: e.name, className: 'dri-dirRow', onClick: () => {
+              const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
+              void browseTo(browser.hostId, next)
             } },
-              h('option', { value: '' }, '选择主机…'),
-              hosts.map((host) => h('option', { key: host.id, value: host.id }, host.name || host.id)))),
-          browser ? h('div', null,
-            h('div', { className: 'dri-dirPath' }, '当前目录：' + browser.path),
-            h('div', { className: 'dri-dirList' },
-              browser.path !== '/' ? h('div', { className: 'dri-dirRow', onClick: () => {
-                const parent = browser.path.split('/').slice(0, -1).join('/') || '/'
-                void browseTo(browser.hostId, parent)
-              } }, h('span', null, '..')) : null,
-              (browser.entries || []).filter((e) => e.type === 'dir').map((e) => h('div', { key: e.name, className: 'dri-dirRow', onClick: () => {
-                const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
-                void browseTo(browser.hostId, next)
-              } }, h('span', null, h('span', { className: 'dri-dirIcon' }, '›'), e.name))),
-              (browser.entries || []).filter((e) => e.type === 'file').map((e) => h('div', { key: e.name, className: 'dri-dirRow', style: { cursor: 'default' } },
-                h('span', null, h('span', { className: 'dri-dirIcon', style: { opacity: 0.35 } }, '·'), e.name),
-                h('span', { className: 'dri-dirSize' }, String(e.size)))),
-              browser.loading ? h('div', { className: 'dri-dirRow', style: { cursor: 'default' } }, '加载中…') : null),
-            h('div', { className: 'dri-dirActions' },
-              h('button', { className: 'dri-btn dri-btn-primary', onClick: async () => {
-                const res = await createPlaceholder(browser.hostId, browser.path)
-                const value = unwrap(res, null)
-                if (value) { setCreated({ localPath: value.localPath }); await reloadPlaceholders() }
-                else store.set({ error: resError(res, '创建工作区失败') })
-              } }, '将当前目录绑定为工作区'),
-              h('span', { className: 'dri-hint' }, browser.loading ? '连接中…' : ((browser.entries || []).length + ' 项')))) : null,
+              h('span', null, h('span', { className: 'dri-dirIcon' }, '›'), e.name),
+              h('button', { className: 'dri-dirDel', 'aria-label': '删除 ' + e.name, onClick: (ev) => {
+                ev.stopPropagation()
+                void doRemove(browser.hostId, (browser.path === '/' ? '' : browser.path) + '/' + e.name)
+              } }, '×')))
+          } else {
+            dirRows.push(h('div', { key: e.name, className: 'dri-dirRow', style: { cursor: 'default' } },
+              h('span', null, h('span', { className: 'dri-dirIcon', style: { opacity: 0.35 } }, '·'), e.name),
+              h('span', { className: 'dri-dirSize' }, String(e.size))))
+          }
+        }
+        if (browser.loading) dirRows.push(h('div', { key: 'loading', className: 'dri-dirRow', style: { cursor: 'default' } }, '加载中…'))
+      }
+
+      return h('div', { className: 'dri-dirBrowser' },
+        h('div', { className: 'dri-field', style: { marginBottom: 8 } },
+          h('label', null, '主机'),
+          h('select', { value: browser ? browser.hostId : '', onChange: (e) => {
+            const hostId = e.target.value
+            if (hostId) void browseTo(hostId, '/')
+            else setBrowser(null)
+          } },
+            h('option', { value: '' }, '选择主机…'),
+            hosts.map((host) => h('option', { key: host.id, value: host.id }, host.name || host.id)))),
+        browser ? h('div', null,
+          h('div', { className: 'dri-dirPath' }, '当前目录：' + browser.path),
+          h('div', { className: 'dri-dirList' }, ...dirRows),
+          h('div', { className: 'dri-dirActions' },
+            h('button', { className: 'dri-btn dri-btn-primary', onClick: bindWorkspace }, '将当前目录绑定为工作区'),
+            h('span', { className: 'dri-hint' }, browser.loading ? '连接中…' : ((browser.entries || []).length + ' 项'))),
+          h('div', { className: 'dri-dirActions', style: { borderTop: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.05))', paddingTop: 12 } },
+            h('input', {
+              className: 'dri-newDir', value: newDir, placeholder: '新建文件夹名称…',
+              onChange: (e) => setNewDir(e.target.value),
+              onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); void createDir() } },
+            }),
+            h('button', { className: 'dri-btn', disabled: !newDir.trim(), onClick: createDir }, '新建文件夹'),
+            h('span', { className: 'dri-hint' }, '删除按钮在目录行右侧')),
           created ? h('div', { className: 'dri-created' },
             '工作区已创建，本地占位路径：', h('br', null),
             h('code', { className: 'dri-code' }, created.localPath),
-            h('br', null), '在 DSH「选择工作区」中选中它，会话即在该主机该目录运行。') : null,
-          state.placeholders.length > 0 ? h('div', { style: { marginTop: 12 } },
+            h('br', null), '它已出现在 DSH「选择工作区」列表中（会话即在该主机该目录运行）。') : null,
+          placeholders.length > 0 ? h('div', { style: { marginTop: 12 } },
             h('div', { className: 'dri-hint', style: { marginBottom: 4 } }, '已绑定：'),
-            state.placeholders.map((w) => h('div', { key: w.localPath, className: 'dri-wsRow' },
+            placeholders.map((w) => h('div', { key: w.localPath, className: 'dri-wsRow' },
               h('code', { className: 'dri-code' }, w.hostId),
               ' → ',
-              h('code', { className: 'dri-code' }, w.remotePath))),
-          ) : null))
+              h('code', { className: 'dri-code' }, w.remotePath)))) : null,
+        ) : null,
+      )
     }
 
     // -------------------------------------------------------------- apply
@@ -439,6 +507,8 @@ window.__ModuleLoader__.load({
         authType: host.authType || 'key', privateKeyPath: host.privateKeyPath,
       })
       const listRemoteDir = (hostId, path) => remote().listRemoteDir(hostId, path)
+      const mkdirRemote = (hostId, path) => remote().mkdirRemote(hostId, path)
+      const removeRemote = (hostId, path) => remote().removeRemote(hostId, path)
       const createPlaceholder = (hostId, remotePath) => remote().createPlaceholder(hostId, remotePath)
 
       ctx.effect(() => {
@@ -448,7 +518,8 @@ window.__ModuleLoader__.load({
 
       const injected = () => ({
         hooks: { sshHosts: { getSnapshot: store.getSnapshot, subscribe: store.subscribe } },
-        load, reloadPlaceholders, saveHost, deleteHost, testConnection, listRemoteDir, createPlaceholder,
+        load, reloadPlaceholders, saveHost, deleteHost, testConnection,
+        listRemoteDir, mkdirRemote, removeRemote, createPlaceholder,
       })
 
       ctx.slots.inject('settings.section', () => ctx.slots.register({
