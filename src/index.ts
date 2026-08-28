@@ -18,6 +18,8 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import SshRuntime from './ssh-service'
 import { sshExecTool, sshListTool, sshLsTool, sshReadTool, sshWorkspaceTool, sshWriteTool } from './tools'
+import { installHostSettings } from './host-settings'
+import { HOST_TYPERT_CONTRIBUTION, REMOTE_SERVICE, SshRemoteService } from './typert'
 
 /** Stable cordis plugin name. */
 export const name = 'remote-ide'
@@ -133,6 +135,19 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
       sync()
     },
     onChange: sync,
+  })
+
+  // Settings-card host config namespace + Typert endpoints. Mounted only when
+  // the official settings/typert services exist (the web profile supplies
+  // both; headless runs simply skip them — tools keep working via the store).
+  ctx.inject(['typert', 'settings'], (scope) => {
+    const settingsScope = installHostSettings(scope)
+    const remote = new SshRemoteService(scope, runtime)
+    remote.setSettings(settingsScope)
+    // 严格描述符注册（face:'host' + invocations）；gateway 的 claimsEndpoint
+    // 按 local 注册表命中端点，SRC 回退无需装饰器。
+    scope.typert.register(HOST_TYPERT_CONTRIBUTION)
+    scope.logger?.info('[dsh-remote-ide] typert remote ' + REMOTE_SERVICE + ' registered')
   })
 
   // Initial registration from the composition entry (covers deployments with

@@ -1,8 +1,39 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-28（追赶行动）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-08-28（占位工作区）· **Category**: project · **Source**: conversation + git history
 
-## 2026-08-28 生态追赶行动（本日完成）
+## 2026-08-28 晚：占位工作区（placeholder workspace）落地
+
+### 背景（用户反馈驱动）
+- 4500 新会话选「服务器开发」→ 弹「选择工作区」→ 只有本地目录，无 SSH 入口
+- 用户指定借鉴 dsh-ssh/dsh-ssh 的 UI 与代码
+
+### dsh-ssh 机制（源码级调研，MIT）
+- **占位目录映射**：远程路径 → 本地占位目录 `<DSH_HOME>/remote/<hostId>/<base64url(远程路径)>`（可逆 base64url 单段；hostId 校验拒穿越；decode 必须还原为 / 开头绝对路径）
+- **UI 流程**：设置页配主机（settings namespace + client UI）→ client 里浏览远端目录 → 选定 → host 建 placeholder → 注册为 DSH workspace
+- **会话路由**：agent/created 钩子看 session.header.cwd 落 placeholder root → agent scope 注册同名遮蔽工具（bash/read/write/edit/glob/grep/read_image）+ capability section + jobs controller
+- **清理**：domain/changed 监听 workspace 删除 → 删 placeholder
+
+### 我们的适配（无 UI 约束下的等价实现）
+- **`src/workspace.ts`（新）**：router 纯函数（remoteRoot/encode/decode/map 双向/routeByCwd/resolveRemotePath 重锚定）+ createPlaceholderDir（写 manifest `.dsh-remote-workspace.json`）+ listPlaceholders + readManifest；fsImpl/env 可注入
+- **`SshRuntime.getConnectionFor(alias)`（新）**：按主机取句柄不切换 activeAlias（engine 连接池共享）；`engine.homeOf(alias)` per-alias home 同步读（wrap home 不再用 status()——多主机下会串）
+- **fs-ssh/subprocess-ssh 锚定层**：cwd 落 placeholder root → 锚定该 hostId（isolate realm 每会话一个适配器实例 → 会话内所有操作落同一主机）；相对路径基准 = 远程工作区路径；普通远程 cwd 旧行为保留；fs-ssh resolve/lstat 用 sessionFor（resolveRemotePath 重锚定绝对占位路径）
+- **`ssh_workspace` 工具（新）**：action=create（host+远程绝对路径 → 建占位目录+manifest+主动连接验证 → 返回本地路径+指引）| list（列全部绑定）——补上 dsh-ssh 靠 client UI 做的「浏览远端选目录」
+- **persona 重写**：PRIMARY RULE——工作区在 ~/.dsh/remote/ 下 = 已连接该主机目录，直接干活别再问；否则 ssh_list 选主机 / ssh_workspace 建绑定
+
+### 用户操作流（对标 dsh-ssh 的 30 秒上手）
+1. 新会话（本地工作区）→「连接 web-1，把 /srv/my-app 设为工作区」→ agent 调 ssh_workspace
+2. agent 返回本地占位路径 → 用户在 DSH「选择工作区」选它（或新会话用）
+3. 之后的会话 cwd 在占位目录下 → 全部工具自动落远程目录，零额外操作
+
+### 验证
+- typecheck ✓ / 69 测试 ✓（workspace 17 新用例）/ build ✓（17 文件）；preset 已同步 ~/.dsh/.agent-presets/remote/；4500 重启后插件树加载成功
+
+### 踩坑（新增）
+- **同文件并行 Edit 相互覆盖再犯**：tools.ts 两个 Edit 同消息发出，前一个被吞 → 同文件修改必须串行（M2 已踩过，重犯）
+- **StopCommand 只杀包装进程**：dsh web 的 node 子进程残留占 4500（EADDRINUSE）→ 用 Get-NetTCPConnection 找 OwningProcess 再 Stop-Process
+
+## 2026-08-28 生态追赶行动（本日早些时候）
 
 ### 生态调研结论（竞品压力）
 - 上游 DSH：12,940 commits（极活跃），npm 最新稳定 **0.1.1-rc.2**（0.1.2-alpha.1 存在但不用）；**0.1.2-alpha.1 修复了「profile 配置的预设根目录启动时丢失」——当年 preset 未显示问题的根因方向**

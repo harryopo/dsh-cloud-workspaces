@@ -15,6 +15,7 @@ import type {
   ExecResult,
   RemoteDirEntry,
   RemoteFileContent,
+  SshAuthKind,
   SshHostEntry,
   SshHostSummary,
   TestResult,
@@ -239,6 +240,36 @@ export class SshEngine {
   async test(alias: string): Promise<TestResult> {
     const entry = this.store.get(alias)
     if (entry === undefined) return { ok: false, error: `unknown host: ${alias}` }
+    return this.testEntry(entry)
+  }
+
+  /**
+   * Test an ad-hoc host config (settings-card "test connection" endpoint).
+   * Builds an entry from the config and runs the same probe as test().
+   */
+  async testConfig(config: {
+    host: string
+    port?: number
+    user: string
+    auth: { kind: SshAuthKind; keyPath?: string; passphrase?: string; password?: string }
+    proxyJump?: string[]
+  }): Promise<TestResult> {
+    const entry: SshHostEntry = {
+      alias: '(probe)',
+      host: config.host,
+      port: config.port ?? 22,
+      user: config.user,
+      auth: config.auth,
+      proxyJump: config.proxyJump ?? [],
+      tags: [],
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    return this.testEntry(entry)
+  }
+
+  /** Shared probe: connect (optionally through the jump chain) and exec echo. */
+  private async testEntry(entry: SshHostEntry): Promise<TestResult> {
     const started = Date.now()
     let client: Client | undefined
     try {
