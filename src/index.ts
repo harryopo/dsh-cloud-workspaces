@@ -80,14 +80,21 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
   })
 
   // Host-plane shared SSH runtime; its own effect owns engine disposal.
+  // Fetch via ctx.get (store read without the inject requirement): newer
+  // cordis refuses direct ctx.ssh property access that is not declared in
+  // `inject`, and `ssh` cannot be declared there — we provide it ourselves,
+  // which would self-deadlock. ctx.plugin() alone returns the Fiber, not the
+  // service instance.
   await ctx.plugin(SshRuntime, { maxReadBytes: resolve().maxReadBytes })
+  const runtime = ctx.get('ssh')
+  if (!runtime) throw new Error('dsh-remote-ide: SshRuntime did not provide ctx.ssh')
 
   const tools = [
-    sshListTool(ctx.ssh),
-    sshExecTool(ctx.ssh),
-    sshLsTool(ctx.ssh),
-    sshReadTool(ctx.ssh),
-    sshWriteTool(ctx.ssh),
+    sshListTool(runtime),
+    sshExecTool(runtime),
+    sshLsTool(runtime),
+    sshReadTool(runtime),
+    sshWriteTool(runtime),
   ]
   let disposeTools: (() => void) | undefined
   let disposeSection: (() => void) | undefined
