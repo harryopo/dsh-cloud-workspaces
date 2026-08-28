@@ -1,8 +1,43 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-15（更新）
-**Category**: project
-**Source**: conversation
+**Date**: 2026-08-28（同步）· **Category**: project · **Source**: conversation + git history
+
+## 架构概览（快速恢复上下文）
+
+**项目定位**：DeepSeek Harness（DSH）的「服务器开发模式」——让 DSH 编码 agent 以远程 Linux 服务器为开发环境。纯 host 插件（无 UI），与 `remote` agent preset 配合完成闭环。
+
+**三层架构（对齐官方 e2b 式范式）**：
+
+| 层 | 模块 | 职责 | 作用域 |
+|----|------|------|--------|
+| Host 全局 | `src/index.ts` · `src/ssh-service.ts` · `src/engine.ts` | SshRuntime (ctx.ssh) + 连接池 + 5 个 ssh_* 工具 | 所有会话 |
+| 远程能力适配 | `src/fs-ssh.ts` | SshFileSystem → ctx.fs 13 方法 | 仅 preset 会话 |
+| 远程能力适配 | `src/subprocess-ssh.ts` | SshSubprocessRuntime → ctx.subprocess exec/PTY | 仅 preset 会话 |
+
+**源文件清单**（10 个 .ts）：
+- `src/index.ts` — 插件入口：apply async，注册 SshRuntime + 5 工具 + settings + systemPrompt
+- `src/ssh-service.ts` — SshRuntime extends Service（ctx.ssh，惰性连接，单会话单目标，broken 重建）
+- `src/engine.ts` — ssh2 引擎（连接池/ProxyJump/exec/SFTP CRUD/PTY，661 行）
+- `src/fs-ssh.ts` — SshFileSystem extends FileSystem（13 抽象方法 + withLock + writeAtomic）
+- `src/subprocess-ssh.ts` — SshSubprocessRuntime extends SubprocessRuntime（spawn/spawnTerminal/resolveExecutable，1426 行）
+- `src/tools.ts` — defineTool × 5（ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write）
+- `src/store.ts` — 主机配置（~/.dsh/dsh-remote-ide.json，0600，~/.ssh/config 导入）
+- `src/protocol.ts` — 共享类型
+- `src/invariant.ts` — 不变量
+
+**preset**：`agent-presets/remote/`（preset.yml + agent.cordis.yml）；agent.cordis.yml = persona + remote-caps isolate group（fs: true, subprocess: true, terminals: true）
+
+**构建/测试**：`pnpm build`（tsc 声明 + tsdown 产物 16 文件）/ `pnpm typecheck` ✓ / `pnpm test`（52/52）✓
+
+## 里程碑状态总览
+
+| 里程碑 | 内容 | 状态 | 日期 | Commit |
+|--------|------|------|------|--------|
+| M0 | SshRuntime extends Service（ctx.ssh，连接池，broken 重建，6 用例） | ✅ | 2026-08-16 | — |
+| M1 | fs-ssh（ctx.fs 13 方法远程适配，20 用例） | ✅ | 2026-08-16 | `404de66` |
+| M2 | subprocess-ssh（ctx.subprocess exec/PTY，13 用例） | ✅ | 2026-08-16 | `404de66` |
+| M3 | preset 组合（isolate realm + persona + host 接线，4 文件） | ✅ | 2026-08-18 | `01bcfd9` |
+| M4 | 真实 Linux 服务器端到端验收 | ⏳ 待验证 | — | — |
 
 ## 项目定位演变（终局）
 

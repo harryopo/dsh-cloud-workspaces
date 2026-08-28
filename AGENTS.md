@@ -22,9 +22,9 @@ agent-presets/
   remote/       # 「服务器开发」preset 模板（preset.yml + agent.cordis.yml）
 scripts/
   start-dsh-web.ps1   # 一键启动 dsh web（4500 端口，latest dsh，自动开浏览器）
-tests/          # vitest（store/engine 纯逻辑）
+tests/          # vitest（store/engine/ssh-service/fs-ssh/subprocess-ssh）
 memory/         # 项目记忆（进度/反馈/踩坑/参考）
-docs/           # 调研报告（01 生态调研、02 服务器开发模式可行性）
+docs/           # 03 方案书（纲领）+ 06 开发方法论（依据），索引见 docs/README.md
 ```
 
 ## 关键命令
@@ -40,7 +40,7 @@ pnpm watch            # tsdown watch
 ### 运行与验证
 
 ```powershell
-# 一键启动 dsh web（4500；用 @deepseek-ai/dsh@latest，勿用旧 rc.6）
+# 一键启动 dsh web（4500；用 @deepseek-ai/dsh@latest，当前锁定 0.1.1-rc.2）
 powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 ```
 
@@ -63,21 +63,23 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 1. **Windows WinNAT 保留端口**（4035-4234 等）→ listen EACCES；用 4500 或 `--port 0`。
 2. **路径含空格** → `dsh plugin add link:...` 会被拆词；用 junction（`C:\Users\Lenovo\dsh-remote-ide-dev`）。
 3. **pnpm-workspace.yaml 里 `- @xxx/yyy` 开头 @ 要加引号**（YAML tag 解析错误）。
-4. **modlens 需要 latest dsh**（rc.6 不加载）；`@liustack/modlens` 3.16.6 已装 profile。
+4. **modlens 需要较新 dsh**（旧 rc.6 不加载）；`@liustack/modlens` 3.16.6 已装 profile。
 5. **GitHub push 偶发网络中断**（Recv failure）→ 重试即可。
 6. **tsdown clean 会删 tsc 的 d.ts** → build 脚本先统一删 lib，tsdown `clean: false`。
 7. **连不上 GitHub clone 大仓库** → 用 codeload tarball。
 
-## 当前状态与下一步
+## 当前状态与下一步（2026-08-28 同步）
 
-- ✅ 已完成：SSH 引擎（端到端验证）、5 个远程工具、remote preset 模板（已装 `~/.dsh/.agent-presets/remote/`）、构建/测试通过、4500 实例运行中、交接文档齐全
-- ⚠️ **待解决（第一任务）**：**「服务器开发」preset 未出现在 4500 新会话的模式选择器**。排查线索见 `memory/project_dsh_remote_ide.md`「遗留问题」：① 确认 app 是否扫描 user preset root（`~/.dsh/.agent-presets`，查 `apps/cli/src/web.ts` 与 `packages/preset/agent-presets/src/mount.ts` 的 roots 组装）；② preset 组合是否 broken（agent.cordis.yml 行 `name: 'dsh-remote-ide/remote-tools'` 的解析）；③ 备选：行直接引用 `name: 'dsh-remote-ide'`
-- ⏳ 待验证：preset 出现后 agent 用 ssh_exec/ssh_read/ssh_write 在远程开发的端到端闭环
-- 🔜 后续候选：ssh_terminal（PTY 工具）、远程后台任务（ctx.jobs）、远程 grep；远期：远程 sandbox 后端（原生 bash 跑远程）
+- ✅ 已完成：M0 SshRuntime（ctx.ssh）→ M1 fs-ssh → M2 subprocess-ssh → M3 isolate realm preset（详见 `memory/project_dsh_remote_ide.md`）；52/52 测试全绿
+- ✅ 依赖已升级：peerDeps/devDeps 锁定 `@deepseek-ai/*@0.1.1-rc.2`（2026-08-28，typecheck/test/build 全过）
+- 🧹 已清理：旧 UI 脚本 ×4、历史调研报告 ×4（结论已整合进方案书 03）
+- ⚠️ **第一任务：M4 真实服务器端到端验收**——4500 新会话选「服务器开发」→ agent 远程跑 bash/PTY/写文件；确认 isolate realm 挂载不抛 leakedServices
+- 📦 然后：npm publish + GitHub 仓库描述/topic 更新 + 官方 Discussions「Show Your Plugins!」展示
+- 🔜 后续候选：ssh_terminal（PTY 工具）、远程后台任务（ctx.jobs）、远程 grep；远期：远程 sandbox 后端
 
 ## 参考资料（本地）
 
-- DSH 源码：`.research/dsh-source/deepseek-harness-master/`（preset/插件机制可查）
+- DSH 源码：`.research/dsh-source/deepseek-harness-master/`（**rc.5 旧版，仅历史参考；契约以 npm 0.1.1-rc.2 的 d.ts 为准**）
 - 官方文档：`docs/user/develop/`（插件开发）+ `docs/cookbook/`（extension-cookbook、adding-a-tool）
 - 项目记忆：`memory/`（进度/反馈/踩坑/参考）
-- 调研报告：`docs/01-调研报告-SSH-IDE插件.md`、`docs/02-调研报告-服务器开发Agent模式.md`
+- 竞品（2026-08-28 调研）：`dsh-ssh/dsh-ssh`（工具层遮蔽路由）、`CrazyShout/dsh-ssh-remote`（服务层 monkey-patch）、`flymysql/dsh-remote`（SFTP 镜像）
