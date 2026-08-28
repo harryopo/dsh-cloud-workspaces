@@ -434,7 +434,7 @@ window.__ModuleLoader__.load({
       }
       const saveHost = (id, patch) => remote().saveHost(id, patch)
       const deleteHost = (id) => remote().deleteHost(id)
-      const testConnection = (host) => remote().testConnection({
+      const testConnection = (host) => remote().testConnection(host.id, {
         host: host.host, port: host.port, user: host.user,
         authType: host.authType || 'key', privateKeyPath: host.privateKeyPath,
       })

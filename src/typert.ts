@@ -73,7 +73,7 @@ export const HOST_TYPERT_CONTRIBUTION: HostTypertContribution = {
     hostInvocation('listHosts', []),
     hostInvocation('saveHost', ['id', 'patch']),
     hostInvocation('deleteHost', ['id']),
-    hostInvocation('testConnection', ['cfg']),
+    hostInvocation('testConnection', ['hostId', 'cfg']),
     hostInvocation('listRemoteDir', ['hostId', 'path']),
     hostInvocation('createPlaceholder', ['hostId', 'remotePath']),
     hostInvocation('listPlaceholders', []),
@@ -181,8 +181,12 @@ export class SshRemoteService extends Service {
     return { id }
   }
 
-  /** 测试连接：用表单配置直连探测（不经 store，未保存也能测）。 */
-  async testConnection(cfg: {
+  /**
+   * 测试连接：用表单配置直连探测。对已保存主机（hostId 非空），密码/密钥
+   * 从 settings 补回（UI 拿到的是脱敏视图，password 已被剥离——测试不带
+   * 密码必然 "All configured authentication methods failed"）。
+   */
+  async testConnection(hostId: string, cfg: {
     host: string
     port?: number
     user: string
@@ -191,13 +195,26 @@ export class SshRemoteService extends Service {
     password?: string
     proxyJump?: string[]
   }): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
+    let password = cfg.password
+    let privateKeyPath = cfg.privateKeyPath
+    if (hostId !== '') {
+      const stored = this.hosts()[hostId]
+      if (stored !== undefined) {
+        if (stored.authType === 'password' && (password === undefined || password === '')) {
+          password = stored.password
+        }
+        if (stored.authType === 'key' && (privateKeyPath === undefined || privateKeyPath === '')) {
+          privateKeyPath = stored.privateKeyPath
+        }
+      }
+    }
     const result = await this.runtime.engine.testConfig({
       host: cfg.host,
       port: cfg.port,
       user: cfg.user,
-      auth: cfg.authType === 'password'
-        ? { kind: 'password', password: cfg.password }
-        : { kind: 'key', keyPath: cfg.privateKeyPath },
+      auth: cfg.authType === 'password' || (hostId !== '' && this.hosts()[hostId]?.authType === 'password')
+        ? { kind: 'password', password }
+        : { kind: 'key', keyPath: privateKeyPath },
       proxyJump: cfg.proxyJump,
     })
     return { ok: result.ok, latencyMs: result.latencyMs, error: result.error }
