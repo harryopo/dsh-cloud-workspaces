@@ -1,6 +1,28 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-28（同步）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-08-28（追赶行动）· **Category**: project · **Source**: conversation + git history
+
+## 2026-08-28 生态追赶行动（本日完成）
+
+### 生态调研结论（竞品压力）
+- 上游 DSH：12,940 commits（极活跃），npm 最新稳定 **0.1.1-rc.2**（0.1.2-alpha.1 存在但不用）；**0.1.2-alpha.1 修复了「profile 配置的预设根目录启动时丢失」——当年 preset 未显示问题的根因方向**
+- SSH 远程开发赛道 15 天内涌入 **13+ 竞品**：dsh-ssh/dsh-ssh（组织运营，工具层遮蔽路由——agent/created 钩子注册同名工具遮蔽官方）、CrazyShout/dsh-ssh-remote（服务层 monkey-patch ctx.fs/subprocess + 系统 OpenSSH 跑命令）、flymysql/dsh-remote（rw_* 私有工具 + SFTP 本地镜像 + 三向同步）
+- **三家竞品都不需要专用 preset**（透明路由/monkey-patch）；我们的 preset-scoped isolate realm 是差异化，但也意味着普通模式无远程能力
+- 我们的护城河：官方 e2b 式 capability seam 替换（ctx.fs/ctx.subprocess 透明）+ ProxyJump 连接池 + 52 单元测试
+
+### 本日落地（commit 3b6e86c，已推送）
+1. **依赖升级**：peerDeps/devDeps `^0.1.0-rc.6` → `^0.1.1-rc.2`；typecheck/52 测试/build 全绿一次通过（adapter 契约无破坏）
+   - ⚠️ semver 坑：`^0.1.0-rc.6` 不匹配 `0.1.1-rc.x`（prerelease 范围只含同 [major.minor.patch]），必须随上游 minor 升级同步改
+2. **旧文件清理**：删 4 个死 UI 脚本（gen-xterm-css/replace-emoji/theme-tokens/build-css）+ 4 份已整合进方案书的调研报告（docs 01/02/04/05）+ 冗余 `.research/dsh-source.tar.gz`
+3. **文档同步**：AGENTS.md（当前状态/下一步/rc.6 引用清理）、docs/README.md（新索引 + 竞品生态节）
+4. **GitHub 元数据**：仓库描述更新（ctx.ssh/ctx.fs/ctx.subprocess adapters + remote preset）+ `dsh-plugin` topic 确认在列（gh CLI 可用，`gh repo edit`）
+5. **本地 .research 源码实为 rc.5**——比旧依赖还旧一版，契约裁决以 npm 0.1.1-rc.2 的 d.ts 为准
+
+### 待办（需用户参与）
+- **npm publish**：未登录（ENEEDAUTH）→ 用户跑 `npm adduser` 后执行 `pnpm publish`（或 npm publish，prepublishOnly 会 build）
+- **M4 真实验收**：4500 新会话选「服务器开发」→ 远程 bash/PTY/写文件（不可重启承载会话的 4500 实例）
+- 社区展示：DSH 官方 Discussions「Show Your Plugins!」发帖（竞品模板见 discussion #2428 / #2666）
+- 远期架构评估：是否借鉴 dsh-ssh 的「agent/created 工具遮蔽」做到无需 preset（扩大适用面）
 
 ## 架构概览（快速恢复上下文）
 

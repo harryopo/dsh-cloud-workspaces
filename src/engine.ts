@@ -364,6 +364,11 @@ export class SshEngine {
     }
   }
 
+  /** Cached remote $HOME of a host, if it has been resolved (sync read). */
+  homeOf(alias: string): string | undefined {
+    return this.pool.get(alias)?.home
+  }
+
   /** Bind the IDE workspace to a host (connects on demand). */
   async connect(alias: string): Promise<WorkspaceStatus> {
     if (this.activeAlias !== '' && this.activeAlias !== alias) {

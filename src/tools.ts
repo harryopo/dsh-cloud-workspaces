@@ -14,6 +14,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { ExecResult, RemoteDirEntry, SshHostSummary } from './protocol'
 import type { SshRuntime } from './ssh-service'
+import { createPlaceholderDir, listPlaceholders } from './workspace'
 
 /** One text content block (the only render shape these tools emit). */
 function text(value: string): ContentBlock[] {
@@ -258,6 +259,82 @@ export function sshWriteTool(runtime: SshRuntime) {
       const alias = resolveAlias(runtime, args.alias)
       const stat = await runtime.engine.writeFile(alias, args.path, args.content)
       return { path: args.path, ...stat }
+    },
+  })
+}
+
+/** Create or list placeholder workspaces (a remote dir mapped to a local dir). */
+export function sshWorkspaceTool(runtime: SshRuntime) {
+  return defineTool({
+    name: 'ssh_workspace',
+    description: 'Bind a remote directory as a DSH workspace: create a local placeholder directory (~/.dsh/remote/<host>/<encoded>) ' +
+      'the user can pick in the "select workspace" dialog; sessions started there run entirely on that host and directory ' +
+      '(file tools, search, editor and terminals all target it). Also lists existing placeholder workspaces. ' +
+      'Triggers: use a server directory as workspace, work on /path/on/server, which workspace, set up remote workspace.',
+    parameters: {
+      action: { type: 'string', enum: ['create', 'list'], description: 'create = bind a remote dir; list = show existing bindings.', required: true },
+      host: { type: 'string', description: 'Host alias from ssh_list (required for create).' },
+      path: { type: 'string', description: 'Absolute remote directory path, e.g. /home/user/project (required for create).' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          action: { type: 'string', required: true },
+          localPath: { type: 'string' },
+          host: { type: 'string' },
+          remotePath: { type: 'string' },
+          workspaces: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                host: { type: 'string', required: true },
+                remotePath: { type: 'string', required: true },
+                localPath: { type: 'string', required: true },
+              },
+            },
+          },
+          hint: { type: 'string' },
+        },
+      },
+      render: (_args, value) => {
+        if (value.action === 'list') {
+          if (value.workspaces === undefined || value.workspaces.length === 0) {
+            return text('no placeholder workspaces yet — call create with a host and an absolute remote path')
+          }
+          return text(['host | remotePath | localPath', '--- | --- | ---',
+            ...value.workspaces.map(w => `${w.host} | ${w.remotePath} | ${w.localPath}`)].join('\n'))
+        }
+        return text(`placeholder workspace ready:\n  host: ${value.host}\n  remote: ${value.remotePath}\n  local: ${value.localPath}\n${value.hint ?? ''}`)
+      },
+    },
+    async execute(args: { action: 'create' | 'list'; host?: string; path?: string }) {
+      if (args.action === 'list') {
+        const workspaces = await listPlaceholders()
+        return {
+          action: 'list' as const,
+          workspaces: workspaces.map(w => ({ host: w.hostId, remotePath: w.remotePath, localPath: w.localPath })),
+        }
+      }
+      const alias = resolveAlias(runtime, args.host)
+      // Host must exist; connect eagerly so a typo fails here instead of at
+      // the next session.
+      await runtime.getConnectionFor(alias)
+      const remotePath = args.path?.trim() ?? ''
+      if (remotePath === '' || !remotePath.startsWith('/')) {
+        throw new Error('path must be an absolute remote directory path (e.g. /home/user/project)')
+      }
+      const created = await createPlaceholderDir({ hostId: alias, remotePath })
+      return {
+        action: 'create' as const,
+        localPath: created.localPath,
+        host: created.hostId,
+        remotePath: created.remotePath,
+        hint: 'In the DSH UI use "select workspace" on this local path (or start a new session with it) — the session will run on the remote directory.',
+      }
     },
   })
 }

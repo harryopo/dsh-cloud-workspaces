@@ -182,6 +182,21 @@ export class SshRuntime extends Service {
     return connection
   }
 
+  /**
+   * 返回指定主机的连接句柄，且不切换激活目标（占位工作区多主机路由用：
+   * 会话 cwd 落在 ~/.dsh/remote/<hostId>/… 时，适配器按 hostId 取句柄，
+   * 与 ssh_* 工具的 activeAlias 互不干扰，二者共享同一 engine 连接池）。
+   * @throws 主机不存在或 Service 正在卸载时。
+   */
+  async getConnectionFor(alias: string): Promise<SshConnection> {
+    if (this.disposed) throw new Error('ssh runtime is disposing')
+    if (alias === this.activeAlias) return this.getConnection()
+    await this.engine_.ensureConnection(alias)
+    await this.engine_.resolveHome(alias)
+    if (this.disposed) throw new Error('ssh runtime is disposing')
+    return this.wrap(alias)
+  }
+
   // ----------------------------------------------------------- host store
 
   /** 已存主机（secret-free 摘要）。 */
@@ -228,7 +243,9 @@ export class SshRuntime extends Service {
         return alias
       },
       get home() {
-        return engine.status().home
+        // per-alias 缓存（ensureConnection/resolveHome 已填充），不用
+        // status().home——那是 activeAlias 的 home，多主机路由下会串。
+        return engine.homeOf(alias)
       },
       exec: (command, options) => engine.exec(alias, command, options),
       execChannel: (command, options) => engine.openChannel(alias, command, options),

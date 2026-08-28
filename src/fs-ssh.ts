@@ -34,6 +34,8 @@ import type {
 } from '@deepseek-ai/dsh-fs'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { Stats } from 'ssh2'
+import type { SshConnection } from './ssh-service'
+import { resolveRemotePath, routeByCwd } from './workspace'
 
 /** 二进制采样窗口：头部出现 NUL 即判定为二进制文件。 */
 const BINARY_SAMPLE_BYTES = 8192
@@ -194,19 +196,62 @@ export class SshFileSystem extends FileSystem {
   /** 每个 targetKey 的尾 promise：串行化读→守→写窗口，并发写确定有序。 */
   private readonly locks = new Map<string, Promise<unknown>>()
 
+  /**
+   * 会话锚定的主机（占位工作区路由）。第一个带占位 cwd 的 resolve/lstat
+   * 把整个 fs 实例锚到该主机——isolate realm 下每会话一个实例，此后所有
+   * 操作（含 readText/writeText 等只拿 FsTarget 的方法）都落在该主机上。
+   */
+  private anchor: string | undefined
+
+  /**
+   * 取连接句柄（带占位工作区路由）：cwd 落在 ~/.dsh/remote/<hostId>/… 下时
+   * 连接该主机（不切换 ssh_* 工具的激活目标）；否则沿用已锚定主机或共享
+   * 激活连接。
+   */
+  private connectionFor(cwd?: string): Promise<SshConnection> {
+    const route = routeByCwd(cwd)
+    if (route.kind === 'remote') {
+      this.anchor = route.hostId
+      return this.ctx.ssh.getConnectionFor(route.hostId)
+    }
+    if (this.anchor !== undefined) return this.ctx.ssh.getConnectionFor(this.anchor)
+    return this.ctx.ssh.getConnection()
+  }
+
+  /**
+   * 相对路径的解析基准：占位 cwd → 该主机 + 远程工作区路径（绝对占位路径
+   * 由 resolveRemotePath 重锚定）；普通远程 cwd → 原样作基准（旧行为）；
+   * 未传 → 该主机 home。
+   */
+  private async sessionFor(cwd?: string): Promise<{
+    connection: SshConnection
+    remoteCwd: string
+    placeholderCwd: string | undefined
+  }> {
+    const route = routeByCwd(cwd)
+    if (route.kind === 'remote') {
+      this.anchor = route.hostId
+      const connection = await this.ctx.ssh.getConnectionFor(route.hostId)
+      return { connection, remoteCwd: route.remoteCwd, placeholderCwd: cwd }
+    }
+    const connection = await this.connectionFor()
+    return { connection, remoteCwd: cwd ?? connection.home ?? '/', placeholderCwd: undefined }
+  }
+
   // --------------------------------------------------------------- resolve
 
   override async resolve(path: string, opts?: { cwd?: string; signal?: AbortSignal }): Promise<FsTarget> {
     assertNotAborted(opts?.signal, 'resolve')
     if (path.trim().length === 0) throw new FsError('file_path must be a non-empty string', 'FS_NOT_FOUND')
+    const fallback = posix.resolve(opts?.cwd ?? '', path)
     try {
-      const connection = await this.ctx.ssh.getConnection()
-      const displayPath = posix.resolve(opts?.cwd ?? connection.home ?? '', path)
+      const session = await this.sessionFor(opts?.cwd)
+      const displayPath = resolveRemotePath(path, session.remoteCwd, session.placeholderCwd)
       const targetKey = await this.canonicalPath(displayPath, opts?.signal)
       assertNotAborted(opts?.signal, 'resolve')
       return { targetKey: FsTargetKey(targetKey), displayPath }
     } catch (error: unknown) {
-      throw mapError(error, 'resolve', posix.resolve(opts?.cwd ?? '', path), opts?.signal)
+      throw mapError(error, 'resolve', fallback, opts?.signal)
     }
   }
 
@@ -242,8 +287,9 @@ export class SshFileSystem extends FileSystem {
   override async lstat(path: string, opts?: { cwd?: string }, signal?: AbortSignal): Promise<FsPathInfo | undefined> {
     assertNotAborted(signal, 'lstat')
     if (path.trim().length === 0) throw new FsError('file_path must be a non-empty string', 'FS_NOT_FOUND')
-    const connection = await this.ctx.ssh.getConnection()
-    const displayPath = posix.resolve(opts?.cwd ?? connection.home ?? '', path)
+    const session = await this.sessionFor(opts?.cwd)
+    const displayPath = resolveRemotePath(path, session.remoteCwd, session.placeholderCwd)
+    const connection = session.connection
     try {
       const sftp = await connection.getSftp()
       const entry = await sftpCall<Stats>((cb) => sftp.lstat(displayPath, cb))
@@ -266,7 +312,7 @@ export class SshFileSystem extends FileSystem {
   override async readText(target: FsTarget, signal?: AbortSignal): Promise<string> {
     await this.requireRegular(target, signal)
     try {
-      const sftp = await (await this.ctx.ssh.getConnection()).getSftp()
+      const sftp = await (await this.connectionFor()).getSftp()
       const bytes = await sftpCall<Buffer>((cb) => sftp.readFile(String(target.targetKey), cb))
       assertNotAborted(signal, 'read')
       return decodeText(bytes, target.displayPath, BINARY_SAMPLE_BYTES)
@@ -281,7 +327,7 @@ export class SshFileSystem extends FileSystem {
       throw new FsError(`cannot read "${target.displayPath}": ${info.size} bytes exceeds the ${maxBytes}-byte limit`, 'FS_TOO_LARGE')
     }
     try {
-      const sftp = await (await this.ctx.ssh.getConnection()).getSftp()
+      const sftp = await (await this.connectionFor()).getSftp()
       const buffer = await sftpCall<Buffer>((cb) => sftp.readFile(String(target.targetKey), cb))
       assertNotAborted(signal, 'read')
       // stat 预检覆盖 at-rest 场景；此双保险挡住 stat 后增长的文件。
@@ -346,7 +392,7 @@ export class SshFileSystem extends FileSystem {
     if (info === undefined) throw new FsError(`cannot list "${target.displayPath}": not found`, 'FS_NOT_FOUND')
     if (info.type !== 'directory') throw new FsError(`cannot list "${target.displayPath}": not a directory`, 'FS_NOT_DIRECTORY')
     try {
-      const sftp = await (await this.ctx.ssh.getConnection()).getSftp()
+      const sftp = await (await this.connectionFor()).getSftp()
       const listed = await sftpCall<import('ssh2').FileEntryWithStats[]>((cb) => sftp.readdir(String(target.targetKey), cb))
       const entries: FsDirEntry[] = []
       for (const entry of listed) {
@@ -453,7 +499,7 @@ export class SshFileSystem extends FileSystem {
   /** 远程 realpath（-m 容忍不存在；base64 传输避免 shell 特殊字符歧义）。 */
   private async canonicalPath(path: string, signal?: AbortSignal): Promise<string> {
     assertNotAborted(signal, 'resolve')
-    const connection = await this.ctx.ssh.getConnection()
+    const connection = await this.connectionFor()
     const result = await connection.exec(`set -o pipefail; realpath -mz -- ${quotePosixArg(path)} | base64 -w0`)
     assertNotAborted(signal, 'resolve')
     if (!result.success) {
@@ -466,7 +512,7 @@ export class SshFileSystem extends FileSystem {
   private async probe(path: string, displayPath: string, signal?: AbortSignal): Promise<Stats | undefined> {
     assertNotAborted(signal, 'stat')
     try {
-      const sftp = await (await this.ctx.ssh.getConnection()).getSftp()
+      const sftp = await (await this.connectionFor()).getSftp()
       const entry = await sftpCall<Stats>((cb) => sftp.stat(path, cb))
       assertNotAborted(signal, 'stat')
       return entry
@@ -500,7 +546,7 @@ export class SshFileSystem extends FileSystem {
   /** 写入前的差异基准读取（LF 归一化；二进制旧文件 → null）。 */
   private async readForDiff(target: FsTarget, signal?: AbortSignal): Promise<string | null> {
     try {
-      const sftp = await (await this.ctx.ssh.getConnection()).getSftp()
+      const sftp = await (await this.connectionFor()).getSftp()
       const bytes = await sftpCall<Buffer>((cb) => sftp.readFile(String(target.targetKey), cb))
       assertNotAborted(signal, 'read')
       return normalizeLineEndings(decodeText(bytes, target.displayPath, bytes.length))
@@ -513,7 +559,7 @@ export class SshFileSystem extends FileSystem {
   /** 编辑基准读取（保持原始字节文本，不归一化）。 */
   private async readForEdit(target: FsTarget, signal?: AbortSignal): Promise<string> {
     try {
-      const sftp = await (await this.ctx.ssh.getConnection()).getSftp()
+      const sftp = await (await this.connectionFor()).getSftp()
       const bytes = await sftpCall<Buffer>((cb) => sftp.readFile(String(target.targetKey), cb))
       assertNotAborted(signal, 'edit')
       return decodeText(bytes, target.displayPath, bytes.length)
@@ -535,7 +581,7 @@ export class SshFileSystem extends FileSystem {
     signal?: AbortSignal,
   ): Promise<FsVersion> {
     assertNotAborted(signal, 'write')
-    const connection = await this.ctx.ssh.getConnection()
+    const connection = await this.connectionFor()
     const sftp = await connection.getSftp()
     const targetPath = String(target.targetKey)
     const stagingDirectory = posix.join(posix.dirname(targetPath), `.dsh-${randomUUID()}.tmp`)

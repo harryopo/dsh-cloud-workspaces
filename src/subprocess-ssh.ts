@@ -52,6 +52,7 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import type { SshConnection } from './ssh-service'
 import type { SshExecChannel, ShellSession } from './engine'
+import { routeByCwd } from './workspace'
 
 /** Node 定时器最大延迟（毫秒）；`@deepseek-ai/dsh-timeout` 的 MAX_TIMER_DELAY_MS 在 dsh-subprocess 未发布时由本地常量承担。 */
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
@@ -523,7 +524,7 @@ export class SshSubprocessHandle implements SubprocessHandle {
     }
     let connection: SshConnection
     try {
-      connection = await this.runtime.getConnection()
+      connection = await this.runtime.connectionFor(this.spec.cwd)
     } catch (error: unknown) {
       if (signal?.aborted === true) return false
       if (this.quiescenceProven) return true
@@ -831,7 +832,7 @@ export class SshSubprocessHandle implements SubprocessHandle {
 
   private async removeFailedState(): Promise<void> {
     try {
-      const connection = await this.runtime.getConnection()
+      const connection = await this.runtime.connectionFor(this.spec.cwd)
       await connection.exec(bashCommand(`rm -rf -- ${quoteShellArg(this.stateDir)}`), { timeoutMs: 10_000 })
     } catch {
       // The command outcome is authoritative; owner teardown bounds private residue.
@@ -1318,6 +1319,43 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
     return this.ctx.ssh.getConnection()
   }
 
+  /**
+   * 会话锚定的主机（占位工作区路由，同 fs-ssh）：spawn/spawnTerminal 的 cwd
+   * 落在 ~/.dsh/remote/<hostId>/… 下时锚定该主机，此后本实例全部子进程与
+   * 终端都落在该主机上。
+   */
+  private anchor: string | undefined
+
+  /**
+   * 取连接句柄（带占位工作区路由）：cwd 为占位路径 → 该主机；否则沿用
+   * 已锚定主机或共享激活连接。
+   */
+  async connectionFor(cwd?: string): Promise<SshConnection> {
+    const route = routeByCwd(cwd)
+    if (route.kind === 'remote') {
+      this.anchor = route.hostId
+      return this.ctx.ssh.getConnectionFor(route.hostId)
+    }
+    if (this.anchor !== undefined) return this.ctx.ssh.getConnectionFor(this.anchor)
+    return this.ctx.ssh.getConnection()
+  }
+
+  /**
+   * spawn 的 cwd 语义：占位 cwd → 该主机 + 远程工作区路径（execChannel 的
+   * cd 前缀必须拿远程路径，本地 Windows 占位路径在远端无意义）；否则 cwd
+   * 原样透传（undefined = 登录 home，相对路径 = 远端 shell 语义）。
+   */
+  async sessionFor(cwd?: string): Promise<{ connection: SshConnection; remoteCwd: string | undefined }> {
+    const route = routeByCwd(cwd)
+    if (route.kind === 'remote') {
+      this.anchor = route.hostId
+      const connection = await this.ctx.ssh.getConnectionFor(route.hostId)
+      return { connection, remoteCwd: route.remoteCwd }
+    }
+    const connection = await this.connectionFor()
+    return { connection, remoteCwd: cwd }
+  }
+
   /** @inheritdoc */
   async resolveExecutable(
     command: string,
@@ -1400,10 +1438,10 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
       : AbortSignal.any([spec.signal, setup.controller.signal])
     this.terminalSetups.add(setup)
     try {
-      const connection = await this.ctx.ssh.getConnection()
+      const session = await this.sessionFor(spec.cwd)
       const terminal = await spawnSshTerminal(
-        connection,
-        { ...spec, signal: setupSignal },
+        session.connection,
+        { ...spec, cwd: session.remoteCwd ?? spec.cwd, signal: setupSignal },
         stateDir,
         this.pollMs,
       )

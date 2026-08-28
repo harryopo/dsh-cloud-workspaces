@@ -17,7 +17,7 @@ import z from 'schemastery'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import SshRuntime from './ssh-service'
-import { sshExecTool, sshListTool, sshLsTool, sshReadTool, sshWriteTool } from './tools'
+import { sshExecTool, sshListTool, sshLsTool, sshReadTool, sshWorkspaceTool, sshWriteTool } from './tools'
 
 /** Stable cordis plugin name. */
 export const name = 'remote-ide'
@@ -95,6 +95,7 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
     sshLsTool(runtime),
     sshReadTool(runtime),
     sshWriteTool(runtime),
+    sshWorkspaceTool(runtime),
   ]
   let disposeTools: (() => void) | undefined
   let disposeSection: (() => void) | undefined
