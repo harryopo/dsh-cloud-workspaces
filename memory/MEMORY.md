@@ -1,15 +1,23 @@
-# MEMORY.md — dsh-remote-ide 项目记忆索引
+# MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-08-31（真机验证通过：免 preset 全链路闭环，改动已提交）· 项目：DeepSeek Harness「服务器开发模式」（dsh-remote-ide v0.2.1）
+> 更新：2026-08-31 晚（发布闭环 ✅：改名 dsh-cloud-workspaces + npm 首发 0.2.1 + Discussions #5229）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
 | 文件 | 内容 |
 |------|------|
-| `project_dsh_remote_ide.md` | **项目进展终态：真机验证通过（2026-08-31）+ 全量审查修复清单（P0×5/P1×7 + 已知遗留）** |
+| `project_dsh_remote_ide.md` | **项目进展终态：发布闭环完成（2026-08-31：改名 dsh-cloud-workspaces + npm 首发 0.2.1 + 截图工作流）+ 真机验证 + 全量审查修复清单（P0×5/P1×7）** |
+| `user_profile.md` | 用户工作方式画像（能力受限直接给替代方案并执行、改需求零拖泥带水） |
 | `feedback_ui.md` | 用户 UI 反馈与最终决策（UI 全删，纯 host 工具） |
 | `reference_ecosystem.md` | 生态参考、关键路径、modlens 识图方法 |
-| `errors_learnings.md` | 11 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律） |
+| `errors_learnings.md` | 14 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律、Trae safe_rm 白名单） |
+
+## 最新状态（2026-08-31 晚 · 发布闭环 ✅）
+
+- **发布闭环全部完成**：GitHub（harryopo/dsh-cloud-workspaces，双语 README + 3 张截图，commit 19bf99f）+ npm（dsh-cloud-workspaces@0.2.1，https://www.npmjs.com/package/dsh-cloud-workspaces）+ 官方 Discussions「Show Your Plugins!」（#5229）；安装命令 `dsh plugin --profile web add dsh-cloud-workspaces`
+- **改名落地**：npm 包名 / GitHub repo = dsh-cloud-workspaces；**内部标识（settings namespace / 存储路径 / typert 前缀 / /api 路径）保持旧名 dsh-remote-ide 保数据兼容，勿改**
+- **无待办硬任务**。可选后续：Discussions 帖子补截图、npm 页面 topic 补充、DSH 生态新插件机会
+- 细节见 `project_dsh_remote_ide.md` 顶部节（含截图工作流、npm 403 新政踩坑）
 
 ## 架构概览（2026-08-28）
 

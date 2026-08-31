@@ -10,6 +10,11 @@
 3. npm 线上地址：https://www.npmjs.com/package/dsh-cloud-workspaces
 4. README 旧 URL 残留已修（英文版 clone 地址、中文版 npm 安装命令）+ 用户 3 张截图（workspace-picker/add-host-form/remote-exec）嵌入双语 README 头部 + Roadmap 勾掉 npm 发布；已提交推送（19bf99f）
 5. 清理：npm debug logs ×11 已删（TEMP\trae* 是 IDE 运行时不可删）
+6. **发布闭环最终状态**：GitHub（harryopo/dsh-cloud-workspaces，双语 README 含截图）+ npm（dsh-cloud-workspaces@0.2.1）+ Discussions 帖（#5229）全部完成；安装命令 `dsh plugin --profile web add dsh-cloud-workspaces`
+
+### 截图工作流（可复用）
+
+用户把截图粘贴到 docs/screenshots/（系统默认文件名「屏幕截图 YYYY-MM-DD HHmmss.png」）→ 用 Read 识别内容 → 重命名为语义名 → 按约定位置嵌入双语 README。本次 3 张：workspace-picker.png / add-host-form.png / remote-exec.png
 
 ### 踩坑
 - **npm 发布 403 新政**：「Two-factor authentication or granular access token with bypass 2fa enabled is required」→ 解法：npmjs.com 建 **Granular Access Token**（勾「绕过 2FA」+ Packages Read-write + 所有包 + 7 天），写入项目 .npmrc 发布后立刻删除
@@ -18,7 +23,7 @@
 - **★ commit 静默失败真凶根除**：`.git/hooks/` 残留 lefthook 死钩子（prepare-commit-msg/post-commit/post-checkout），fallback 含未引号含空格路径（`.research` 旧源码）→ sh 解析炸、零输出、exit 1；`--no-verify` 救不了 prepare-commit-msg。3 个死钩子已删，commit 恢复正常（详见 AGENTS.md 已知坑 12）
 
 ### 待办
-- 无（发布闭环完成）。后续可选： Discussions 帖子补截图、npm 页面 topic 补充
+- 无硬任务（发布闭环完成）。可选后续： Discussions 帖子补截图、npm 页面 topic 补充、DSH 生态新插件机会
 
 ## 2026-08-31 生态发布：README 重写 + Discussions 发帖（用户确认产品可发布）
 
@@ -29,8 +34,8 @@
 4. gh CLI 已登录（harryopo）——今后 GitHub API 操作直接 gh，无需 MCP GitHub
 
 ### 待办
-- **npm publish**：npm 未登录（ENEEDAUTH）→ 用户跑 `npm adduser` 后执行 `pnpm publish`（prepublishOnly 自动 build）
-- **README 截图**（用户手截，勿用浏览器自动化）：①设置→SSH 连接卡 ②添加工作区→云端(SSH) tab ③会话 bash 行展开终端卡；拿到后放 docs/screenshots/ 嵌入 README
+- ~~**npm publish**~~ ✅ 已完成（2026-08-31 晚：dsh-cloud-workspaces@0.2.1 已上线，403 新政解法见顶部节踩坑）
+- ~~**README 截图**（用户手截，勿用浏览器自动化）~~ ✅ 已完成（2026-08-31 晚：①设置→SSH 连接卡 ②添加工作区→云端(SSH) tab ③会话 bash 行展开终端卡，3 张已嵌入双语 README，工作流见顶部节）
 - 用户工作方式反馈：**截图让用户自己截**（告知截什么即可）；别用 MCP/浏览器自动化操控电脑，直接 RunCommand
 
 ## 2026-08-31 上午：UI 修复——会话里 bash/read 工具行可展开（commit 3d2be8f）
