@@ -1,12 +1,12 @@
 # MEMORY.md — dsh-remote-ide 项目记忆索引
 
-> 更新：2026-08-30（深夜三：全量代码审查，12 处修复 + 4 回归测试，98/98 绿）· 项目：DeepSeek Harness「服务器开发模式」（dsh-remote-ide v0.2.1）
+> 更新：2026-08-31（真机验证通过：免 preset 全链路闭环，改动已提交）· 项目：DeepSeek Harness「服务器开发模式」（dsh-remote-ide v0.2.1）
 
 ## 索引
 
 | 文件 | 内容 |
 |------|------|
-| `project_dsh_remote_ide.md` | **项目进展终态：M0-M4 完成 + 免 preset 转型 + 2026-08-30 全量审查修复清单（P0×5/P1×7 + 已知遗留）** |
+| `project_dsh_remote_ide.md` | **项目进展终态：真机验证通过（2026-08-31）+ 全量审查修复清单（P0×5/P1×7 + 已知遗留）** |
 | `feedback_ui.md` | 用户 UI 反馈与最终决策（UI 全删，纯 host 工具） |
 | `reference_ecosystem.md` | 生态参考、关键路径、modlens 识图方法 |
 | `errors_learnings.md` | 11 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律） |

@@ -89,13 +89,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 10. **vitest fake 实例泄漏**：`FakeClient.instances` 只在所属 describe 的 beforeEach 清理——新 describe 忘了清，`instances[0]` 拿到陈旧对象导致诡异超时。
 11. **搜官方代码要进内层**：dsh 全局包 `lib/` 只是引导 stub，真正的包在其 `node_modules/@deepseek-ai/`。
 
-## 当前状态与下一步（2026-08-30 深夜三 · 全量审查后）
+## 当前状态与下一步（2026-08-31 凌晨 · 真机验证通过）
 
 - ✅ **方向转型完成**：去 preset 化——工作区选择器「本机 / 云端（SSH）」双 tab（client 填充官方 `directory-flow` 插槽，onPicked 官方收养）+ `src/session-tools.ts` agent/created 钩子在 agent scope 注册同名遮蔽工具（免 preset 透明模式，核心竞争力）。细节见 `memory/project_dsh_remote_ide.md` 顶部三节
 - ✅ **全量代码审查 + 修复**（v0.2.1）：P0×5（openShell 双重释放 / getConnection 陈旧 rejection 毒化 / 钩子全局污染防护 / ProxyJump 探测必挂+泄漏 / 前端同名主机覆盖）+ P1×7（大文件读、父目录创建、超时保护、服务缺失守卫、日志上限、空 old_string、浏览竞态）。**98/98 测试 + typecheck + build 全绿**；清单与已知遗留见 `memory/project_dsh_remote_ide.md` 深夜三节
-- ⚠️ **工作区有大量未提交改动**（转型全套 + 9 个真机 bug + 本次审查修复）——接手先看 `git status` / `git diff --stat`
-- ⏳ **待真机验证（首要任务）**：用户浏览器走一遍——双 tab 选择器出现；云端工作区会话内官方工具透明落远程。**主要风险点：`payload.agent.ctx` 在真实 dsh 运行时是否存在**（缺失时钩子留痕于 `~/.dsh/dsh-remote-ide-debug.log`，表现为该会话无遮蔽工具）
-- 📌 验证通过后：提交改动（分主题）→ npm publish（需用户 `npm adduser`）→ 官方 Discussions「Show Your Plugins!」发帖（竞品迭代快，宜早）
+- ✅ **真机验证通过**（2026-08-31，真实 4500 + 浏览器 + 192.168.45.200）：双 tab 选择器 / 远端目录浏览 / 官方收养 / 会话钩子 6 遮蔽工具注册全部实锤；**核心风险点解除：`payload.agent.ctx` 在真实运行时存在**（`~/.dsh/dsh-remote-ide-debug.log` 有路由记录）；E2E 25/25 复过。改动已分三主题提交（44725fe / e5dcd86 / a3b7078）
+- ⏳ **待用户收尾**：云端工作区会话里发一条真实消息亲眼看 bash 落远程（消耗 LLM 额度，留给用户）→ git push → npm publish（需用户 `npm adduser`）→ 官方 Discussions「Show Your Plugins!」发帖（竞品迭代快，宜早）
 - 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
 
 ## 参考资料（本地）

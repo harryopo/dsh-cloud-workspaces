@@ -1,6 +1,26 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-30（全量代码审查 + 修复）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-08-31（真机验证通过：免 preset 全链路闭环）· **Category**: project · **Source**: conversation + git history
+
+## 2026-08-31 凌晨：真机验证通过——免 preset 全链路闭环 ✅
+
+在真实 4500 实例（本次新起，无承载会话）+ 真实浏览器 + 真实服务器（192.168.45.200，openEuler）上逐环验证：
+
+1. ✅ **双 tab 选择器出现**：「添加工作区」→ 本机 / 云端（SSH）双 tab（client 插槽注入成功）
+2. ✅ **远端目录浏览**：选主机 192.168.45.200 → typert listRemoteDir → 真实目录列表返回（/ 下 boot/etc/home/myweb…）
+3. ✅ **官方收养**：「使用 / 作为工作区」→ 占位工作区收养成功，出现在「选择工作区」列表（显示 `192.168.45.200 / root`）
+4. ✅ **🎯 核心风险点解除：`payload.agent.ctx` 在真实 dsh 运行时存在**——钩子日志实锤：`agent/created: cwd=…\192.168.45.200\Lw → remote` + `remote session routed … (6 shadow tools)`，6 个遮蔽工具成功注册进 agent scope
+5. ✅ **E2E 25/25**（wsl-e2e，真 SSH：引擎/SFTP/PTY/ctx.fs/占位路由/ctx.subprocess 全通，新构建产物）
+6. ✅ 98/98 单测 + typecheck + build 全绿；改动已分三主题提交（44725fe / e5dcd86 / a3b7078），工作区干净
+
+**仅剩用户收尾一步**：在该云端工作区会话里发一条真实消息（如「运行 pwd 并看看当前目录」），亲眼看 bash 落远程——会消耗用户 LLM 额度，留给用户自己点。机制层已无风险。
+
+**之后**：npm publish（需用户 `npm adduser`）→ Discussions「Show Your Plugins!」
+
+### 环境备注
+- 4500 实例为本次验证新起（此前无运行实例）；`dsh web --port 4500` 秒起
+- wsl-e2e 的 sshd 当前在线（127.0.0.1:2223）；若重启过机器需 `wsl -u root /usr/sbin/sshd`
+- 浏览器自动化（browser-use）走通了全程；原生 select 选项直接点不了，用 evaluate_script 设 value + 派发 change 事件解决
 
 ## 2026-08-30 深夜三：全量代码审查（前后端 6100 行）——12 处修复 + 4 回归测试（98/98 绿）
 
