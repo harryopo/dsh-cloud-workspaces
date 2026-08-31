@@ -8,16 +8,17 @@
 1. **改名**：GitHub repo（gh api PATCH repos/.../dsh-remote-ide -f name=dsh-cloud-workspaces，gh CLI 无 --rename）+ npm 包名 + cordis.patch.yml + client/index.js module id + 双语 README + AGENTS.md；**内部标识（settings namespace/存储路径/typert 前缀//api 路径）保持旧名保数据兼容**；package.json 补 `publishConfig.registry`（官方源）+ repository.url/homepage 更新
 2. **npm 首发**：`dsh-cloud-workspaces@0.2.1` 上线（pnpm publish --access public --no-git-checks）；npm view 验证 name/version/description/repository.url 全对
 3. npm 线上地址：https://www.npmjs.com/package/dsh-cloud-workspaces
-4. README 旧 URL 残留已修（英文版 clone 地址、中文版 npm 安装命令）
+4. README 旧 URL 残留已修（英文版 clone 地址、中文版 npm 安装命令）+ 用户 3 张截图（workspace-picker/add-host-form/remote-exec）嵌入双语 README 头部 + Roadmap 勾掉 npm 发布；已提交推送（19bf99f）
 5. 清理：npm debug logs ×11 已删（TEMP\trae* 是 IDE 运行时不可删）
 
 ### 踩坑
 - **npm 发布 403 新政**：「Two-factor authentication or granular access token with bypass 2fa enabled is required」→ 解法：npmjs.com 建 **Granular Access Token**（勾「绕过 2FA」+ Packages Read-write + 所有包 + 7 天），写入项目 .npmrc 发布后立刻删除
 - **npm login 在非 TTY 终端**：打印 URL 后挂起等浏览器授权，授权后自动完成；whoami 可验证
 - Trae 终端删除文件有 safe_rm 白名单：`npm-cache\_logs` 对通配符 `\*` 判定失败，改 `Get-ChildItem | Remove-Item -Force` 管道传具体路径可过
+- **★ commit 静默失败真凶根除**：`.git/hooks/` 残留 lefthook 死钩子（prepare-commit-msg/post-commit/post-checkout），fallback 含未引号含空格路径（`.research` 旧源码）→ sh 解析炸、零输出、exit 1；`--no-verify` 救不了 prepare-commit-msg。3 个死钩子已删，commit 恢复正常（详见 AGENTS.md 已知坑 12）
 
 ### 待办
-- 用户插图（3 张：双 tab 选择器/添加主机表单/bash 远程执行）放 docs/screenshots/ 后嵌入双语 README → 提交推送（Roadmap 里「npm first publish」顺手勾掉）
+- 无（发布闭环完成）。后续可选： Discussions 帖子补截图、npm 页面 topic 补充
 
 ## 2026-08-31 生态发布：README 重写 + Discussions 发帖（用户确认产品可发布）
 

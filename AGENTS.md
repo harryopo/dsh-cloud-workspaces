@@ -91,6 +91,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 9. **同文件多个 Edit 并行会相互覆盖**（已犯 4 次）→ 同一文件的修改必须严格串行。
 10. **vitest fake 实例泄漏**：`FakeClient.instances` 只在所属 describe 的 beforeEach 清理——新 describe 忘了清，`instances[0]` 拿到陈旧对象导致诡异超时。
 11. **搜官方代码要进内层**：dsh 全局包 `lib/` 只是引导 stub，真正的包在其 `node_modules/@deepseek-ai/`。
+12. **lefthook 死钩子导致 commit 静默失败**（2026-08-31 已根除）：`.git/hooks/` 残留 lefthook 的 `prepare-commit-msg`/`post-commit`/`post-checkout`，其 fallback 里含**未加引号的含空格绝对路径**（指向 `.research` 旧源码目录），sh 解析炸掉且零输出 → `git commit` 退出 1 无任何报错（`--no-verify` 救不了 prepare-commit-msg）。3 个死钩子已删除，commit 恢复正常。若复发先查 `.git/hooks/` 非 sample 文件。
 
 ## 当前状态与下一步（2026-08-31 凌晨 · 真机验证通过）
 
