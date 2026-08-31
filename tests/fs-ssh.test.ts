@@ -611,6 +611,37 @@ describe('SshFileSystem 远程文件系统', () => {
     await fiber.dispose()
   })
 
+  it('writeText：覆盖已有文件优先走 posix-rename 扩展（真实服务器 SSH_FX_FAILURE 回归）', async () => {
+    const { fiber, fs } = await setup()
+    // 默认 fake 的 rename 无条件覆盖，掩盖了 SFTP RENAME「不覆盖已存在目标、
+    // OpenSSH 返回 SSH_FX_FAILURE」的真实语义——给 fake 装上扩展并计数。
+    const sftp = fake.state.sftp as unknown as {
+      rename(from: string, to: string, cb: (err?: Error) => void): void
+      ext_openssh_rename?: (from: string, to: string, cb: (err?: Error) => void) => void
+    }
+    let extCalls = 0
+    sftp.ext_openssh_rename = (from, to, cb) => {
+      extCalls += 1
+      sftp.rename(from, to, cb)
+    }
+    const target = await fs.resolve('project/main.ts')
+    const outcome = await fs.writeText(target, 'const y = 2\n')
+    expect(extCalls).toBe(1)
+    expect(outcome.operation).toBe('update')
+    expect(await fs.readText(target)).toBe('const y = 2\n')
+    await fiber.dispose()
+  })
+
+  it('writeText：扩展不可用时降级 unlink + rename（非 OpenSSH 服务器）', async () => {
+    const { fiber, fs } = await setup()
+    const target = await fs.resolve('project/main.ts')
+    // 默认 fake 未实现 ext_openssh_rename → 走降级路径，覆盖仍须成功。
+    const outcome = await fs.writeText(target, 'fallback content\n')
+    expect(outcome.operation).toBe('update')
+    expect(await fs.readText(target)).toBe('fallback content\n')
+    await fiber.dispose()
+  })
+
   it('writeText：createIfAbsent 冲突报 FS_NOT_OBSERVED', async () => {
     const { fiber, fs } = await setup()
     const target = await fs.resolve('project/main.ts')

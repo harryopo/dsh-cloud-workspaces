@@ -189,6 +189,27 @@ function sftpCallVoid(
   })
 }
 
+/** SFTPWrapper 的 OpenSSH 扩展形状（@types/ssh2 未声明 ext_openssh_rename）。 */
+type SftpWithOpensshExtensions = import('ssh2').SFTPWrapper & {
+  ext_openssh_rename?: (from: string, to: string, callback: (error: Error | null | undefined) => void) => void
+}
+
+const POSIX_RENAME_UNSUPPORTED = 'posix-rename@openssh.com unsupported'
+
+/** posix-rename@openssh.com 原子替换（覆盖已存在目标；普通 SFTP RENAME 做不到）。 */
+async function posixRename(sftp: import('ssh2').SFTPWrapper, from: string, to: string): Promise<void> {
+  const extRename = (sftp as SftpWithOpensshExtensions).ext_openssh_rename
+  if (extRename === undefined) throw new Error(POSIX_RENAME_UNSUPPORTED)
+  await sftpCallVoid((callback) => extRename.call(sftp, from, to, callback))
+}
+
+/** 扩展缺失（ssh2 同步 throw 或方法不存在）才降级；远端真实错误原样上抛。 */
+function isPosixRenameUnsupported(error: unknown): boolean {
+  return error instanceof Error
+    && (error.message === POSIX_RENAME_UNSUPPORTED
+      || error.message.includes('does not support this extended request'))
+}
+
 /** SSH 远程文件系统后端：共享 ctx.ssh 的连接，适配 dsh-fs 能力缝。 */
 export class SshFileSystem extends FileSystem {
   static inject = ['ssh']
@@ -205,17 +226,26 @@ export class SshFileSystem extends FileSystem {
 
   /**
    * 取连接句柄（带占位工作区路由）：cwd 落在 ~/.dsh/remote/<hostId>/… 下时
-   * 连接该主机（不切换 ssh_* 工具的激活目标）；否则沿用已锚定主机或共享
-   * 激活连接。
+   * 连接该主机；否则沿用已锚定主机或共享激活连接。锚定变更时同步激活
+   * runtime 连接——ssh_* 工具的无别名回退读 activeAlias（全局单目标），
+   * 不激活会让同一占位会话里的 ssh_exec 报 "no alias given"，而 fs 工具
+   * 明明已在该主机上工作。
    */
-  private connectionFor(cwd?: string): Promise<SshConnection> {
+  private async connectionFor(cwd?: string): Promise<SshConnection> {
     const route = routeByCwd(cwd)
     if (route.kind === 'remote') {
-      this.anchor = route.hostId
+      await this.activateAnchor(route.hostId)
       return this.ctx.ssh.getConnectionFor(route.hostId)
     }
     if (this.anchor !== undefined) return this.ctx.ssh.getConnectionFor(this.anchor)
     return this.ctx.ssh.getConnection()
+  }
+
+  /** 首次锚定某主机时把 runtime 的激活连接也切过去（幂等，仅锚定变更时）。 */
+  private async activateAnchor(hostId: string): Promise<void> {
+    if (this.anchor === hostId) return
+    this.anchor = hostId
+    await this.ctx.ssh.connect(hostId)
   }
 
   /**
@@ -230,7 +260,7 @@ export class SshFileSystem extends FileSystem {
   }> {
     const route = routeByCwd(cwd)
     if (route.kind === 'remote') {
-      this.anchor = route.hostId
+      await this.activateAnchor(route.hostId)
       const connection = await this.ctx.ssh.getConnectionFor(route.hostId)
       return { connection, remoteCwd: route.remoteCwd, placeholderCwd: cwd }
     }
@@ -342,7 +372,7 @@ export class SshFileSystem extends FileSystem {
 
   override async streamText(target: FsTarget, signal?: AbortSignal): Promise<AsyncIterable<string>> {
     await this.requireRegular(target, signal)
-    const sftp = await (await this.ctx.ssh.getConnection()).getSftp()
+    const sftp = await (await this.connectionFor()).getSftp()
     const displayPath = target.displayPath
     return {
       async *[Symbol.asyncIterator](): AsyncGenerator<string> {
@@ -620,7 +650,24 @@ export class SshFileSystem extends FileSystem {
         }
         await sftpCallVoid((cb) => sftp.unlink(temporary, cb))
       } else {
-        await sftpCallVoid((cb) => sftp.rename(temporary, targetPath, cb))
+        // SFTP RENAME 语义不覆盖已存在目标（OpenSSH 对存在目标返回
+        // SSH_FX_FAILURE）；替换已存在文件必须走 posix-rename@openssh.com
+        // 扩展（原子覆盖）。扩展不可用的服务器降级 unlink + rename（极小
+        // 非原子窗口）。
+        try {
+          await posixRename(sftp, temporary, targetPath)
+        } catch (error) {
+          if (isPosixRenameUnsupported(error)) {
+            try {
+              await sftpCallVoid((cb) => sftp.unlink(targetPath, cb))
+            } catch (_targetAlreadyAbsent) {
+              // create-race：目标本就不存在，普通 rename 照常生效。
+            }
+            await sftpCallVoid((cb) => sftp.rename(temporary, targetPath, cb))
+          } else {
+            throw error
+          }
+        }
       }
       try {
         await sftpCallVoid((cb) => sftp.rmdir(stagingDirectory, cb))

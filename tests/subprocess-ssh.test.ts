@@ -582,6 +582,31 @@ describe('SshSubprocessRuntime 远程 subprocess', () => {
     await fiber.dispose()
   })
 
+  it('spawn：快机器竞态——发布 pid 与退出落在同一轮询窗口内仍能取到 pgid', async () => {
+    const { ctx, fiber, subprocess } = await setup()
+    const handle = subprocess.spawn(spawnSpec({ argv: ['echo', 'fast'] }))
+
+    const channel = await waitForChannel()
+    const sftp = await sftpOf(ctx)
+    // 真实时序（真实服务器/localhost 上必然出现）：发布 pid 先于命令退出，
+    // 且两者都落在一次 SFTP 轮询落空后的 race 等待窗口内——先让首轮
+    // poll(ENOENT) 进入等待（pollMs=5），再在窗口内发布 + 关闭通道。
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    sftp.nodes.set(posix.join(stateDirOf(channel.command), 'pid'), {
+      kind: 'file',
+      content: Buffer.from('999\n'),
+      mode: 0o600,
+      mtime: 1,
+    })
+    channel.emit('close', 0, null)
+
+    const outcome = await handle.done
+    expect(outcome.exitCode).toBe(0)
+    expect(outcome.signal).toBeNull()
+    expect(handle.pid).toBe(999)
+    await fiber.dispose()
+  })
+
   it('spawn：stderr 独立通道收集；非零退出码透传', async () => {
     const { ctx, fiber, subprocess } = await setup()
     const handle = subprocess.spawn(spawnSpec({ argv: ['sh', '-c', 'echo err >&2; exit 3'] }))

@@ -58,6 +58,8 @@ const fake = vi.hoisted(() => {
 
   class FakeClient extends MiniEmitter {
     static instances: FakeClient[] = []
+    /** 下一次 connect 的行为：ready（默认）或 error（模拟临时不可达）。 */
+    static nextConnectBehavior: 'ready' | 'error' = 'ready'
     exec = vi.fn()
     shell = vi.fn()
     sftp = vi.fn()
@@ -78,9 +80,12 @@ const fake = vi.hoisted(() => {
       })
     }
 
-    /** engine.connectClient 调用的入口：异步触发 ready。 */
+    /** engine.connectClient 调用的入口：异步触发 ready 或 error。 */
     connect() {
-      setImmediate(() => this.trigger('ready'))
+      setImmediate(() => {
+        if (FakeClient.nextConnectBehavior === 'ready') this.trigger('ready')
+        else this.trigger('error', new Error('connect refused'))
+      })
       return this
     }
 
@@ -108,6 +113,7 @@ function tmpStoreFile(): string {
 describe('SshRuntime 连接生命周期', () => {
   beforeEach(() => {
     fake.FakeClient.instances.length = 0
+    fake.FakeClient.nextConnectBehavior = 'ready'
   })
 
   async function setup(): Promise<{ ctx: Context; fiber: Fiber; runtime: SshRuntime }> {
@@ -204,5 +210,23 @@ describe('SshRuntime 连接生命周期', () => {
     expect(prod.alias).toBe('prod')
     expect(prod).not.toBe(dev)
     expect(fake.FakeClient.instances).toHaveLength(2)
+  })
+
+  it('临时连接失败后不被陈旧 rejection 毒化：主机恢复后 getConnection 自愈', async () => {
+    const { runtime } = await setup()
+    fake.FakeClient.nextConnectBehavior = 'error'
+    const failed = await runtime.connect('dev')
+    expect(failed.state).toBe('failed')
+    // connect 内部还会立即打开一次句柄（在途中）——等它同样落败，
+    // 确保 ready 已是陈旧 rejection，之后的自愈只能靠重建。
+    await new Promise((resolve) => setImmediate(resolve))
+    const failedAttempts = fake.FakeClient.instances.length
+
+    // 主机恢复可达——此前实现会永久缓存 rejected ready，每次 getConnection
+    // 都抛陈旧错误；修复后应重建连接自愈。
+    fake.FakeClient.nextConnectBehavior = 'ready'
+    const connection = await runtime.getConnection()
+    expect(connection.alias).toBe('dev')
+    expect(fake.FakeClient.instances.length).toBe(failedAttempts + 1)
   })
 })

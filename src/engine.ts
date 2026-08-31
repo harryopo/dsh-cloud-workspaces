@@ -6,10 +6,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs'
-import { createServer, type Server as NetServer } from 'node:net'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { Client, type ClientChannel, type ConnectConfig } from 'ssh2'
+import { posix } from 'node:path'
+import { Client, type ConnectConfig } from 'ssh2'
 import type {
   ConnectionState,
   ExecResult,
@@ -109,12 +107,12 @@ export interface ShellSession {
 }
 
 /** Build the ssh2 connect config for one entry (key read from disk). */
-function buildConnectConfig(entry: SshHostEntry, sock?: ConnectConfig['sock']): ConnectConfig {
+function buildConnectConfig(entry: SshHostEntry, sock?: ConnectConfig['sock'], readyTimeoutMs?: number): ConnectConfig {
   const config: ConnectConfig = {
     host: entry.host,
     port: entry.port,
     username: entry.user,
-    readyTimeout: 15_000,
+    readyTimeout: readyTimeoutMs ?? 15_000,
     keepaliveInterval: 15_000,
     keepaliveCountMax: 3,
   }
@@ -194,6 +192,8 @@ export class SshEngine {
   private readonly store: HostStore
   private readonly opts: Required<EngineOptions>
   private readonly pool = new Map<string, PoolRecord>()
+  /** In-flight connect attempts (concurrent callers await instead of racing). */
+  private readonly connecting = new Map<string, Promise<PoolRecord>>()
   private sweepTimer: NodeJS.Timeout | undefined
   /** Alias of the connection the IDE workspace is bound to ('' = none). */
   private activeAlias = ''
@@ -282,17 +282,19 @@ export class SshEngine {
   private async testEntry(entry: SshHostEntry): Promise<TestResult> {
     const started = Date.now()
     let client: Client | undefined
+    // Jump-hop clients must outlive the probe: they carry the target's
+    // transport socket, so they are ended only in finally (ending them
+    // earlier drops the connection before the ping runs).
+    const hops: Client[] = []
     try {
-      const config = buildConnectConfig(entry)
+      const config = buildConnectConfig(entry, undefined, this.opts.connectTimeoutMs)
       const password = entry.auth.kind === 'password' ? entry.auth.password : undefined
       if (entry.proxyJump.length > 0) {
-        const hops = await this.connectHops(entry)
-        config.sock = hops[hops.length - 1]!.sock
-        client = await connectClient(config, password)
-        for (const hop of hops) hop.client.end()
-      } else {
-        client = await connectClient(config, password)
+        const opened = await this.connectHops(entry)
+        for (const hop of opened) hops.push(hop.client)
+        config.sock = opened[opened.length - 1]!.sock
       }
+      client = await connectClient(config, password)
       const ok = await new Promise<boolean>((resolve) => {
         client!.exec('echo dsh-remote-ide-ping', (error, stream) => {
           if (error) { resolve(false); return }
@@ -309,33 +311,59 @@ export class SshEngine {
       }
     } finally {
       client?.end()
+      for (const hop of hops) {
+        try { hop.end() } catch { /* already closed */ }
+      }
     }
   }
 
-  /** Open a persistent pooled connection for a host (returns when ready). */
+  /**
+   * Open (or reuse) the pooled connection for a host. Concurrent callers
+   * while a connect attempt is in flight await that same attempt — they must
+   * never observe a record whose client has not been assigned yet.
+   */
   async ensureConnection(alias: string): Promise<PoolRecord> {
     const existing = this.pool.get(alias)
-    if (existing !== undefined && !existing.broken) return existing
-    const entry = this.store.get(alias)
-    if (entry === undefined) throw new Error(`unknown host: ${alias}`)
-    this.dropConnection(alias)
+    if (existing !== undefined && existing.client !== undefined && !existing.broken) return existing
+    const inflight = this.connecting.get(alias)
+    if (inflight !== undefined) return inflight
+    const attempt = this.openPoolRecord(alias)
+    this.connecting.set(alias, attempt)
+    void attempt.catch(() => {})
+    return attempt
+  }
 
-    const record: PoolRecord = {
-      client: undefined as unknown as Client,
-      hops: [],
-      idleAt: Date.now(),
-      broken: false,
-      inFlight: 0,
-    }
-    this.pool.set(alias, record)
+  /** Build one pooled connection record (pool + in-flight registry updated). */
+  private async openPoolRecord(alias: string): Promise<PoolRecord> {
     try {
-      const config = buildConnectConfig(entry)
+      const entry = this.store.get(alias)
+      if (entry === undefined) throw new Error(`unknown host: ${alias}`)
+      this.dropConnection(alias)
+
+      const record: PoolRecord = {
+        client: undefined as unknown as Client,
+        hops: [],
+        idleAt: Date.now(),
+        broken: false,
+        inFlight: 0,
+      }
+      this.pool.set(alias, record)
+      const config = buildConnectConfig(entry, undefined, this.opts.connectTimeoutMs)
       if (entry.proxyJump.length > 0) {
         const hops = await this.connectHops(entry)
         config.sock = hops[hops.length - 1]!.sock
         record.hops = hops.map(h => h.client)
       }
-      const client = await connectClient(config, entry.auth.kind === 'password' ? entry.auth.password : undefined)
+      let client: Client
+      try {
+        client = await connectClient(config, entry.auth.kind === 'password' ? entry.auth.password : undefined)
+      } catch (error) {
+        // 目标连接失败时跳板链已建立——显式释放，否则泄漏。
+        for (const hop of record.hops) {
+          try { hop.end() } catch { /* already closed */ }
+        }
+        throw error
+      }
       record.client = client
       client.on('error', (error) => {
         record.broken = true
@@ -357,6 +385,8 @@ export class SshEngine {
     } catch (error) {
       this.pool.delete(alias)
       throw error
+    } finally {
+      this.connecting.delete(alias)
     }
   }
 
@@ -366,7 +396,7 @@ export class SshEngine {
     for (const hopAlias of entry.proxyJump) {
       const hop = this.store.get(hopAlias)
       if (hop === undefined) throw new Error(`jump host not found: ${hopAlias}`)
-      const config = buildConnectConfig(hop)
+      const config = buildConnectConfig(hop, undefined, this.opts.connectTimeoutMs)
       if (hops.length > 0) config.sock = hops[hops.length - 1]!.sock
       const client = await connectClient(config, hop.auth.kind === 'password' ? hop.auth.password : undefined)
       const sock = (client as unknown as { sock: import('node:net').Socket }).sock
@@ -630,14 +660,22 @@ export class SshEngine {
             channel.close()
           },
         }
-        channel.on('data', (chunk: Buffer) => session.onData?.(chunk))
-        channel.on('close', () => {
+        // error 与 close 常先后双发——inFlight 只释放一次，否则会降到负数，
+        // 让 sweep 误判连接空闲并在其他操作运行中将其断开。
+        let released = false
+        const release = (): void => {
+          if (released) return
+          released = true
           record.inFlight -= 1
           record.idleAt = Date.now()
+        }
+        channel.on('data', (chunk: Buffer) => session.onData?.(chunk))
+        channel.on('close', () => {
+          release()
           session.onExit?.(null)
         })
         channel.on('error', (error: Error) => {
-          record.inFlight -= 1
+          release()
           session.onExit?.(null, error.message)
         })
         resolve(session)
@@ -704,37 +742,55 @@ export class SshEngine {
       })
     })
     if (stat.isDirectory()) throw new Error(`cannot read directory: ${path}`)
-    const buffer = await new Promise<Buffer>((resolve, reject) => {
-      sftp.readFile(path, (error, data: Buffer) => {
-        if (error) reject(error)
-        else resolve(data)
+    const cap = this.opts.maxReadBytes
+    const truncated = stat.size > cap
+    // 超限文件只流式读取头部 cap 字节——整读入内存会让大日志/数据文件
+    // 直接打爆宿主进程。
+    const buffer = truncated
+      ? await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = []
+        const stream = sftp.createReadStream(path, { start: 0, end: cap - 1 })
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+        stream.on('end', () => resolve(Buffer.concat(chunks)))
+        stream.on('error', reject)
       })
-    })
-    const truncated = buffer.length > this.opts.maxReadBytes
-    const slice = truncated ? buffer.subarray(0, this.opts.maxReadBytes) : buffer
+      : await new Promise<Buffer>((resolve, reject) => {
+        sftp.readFile(path, (error, data: Buffer) => {
+          if (error) reject(error)
+          else resolve(data)
+        })
+      })
+    const slice = truncated ? buffer.subarray(0, cap) : buffer
     // Binary sniff: reject files with a NUL byte in the head (the editor is
     // text-only; binary files get a clear error instead of mojibake).
     const head = slice.subarray(0, 8192)
     if (head.includes(0)) {
-      throw new Error(`binary file (${buffer.length} bytes); preview is not supported`)
+      throw new Error(`binary file (${stat.size} bytes); preview is not supported`)
     }
     return {
       content: slice.toString('utf8'),
       truncated,
-      size: buffer.length,
+      size: stat.size,
       mtimeMs: stat.mtime * 1000,
     }
   }
 
-  /** Write text to a remote file (creates parent dirs on demand). */
+  /** Write text to a remote file (missing parent directories are created). */
   async writeFile(alias: string, path: string, content: string): Promise<{ size: number; mtimeMs: number }> {
     const sftp = await this.getSftp(alias)
-    await new Promise<void>((resolve, reject) => {
+    const write = (): Promise<void> => new Promise<void>((resolve, reject) => {
       sftp.writeFile(path, Buffer.from(content, 'utf8'), (error) => {
         if (error) reject(error)
         else resolve()
       })
     })
+    try {
+      await write()
+    } catch (error) {
+      if (!isMissingPathError(error)) throw error
+      await this.mkdirParents(sftp, path)
+      await write()
+    }
     const stat = await new Promise<import('ssh2').Stats>((resolve, reject) => {
       sftp.stat(path, (error, stats) => {
         if (error) reject(error)
@@ -742,6 +798,32 @@ export class SshEngine {
       })
     })
     return { size: stat.size, mtimeMs: stat.mtime * 1000 }
+  }
+
+  /** Create the missing parent directories of a remote path (bottom-up scan). */
+  private async mkdirParents(sftp: import('ssh2').SFTPWrapper, path: string): Promise<void> {
+    let dir = posix.dirname(path)
+    const missing: string[] = []
+    while (dir !== '/' && dir !== '.' && dir !== '') {
+      const exists = await new Promise<boolean>((resolve, reject) => {
+        sftp.stat(dir, (error) => {
+          if (error === undefined || error === null) resolve(true)
+          else if (isMissingPathError(error)) resolve(false)
+          else reject(error)
+        })
+      })
+      if (exists) break
+      missing.push(dir)
+      dir = posix.dirname(dir)
+    }
+    for (const target of missing.reverse()) {
+      await new Promise<void>((resolve, reject) => {
+        sftp.mkdir(target, (error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    }
   }
 
   /** Create a remote directory (recursively via mkdir -p fallback). */
@@ -824,11 +906,7 @@ export function quoteSh(value: string): string {
   return "'" + value.replace(/'/g, `'\\''`) + "'"
 }
 
-/** Default remote start path: $HOME when known, else /root or the user home. */
-export function defaultRemotePath(alias: string, home?: string): string {
-  return home ?? `/home/${alias}`
+/** SFTP 错误的「路径不存在」判定（跨实现的错误消息匹配）。 */
+function isMissingPathError(error: unknown): boolean {
+  return /no such file|ENOENT|not found/i.test(error instanceof Error ? error.message : String(error))
 }
-
-void defaultRemotePath
-void homedir
-void join

@@ -554,10 +554,14 @@ export class SshSubprocessHandle implements SubprocessHandle {
   private async run(): Promise<SubprocessOutcome> {
     let preparing = true
     try {
-      const connection = await this.runtime.getConnection()
+      // 占位 cwd → 锚定主机 + 远程路径重锚定：execChannel 的 cd 前缀必须拿
+      // 远程路径（本地 Windows 占位路径在远端无意义，cd 失败会让 wrapper 在
+      // 发布 pgid 前退出）。普通远程 cwd / undefined 原样透传，行为不变。
+      const session = await this.runtime.sessionFor(this.spec.cwd)
+      const connection = session.connection
       await this.prepareState(connection)
       preparing = false
-      const channel = await connection.execChannel(commandText(this.spec, this.paths), { cwd: this.spec.cwd })
+      const channel = await connection.execChannel(commandText(this.spec, this.paths), { cwd: session.remoteCwd })
       this.channel = channel
       this.commandState.resolve(channel)
       const completion = Promise.withResolvers<SubprocessOutcome>()
@@ -695,8 +699,7 @@ export class SshSubprocessHandle implements SubprocessHandle {
       () => true,
       () => true,
     )
-    while (true) {
-      let raw = ''
+    const readPid = async (): Promise<string> => {
       try {
         const buffer = await new Promise<Buffer>((resolve, reject) => {
           sftp.readFile(this.paths.pid, (error, data) => {
@@ -704,26 +707,37 @@ export class SshSubprocessHandle implements SubprocessHandle {
             else resolve(data)
           })
         })
-        raw = buffer.toString('utf8').trim()
+        return buffer.toString('utf8').trim()
       } catch {
-        // The wrapper has not published yet; poll again.
+        // The wrapper has not published yet.
+        return ''
       }
-      if (raw.length > 0) {
-        const pid = Number(raw)
-        if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(pid)) {
-          throw new Error(`subprocess-ssh: remote wrapper published invalid process-group id ${JSON.stringify(raw)}`)
-        }
-        // Refuse ids whose negative form addresses every process (`kill -- -1`) or init's group.
-        if (pid <= 1) {
-          throw new Error(`subprocess-ssh: unsafe published process-group id ${pid}`)
-        }
-        return pid
+    }
+    const published = (raw: string): number => {
+      const pid = Number(raw)
+      if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(pid)) {
+        throw new Error(`subprocess-ssh: remote wrapper published invalid process-group id ${JSON.stringify(raw)}`)
       }
+      // Refuse ids whose negative form addresses every process (`kill -- -1`) or init's group.
+      if (pid <= 1) {
+        throw new Error(`subprocess-ssh: unsafe published process-group id ${pid}`)
+      }
+      return pid
+    }
+    while (true) {
+      const raw = await readPid()
+      if (raw.length > 0) return published(raw)
       if (this.terminationController.signal.aborted) {
         throw new Error('subprocess-ssh: process-group publication aborted')
       }
       const settled = await Promise.race([commandSettled, waitTick(this.pollMs).then(() => false)])
       if (settled) {
+        // A fast command can publish and exit inside one poll window; the
+        // state directory outlives a normal exit, so the pid is still on
+        // disk — read once more before declaring the publication lost,
+        // otherwise real (fast) servers fail short spawns spuriously.
+        const finalRaw = await readPid()
+        if (finalRaw.length > 0) return published(finalRaw)
         throw new Error('subprocess-ssh: remote command exited before publishing its process-group id')
       }
     }
@@ -767,7 +781,8 @@ export class SshSubprocessHandle implements SubprocessHandle {
         return
       }
     }
-    const connection = await this.runtime.getConnection()
+    // 锚定主机上终止（占位 cwd 的 spawn 不落在激活连接上）。
+    const connection = await this.runtime.connectionFor()
     await this.terminateGroup(connection, this.remotePid)
   }
 
@@ -1328,16 +1343,25 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
 
   /**
    * 取连接句柄（带占位工作区路由）：cwd 为占位路径 → 该主机；否则沿用
-   * 已锚定主机或共享激活连接。
+   * 已锚定主机或共享激活连接。锚定变更时同步激活连接（见 activateAnchor）。
    */
   async connectionFor(cwd?: string): Promise<SshConnection> {
     const route = routeByCwd(cwd)
     if (route.kind === 'remote') {
-      this.anchor = route.hostId
+      await this.activateAnchor(route.hostId)
       return this.ctx.ssh.getConnectionFor(route.hostId)
     }
     if (this.anchor !== undefined) return this.ctx.ssh.getConnectionFor(this.anchor)
     return this.ctx.ssh.getConnection()
+  }
+
+  /** 首次锚定某主机时把激活连接也切过去：ssh_* 工具的无别名回退读
+   * activeAlias（全局单目标），不激活会让同一占位会话的 ssh_exec 全部
+   * 报 "no alias given"，而 fs/subprocess 明明已在该主机上工作。 */
+  private async activateAnchor(hostId: string): Promise<void> {
+    if (this.anchor === hostId) return
+    this.anchor = hostId
+    await this.ctx.ssh.connect(hostId)
   }
 
   /**
@@ -1348,7 +1372,7 @@ export class SshSubprocessRuntime extends SubprocessRuntime {
   async sessionFor(cwd?: string): Promise<{ connection: SshConnection; remoteCwd: string | undefined }> {
     const route = routeByCwd(cwd)
     if (route.kind === 'remote') {
-      this.anchor = route.hostId
+      await this.activateAnchor(route.hostId)
       const connection = await this.ctx.ssh.getConnectionFor(route.hostId)
       return { connection, remoteCwd: route.remoteCwd }
     }

@@ -176,7 +176,16 @@ export class SshRuntime extends Service {
     if (this.ready === undefined || this.engine_.isBroken(this.activeAlias)) {
       this.ready = this.openConnection()
     }
-    const connection = await this.ready
+    let connection: SshConnection
+    try {
+      connection = await this.ready
+    } catch (error) {
+      // rejected ready 会被永久缓存（临时网络故障/主机短暂不可达）——重建
+      // 一次，让后续操作有机会自愈，而不是每次都抛陈旧错误。
+      if (this.disposed || this.activeAlias === '') throw error
+      this.ready = this.openConnection()
+      connection = await this.ready
+    }
     // 等待句柄期间可能发生 disposal：同步预检通过仍需复查。
     if (this.disposed) throw new Error('ssh runtime is disposing')
     return connection
