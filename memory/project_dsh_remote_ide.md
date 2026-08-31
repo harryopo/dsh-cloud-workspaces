@@ -1,6 +1,18 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-31（真机验证通过：免 preset 全链路闭环）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-08-31（UI 修复：遮蔽 bash/read 行可展开）· **Category**: project · **Source**: conversation + git history
+
+## 2026-08-31 上午：UI 修复——会话里 bash/read 工具行可展开（commit 3d2be8f）
+
+**用户反馈**：云端工作区会话功能全通，但消息流里 Bash 工具行「无法展开来看」。
+
+**根因**（dsh 0.1.1-rc.2 内层包源码级定位）：官方 UI 对名为 `bash`/`read` 的工具走 **keyed `tool.call.toolview` 插槽**（`dsh-client-ui-tool` 的 BashRow / read 行）。这些行的 `expandable` 仅当宿主经工具定义的 **`presentCall`/`presentResult`** 附上 terminal/read 视图（`callView`/`resultView`）时为真——我们的遮蔽工具没提供 → 整行 inert 纯文本。通用 GenericToolCard 路径不受影响（write/edit/glob/grep 本来就能展开）。
+
+**修复**：`src/session-tools.ts` 给遮蔽 bash 加 `presentCall`（terminal 卡：command/description/cwd）+ `presentResult`（解析 renderExec 文本 → `{card:'terminal', output, exitCode}`）；read 加 `presentCall`（generic read + locations）+ `presentResult`（解析 renderLines 头 → `{card:'read', path, offset, lines, totalLines, content}`）。注意 defineTool 包装层会先校验 args，非法即软降级 undefined（测试要传合法 args）。2 个回归测试；100/100 绿。
+
+**真机验证**：重启 4500（本会话自起的实例）→ 浏览器实锤行变 `role=button data-expandable=true`，点击展开出终端卡（命令 + 服务器真实 stdout + 复制按钮）。
+
+**经验**：DSH 工具想获得官方同款富 UI，必须实现 presentCall/presentResult（类型在 `@deepseek-ai/dsh-tools` 的 presentation.d.ts：terminal/generic/diff 呼叫视图 + terminal/read/search/diff/web 结果视图）。
 
 ## 2026-08-31 凌晨：真机验证通过——免 preset 全链路闭环 ✅
 

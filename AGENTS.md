@@ -71,6 +71,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 - **双面插件**：host 半（exports "."）在 Node 进程；client 半（exports "./client"，web 端 ModuleLoader 直执行 bundle）提供设置页「SSH 连接」卡片——**必须 React.createElement，不能用 JSX**（web 端不转译）。`package.json` 的 `dsh.bundle.patch` 指向 `cordis.patch.yml` 挂载。
 - **工具注册**：`ctx.tools.register(defineTool({...}))`（`@deepseek-ai/dsh-tools`）；schema 自动进 system prompt；输出 schema 的类型会推导 execute 返回类型——注意 `exitCode: null` vs `undefined` 的对齐（见 tools.ts 的转换）。
 - **会话遮蔽工具**：订阅走 **`ctx.on('agent/created', cb)`** 事件总线（AgentRegistry 服务上没有 on）；遮蔽工具只能注册进 `payload.agent.ctx`（agent scope）——**绝不退回插件级 ctx**（会全局遮蔽本地会话的官方工具）；钩子整体吞异常，绝不阻塞会话创建。
+- **富 UI 视图**：官方 UI 对 `bash`/`read` 等名字走 keyed `tool.call.toolview` 行，仅当工具定义实现 **`presentCall`/`presentResult`**（terminal/read/search 等视图，类型见 dsh-tools presentation.d.ts）时行才可展开；不实现则整行 inert（2026-08-31 真机踩过）。
 - **可选服务用 `ctx.get()`**；注册皆 effect（`ctx.effect`）；`./invariant` 子路径必带。
 - **host 依赖 external**（tsdown `external`）：`@deepseek-ai/*` 运行时从 profile 解析，不打包。
 - **主题**：若未来加 UI，用 `--dsw-*` token（DSH 官方设计体系），明暗自适应用**成对 token**（fill + label-primary-foreground），不要自创配色/emoji。
