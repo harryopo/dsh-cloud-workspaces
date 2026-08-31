@@ -1,7 +1,7 @@
 {
   "name": "dsh-remote-ide",
-  "version": "0.2.0",
-  "description": "Server-development mode for DeepSeek Harness: remote agent tools (ssh_list / ssh_exec / ssh_ls / ssh_read / ssh_write) backed by a persistent ssh2 engine, so the DSH coding agent's working environment is a remote Linux server. Works with the `remote` agent preset.",
+  "version": "0.2.1",
+  "description": "Cloud workspaces for DeepSeek Harness: pick \"Cloud (SSH)\" in the workspace chooser and the agent's bash/read/write/edit/glob/grep tools transparently run on your Linux server over SSH. Includes ssh_* agent tools, an SSH host settings card, jump-host support and persistent connection pooling.",
   "type": "module",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -42,7 +42,10 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web"
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
     }
   },
   "dependencies": {

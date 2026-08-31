@@ -1,12 +1,12 @@
 # MEMORY.md — dsh-remote-ide 项目记忆索引
 
-> 更新：2026-08-28（进度同步）· 项目：DeepSeek Harness「服务器开发模式」（dsh-remote-ide v0.2.0）
+> 更新：2026-08-30（深夜三：全量代码审查，12 处修复 + 4 回归测试，98/98 绿）· 项目：DeepSeek Harness「服务器开发模式」（dsh-remote-ide v0.2.1）
 
 ## 索引
 
 | 文件 | 内容 |
 |------|------|
-| `project_dsh_remote_ide.md` | **项目进展终态：M0-M3 完成（ctx.ssh + fs-ssh + subprocess-ssh + isolate realm preset）→ M4 待验收** |
+| `project_dsh_remote_ide.md` | **项目进展终态：M0-M4 完成 + 免 preset 转型 + 2026-08-30 全量审查修复清单（P0×5/P1×7 + 已知遗留）** |
 | `feedback_ui.md` | 用户 UI 反馈与最终决策（UI 全删，纯 host 工具） |
 | `reference_ecosystem.md` | 生态参考、关键路径、modlens 识图方法 |
 | `errors_learnings.md` | 11 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律） |
@@ -49,7 +49,7 @@ dsh-remote-ide — DSH「服务器开发模式」三层架构
 | M2 | subprocess-ssh（ctx.subprocess exec/PTY，13 用例） | ✅ 完成（2026-08-16） |
 | M3 | preset 组合（isolate realm + persona + 接线） | ✅ 完成（2026-08-18） |
 | 追赶 | 依赖升级 0.1.1-rc.2 + 旧文件清理 + GitHub 元数据（`3b6e86c`） | ✅ 完成（2026-08-28） |
-| M4 | 真实 Linux 服务器端到端验收 | ⏳ 待验证 |
+| M4 | 真实 Linux 服务器端到端验收 | ✅ 完成（2026-08-30，24/24 + 锚定同步检查） |
 
 ### 当前末态
 
@@ -57,6 +57,15 @@ dsh-remote-ide — DSH「服务器开发模式」三层架构
 - **git 状态**：工作区干净，所有改动已提交
 - **环境**：4500 实例（latest dsh + modlens + dsh-remote-ide link）；preset 已装 `~/.dsh/.agent-presets/remote/`
 - **交接文档**：AGENTS.md / CLAUDE.md 已写（任何 AI 工具可接手）
+
+## 最新状态（2026-08-30 · M4 真机验收通过）
+
+- **M4 完成**：`scripts/e2e-real-server.mjs` 对真实 Linux（WSL2 Ubuntu-24.04 sshd，alias `wsl-e2e` = 127.0.0.1:2223 root）24/24 全过——testConfig/exec/SFTP/PTY/真实 ctx.fs/占位工作区路由/真实 ctx.subprocess（占位 cwd → 远程 pwd）。dsh web 4500 加载验证：`/plugins/dsh-remote-ide/client.js` 200
+- **真 E2E 修了 3 个真机 bug**（详见 project 文件 2026-08-30 节）：① engine.ensureConnection 并发竞态（client 未就绪即返回）；② fs-ssh 覆盖写必须走 posix-rename@openssh.com（SFTP RENAME 不覆盖，二次保存必挂）；③ subprocess run() 占位 cwd 未重锚定（cd 本地路径 → wrapper 发布前退出）
+- **bug ④（用户真机触发）**：testConnection **成功**结果带 `error: undefined` → 网关 assertJsonValue 拒绝（"business result failed boundary validation"）；失败路径 8/28 测过、成功路径从未走过网关。修复：`jsonSafe` 剥离 undefined，**所有 typert 端点 return 必须包 jsonSafe**（写新端点的默认动作）；80/80 绿；VM 192.168.45.200 认证直连验证 ok（320ms）
+- **测试**：80/80（engine-connection +3、fs-ssh +2、typert +5）；⚠️ subprocess 锚定回归测试被 Mimosa 钩子拦截（env 派生路径 → spawn 的误报），由 E2E 覆盖
+- **搜官方代码的坑**：dsh 全局包 lib/ 只是引导 stub，真正的包在内层 `node_modules/@deepseek-ai/`（本次定位网关代码绕了远路）
+- **下一步**：npm publish（需用户 adduser）→ Discussions 发帖；WSL 重启后需重跑 `/usr/sbin/sshd`；4500 用全局 dsh 直起（`dsh web --port 4500`，start 脚本 npx 下载过慢）
 
 ## 最新状态（2026-08-28 晚·新机器环境重建）
 
