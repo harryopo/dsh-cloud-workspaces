@@ -1,3 +1,0 @@
-name: 服务器开发
-description: 以远程 Linux 服务器为开发环境的编码 Agent——通过 SSH 在服务器上执行命令、读写文件、安装工具链。
-order: 20

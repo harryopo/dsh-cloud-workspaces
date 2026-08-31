@@ -1,13 +1,12 @@
 /**
  * Remote-development agent tools: the model's hands on the connected Linux
- * server. Registered by the host half; the server-development agent preset
- * (agent-presets/remote) mounts this package so the agent's working
- * environment IS the remote server — commands run over SSH, files read and
- * written over SFTP.
+ * server (ssh_list / ssh_exec / ssh_ls / ssh_read / ssh_write / ssh_workspace).
+ * Registered globally by the host half; cloud-workspace sessions additionally
+ * get same-name shadow tools (session-tools) routed by the session cwd.
  *
- * The tools consume the shared SshRuntime (ctx.ssh, host plane) rather than a
- * private engine: fs-ssh / subprocess-ssh in the preset's isolate realm inject
- * the same runtime, so one connection serves tools and capability adapters.
+ * The tools consume the shared SshRuntime (ctx.ssh, host plane): one engine
+ * serves the tools and the legacy preset-scoped adapters (fs-ssh /
+ * subprocess-ssh), so a connection established by one is visible to the others.
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -15,6 +14,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { ExecResult, RemoteDirEntry, SshHostSummary } from './protocol'
 import type { SshRuntime } from './ssh-service'
 import { createPlaceholderDir, listPlaceholders } from './workspace'
+import { jsonSafe } from './jsonsafe'
 
 /** One text content block (the only render shape these tools emit). */
 function text(value: string): ContentBlock[] {
@@ -108,12 +108,39 @@ export function sshListTool(runtime: SshRuntime) {
               },
             },
           },
+          total: { type: 'integer', required: true, description: 'All configured hosts count (before query filter).' },
         },
       },
-      render: (_args, value) => text(renderHosts(value.hosts)),
+      render: (args, value) => {
+        if (value.hosts.length === 0) {
+          const query = (args as { query?: string }).query?.trim() ?? ''
+          if (value.total > 0 && query !== '') {
+            return text(`no hosts match query "${query}" — call ssh_list without query to see all ${value.total} host(s)`)
+          }
+          return text('no hosts configured — ask the user to add one in the DSH settings panel (设置 → SSH 连接), or place an entry in ~/.ssh/config on the DSH host and call ssh_list again to import')
+        }
+        return text(renderHosts(value.hosts))
+      },
     },
     async execute(args: { query?: string }) {
-      return { hosts: runtime.engine.list(args.query) }
+      // createdAt/updatedAt 对模型无价值且 output schema 未声明
+      // （additionalProperties: false 会拒绝）——显式剥离。
+      const hosts = runtime.engine.list(args.query).map((host) => ({
+        alias: host.alias,
+        host: host.host,
+        port: host.port,
+        user: host.user,
+        auth: host.auth,
+        keyReady: host.keyReady,
+        proxyJump: host.proxyJump,
+        description: host.description,
+        environment: host.environment,
+        tags: host.tags,
+      }))
+      return {
+        hosts: jsonSafe(hosts),
+        total: runtime.engine.list().length,
+      }
     },
   })
 }
@@ -152,7 +179,9 @@ export function sshExecTool(runtime: SshRuntime) {
       const result = await runtime.engine.exec(alias, args.command, { timeoutMs: args.timeoutMs })
       // The output schema models exitCode as optional (undefined when the
       // channel died without one); the engine reports null for that case.
-      return { ...result, exitCode: result.exitCode ?? undefined }
+      // jsonSafe strips the undefined own-key — lossless-JSON validation
+      // rejects explicit undefined values.
+      return jsonSafe({ ...result, exitCode: result.exitCode ?? undefined })
     },
   })
 }
@@ -193,7 +222,7 @@ export function sshLsTool(runtime: SshRuntime) {
     },
     async execute(args: { path: string; alias?: string }) {
       const alias = resolveAlias(runtime, args.alias)
-      return { path: args.path, entries: await runtime.engine.ls(alias, args.path) }
+      return jsonSafe({ path: args.path, entries: await runtime.engine.ls(alias, args.path) })
     },
   })
 }
@@ -227,7 +256,7 @@ export function sshReadTool(runtime: SshRuntime) {
     async execute(args: { path: string; alias?: string }) {
       const alias = resolveAlias(runtime, args.alias)
       const file = await runtime.engine.readFile(alias, args.path)
-      return { path: args.path, ...file }
+      return jsonSafe({ path: args.path, ...file })
     },
   })
 }
@@ -236,7 +265,7 @@ export function sshReadTool(runtime: SshRuntime) {
 export function sshWriteTool(runtime: SshRuntime) {
   return defineTool({
     name: 'ssh_write',
-    description: 'Write text content to a file on the remote server over SFTP (overwrites; parent directories are NOT auto-created). ' +
+    description: 'Write text content to a file on the remote server over SFTP (overwrites; missing parent directories are created automatically). ' +
       'Use for editing server-side code and configs. Triggers: edit a file on the server, save remote file, deploy a config.',
     parameters: {
       path: { type: 'string', description: 'Remote file path.', required: true },
@@ -258,7 +287,7 @@ export function sshWriteTool(runtime: SshRuntime) {
     async execute(args: { path: string; content: string; alias?: string }) {
       const alias = resolveAlias(runtime, args.alias)
       const stat = await runtime.engine.writeFile(alias, args.path, args.content)
-      return { path: args.path, ...stat }
+      return jsonSafe({ path: args.path, ...stat })
     },
   })
 }
@@ -314,10 +343,10 @@ export function sshWorkspaceTool(runtime: SshRuntime) {
     async execute(args: { action: 'create' | 'list'; host?: string; path?: string }) {
       if (args.action === 'list') {
         const workspaces = await listPlaceholders()
-        return {
+        return jsonSafe({
           action: 'list' as const,
           workspaces: workspaces.map(w => ({ host: w.hostId, remotePath: w.remotePath, localPath: w.localPath })),
-        }
+        })
       }
       const alias = resolveAlias(runtime, args.host)
       // Host must exist; connect eagerly so a typo fails here instead of at
@@ -328,13 +357,13 @@ export function sshWorkspaceTool(runtime: SshRuntime) {
         throw new Error('path must be an absolute remote directory path (e.g. /home/user/project)')
       }
       const created = await createPlaceholderDir({ hostId: alias, remotePath })
-      return {
+      return jsonSafe({
         action: 'create' as const,
         localPath: created.localPath,
         host: created.hostId,
         remotePath: created.remotePath,
         hint: 'In the DSH UI use "select workspace" on this local path (or start a new session with it) — the session will run on the remote directory.',
-      }
+      })
     },
   })
 }

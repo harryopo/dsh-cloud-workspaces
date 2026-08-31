@@ -11,14 +11,15 @@
  *
  * 与 src/typert.ts 的端点参数名（wire）必须一一对应：
  *   listHosts() / saveHost(id, patch) / deleteHost(id) /
- *   testConnection(cfg) / listRemoteDir(hostId, path) /
+ *   testConnection(hostId, cfg) / listRemoteDir(hostId, path) /
+ *   mkdirRemote(hostId, path) / removeRemote(hostId, path) /
  *   createPlaceholder(hostId, remotePath) / listPlaceholders()
  */
 window.__ModuleLoader__.load({
   id: 'dsh-remote-ide',
   factory(require) {
     const React = require('react')
-    const { useState, useEffect, useCallback } = React
+    const { useState, useEffect, useCallback, useRef } = React
     const h = React.createElement
 
     // ------------------------------------------------------------ typert
@@ -65,6 +66,29 @@ window.__ModuleLoader__.load({
     function resError(res, fallback) {
       const e = res && typeof res === 'object' ? res.error : null
       return (e && typeof e === 'object' && typeof e.message === 'string' && e.message) || fallback
+    }
+    /** typert 调用超时保护：宿主侧挂起时给出可见错误，而不是无限转圈（卡退观感）。 */
+    function withTimeout(promise, ms, label) {
+      const guarded = Promise.resolve(promise)
+      guarded.catch(() => {}) // 落败方的 rejection 不作为 unhandled 抛出
+      let timer
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label + ' 超时（请检查服务器是否可达）')), ms)
+      })
+      return Promise.race([guarded, timeout]).finally(() => clearTimeout(timer))
+    }
+
+    /**
+     * 由显示名/主机派生唯一 id：同名主机此前会撞上同一 id 互相覆盖
+     * （用户数据静默丢失）。已存在时追加数字后缀。
+     */
+    function slugId(base) {
+      const slug = String(base || 'host').replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[-.]+|[-.]+$/g, '') || 'host'
+      const existing = store.getSnapshot().hosts
+      if (!existing[slug]) return slug
+      let n = 2
+      while (existing[slug + '-' + n]) n += 1
+      return slug + '-' + n
     }
 
     // --------------------------------------------------------------- store
@@ -185,6 +209,17 @@ window.__ModuleLoader__.load({
       .dri-code { font-family: var(--dsw-font-family, ui-monospace, monospace); }
       .dri-hint { font-size: 12px; color: var(--dsw-alias-label-tertiary, #86868b); }
       .dri-subtitle { font-size: 14px; font-weight: 600; margin: 28px 0 4px; letter-spacing: -0.005em; }
+      .dri-pickerOverlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.35); backdrop-filter: blur(2px); }
+      .dri-picker { width: min(520px, calc(100vw - 48px)); max-height: min(560px, calc(100vh - 64px)); overflow: auto;
+        border-radius: 24px; padding: 20px 22px 16px; color: var(--dsw-alias-label-primary, #1d1d1f);
+        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 92%, transparent);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 24px 60px rgba(0,0,0,0.22); }
+      .dri-pickerHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+      .dri-tabs { display: flex; gap: 8px; }
+      .dri-pickerBody { display: flex; flex-direction: column; gap: 4px; }
+      .dri-pickLocal { font-size: 14px; padding: 12px 18px; border-radius: 14px; align-self: flex-start; }
+      .dri-pickerFoot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.05)); }
     `
 
     // ---------------------------------------------------------- component
@@ -195,11 +230,15 @@ window.__ModuleLoader__.load({
       const [result, setResult] = useState(null) // { ok, message } | null
       const run = useCallback(async () => {
         setTesting(true); setResult(null)
-        const res = await onTest()
-        const value = unwrap(res, null)
-        setResult(value && value.ok
-          ? { ok: true, message: '连接成功（' + value.latencyMs + 'ms）' }
-          : { ok: false, message: (value && value.error) || resError(res, '连接失败') })
+        try {
+          const res = await onTest()
+          const value = unwrap(res, null)
+          setResult(value && value.ok
+            ? { ok: true, message: '连接成功（' + value.latencyMs + 'ms）' }
+            : { ok: false, message: (value && value.error) || resError(res, '连接失败') })
+        } catch (error) {
+          setResult({ ok: false, message: String((error && error.message) || error) })
+        }
         setTesting(false)
       }, [onTest])
       const authLabel = host.authType === 'password' ? (hasSecret ? '密码已保存' : '密码') : '密钥'
@@ -308,7 +347,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'dri-section' },
         h('h2', null, 'SSH 连接'),
         h('p', { className: 'dri-intro' },
-          '配置远程开发主机。保存后可在「服务器开发」模式中通过 ssh_workspace 把服务器目录绑定为工作区（或在本页「远端工作区」直接创建）；会话工作区落在占位目录时，文件 / 搜索 / 编辑 / 终端全部在该主机上执行。'),
+          '配置远程开发主机。之后在「添加工作区」里选「云端（SSH）」即可把服务器目录绑定为工作区——该会话的文件 / 搜索 / 编辑 / 终端全部在该主机上执行，和本地一样（无需选择任何特殊模式）。'),
         h('div', { className: 'dri-head' },
           state.error ? h('p', { className: 'dri-error', role: 'alert' }, state.error) : null,
           h('span', null),
@@ -331,8 +370,13 @@ window.__ModuleLoader__.load({
           } : null,
           onCancel: () => setEditing(null),
           onSave: async (patch) => {
-            const id = editing.mode === 'edit' ? editing.host.id : (patch.name || patch.host || 'host').replace(/[^A-Za-z0-9._-]/g, '-')
-            const res = await saveHost(id, patch)
+            const id = editing.mode === 'edit' ? editing.host.id : slugId(patch.name || patch.host)
+            let res
+            try {
+              res = await saveHost(id, patch)
+            } catch (error) {
+              res = { ok: false, error: { message: String((error && error.message) || error) } }
+            }
             if (!res || res.ok !== true) store.set({ error: resError(res, '保存失败') })
             else { setEditing(null); await load() }
           },
@@ -344,7 +388,11 @@ window.__ModuleLoader__.load({
             h('button', { className: 'dri-btn', onClick: () => setPendingDelete(null) }, '取消'),
             ' ',
             h('button', { className: 'dri-btn dri-btn-danger', onClick: async () => {
-              await deleteHost(pendingDelete); setPendingDelete(null); await load()
+              try {
+                await deleteHost(pendingDelete); setPendingDelete(null); await load()
+              } catch (error) {
+                store.set({ error: String((error && error.message) || error) })
+              }
             } }, '确认删除'))) : null,
 
         h('h2', { className: 'dri-subtitle' }, '远端工作区'),
@@ -364,34 +412,57 @@ window.__ModuleLoader__.load({
       const [browser, setBrowser] = useState(null) // { hostId, path, entries, loading }
       const [created, setCreated] = useState(null)
       const [newDir, setNewDir] = useState('')
+      const seq = useRef(0) // 浏览请求序号：乱序返回不覆盖最新目录
+
+      const fail = (res, fallback) => { store.set({ error: resError(res, fallback) }) }
 
       const browseTo = async (hostId, nextPath) => {
+        const my = ++seq.current
         setBrowser({ hostId, path: nextPath, entries: [], loading: true })
-        const res = await listRemoteDir(hostId, nextPath)
+        let res
+        try {
+          res = await withTimeout(listRemoteDir(hostId, nextPath), 20_000, '读取远端目录')
+        } catch (error) {
+          res = { ok: false, error: { message: String((error && error.message) || error) } }
+        }
+        if (my !== seq.current) return
         setBrowser({ hostId, path: nextPath, entries: unwrap(res, []) || [], loading: false })
+        if (!res || res.ok !== true) fail(res, '读取远端目录失败')
       }
 
       const createDir = async () => {
         const name = newDir.trim()
         if (!name || !browser) return
         const next = (browser.path === '/' ? '' : browser.path) + '/' + name
-        const res = await mkdirRemote(browser.hostId, next)
-        if (!res || res.ok !== true) store.set({ error: resError(res, '新建文件夹失败') })
-        else { setNewDir(''); await browseTo(browser.hostId, browser.path) }
+        try {
+          const res = await withTimeout(mkdirRemote(browser.hostId, next), 20_000, '新建文件夹')
+          if (!res || res.ok !== true) fail(res, '新建文件夹失败')
+          else { setNewDir(''); await browseTo(browser.hostId, browser.path) }
+        } catch (error) {
+          store.set({ error: String((error && error.message) || error) })
+        }
       }
 
       const doRemove = async (hostId, fullPath) => {
         if (!window.confirm('删除远端 ' + fullPath + '？\n（仅删除空目录或文件，非空目录请先清空）')) return
-        const res = await removeRemote(hostId, fullPath)
-        if (!res || res.ok !== true) store.set({ error: resError(res, '删除失败') })
-        else if (browser) await browseTo(hostId, browser.path)
+        try {
+          const res = await withTimeout(removeRemote(hostId, fullPath), 20_000, '删除')
+          if (!res || res.ok !== true) fail(res, '删除失败')
+          else if (browser) await browseTo(hostId, browser.path)
+        } catch (error) {
+          store.set({ error: String((error && error.message) || error) })
+        }
       }
 
       const bindWorkspace = async () => {
-        const res = await createPlaceholder(browser.hostId, browser.path)
-        const value = unwrap(res, null)
-        if (value) { setCreated({ localPath: value.localPath }); await reloadPlaceholders() }
-        else store.set({ error: resError(res, '创建工作区失败') })
+        try {
+          const res = await withTimeout(createPlaceholder(browser.hostId, browser.path), 30_000, '创建工作区')
+          const value = unwrap(res, null)
+          if (value) { setCreated({ localPath: value.localPath }); await reloadPlaceholders() }
+          else fail(res, '创建工作区失败')
+        } catch (error) {
+          store.set({ error: String((error && error.message) || error) })
+        }
       }
 
       if (hosts.length === 0) return null
@@ -464,7 +535,201 @@ window.__ModuleLoader__.load({
 
     // -------------------------------------------------------------- apply
 
+    /** 订阅模块 store 的极简 hook（避免依赖 useSyncExternalStore 的版本差异）。 */
+    function useStore() {
+      const [, force] = useState(0)
+      useEffect(() => store.subscribe(() => force((n) => n + 1)), [])
+      return store.getSnapshot()
+    }
+
+    /**
+     * 工作区选择器：填充官方 ui-workspace 的 directory-flow 洞（本机 / 云端
+     * 双 tab）。官方拥有「添加工作区」触发与收养（onPicked(path) 交给
+     * createWorkspace），本组件只负责「选目录」这一段交互：
+     *   本机 tab → 宿主原生系统目录对话框（ctx.workspaces.pickDirectory）
+     *   云端 tab → SSH 主机 + 远端目录浏览 → 创建占位工作区 → onPicked(占位路径)
+     * pickerDeps 由 apply() 注入（closure 捕获 typert 动作与 workspaces 面）。
+     */
+    function WorkspacePicker(props) {
+      const { open, busy, onPicked, onCancel, onError } = props
+      const state = useStore()
+      const [tab, setTab] = useState('cloud')
+      const [localBusy, setLocalBusy] = useState(false)
+      const [browser, setBrowser] = useState(null)
+      const [newDir, setNewDir] = useState('')
+      const [creating, setCreating] = useState(false)
+      const [addingHost, setAddingHost] = useState(false)
+      const seq = useRef(0) // 浏览请求序号：乱序返回不覆盖最新目录
+
+      useEffect(() => {
+        if (open && pickerDeps) void pickerDeps.load()
+      }, [open])
+
+      useEffect(() => {
+        if (!open) return
+        const onKey = (e) => { if (e.key === 'Escape' && !busy && !creating) onCancel && onCancel() }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [open, busy, creating])
+
+      if (!open) return null
+      const hostList = Object.values(state.hosts || {})
+      const deps = pickerDeps || {}
+
+      const pickLocal = async () => {
+        if (!deps.pickDirectory) { onError && onError('本机目录选择服务不可用'); return }
+        setLocalBusy(true)
+        try {
+          const path = await deps.pickDirectory()
+          if (path) onPicked(path)
+        } catch (error) {
+          onError && onError(String((error && error.message) || error))
+        }
+        setLocalBusy(false)
+      }
+
+      const browseTo = async (hostId, nextPath) => {
+        const my = ++seq.current
+        setBrowser({ hostId, path: nextPath, entries: [], loading: true })
+        try {
+          const res = await withTimeout(deps.listRemoteDir(hostId, nextPath), 20_000, '读取远端目录')
+          if (my !== seq.current) return
+          setBrowser({ hostId, path: nextPath, entries: unwrap(res, []) || [], loading: false })
+        } catch (error) {
+          if (my !== seq.current) return
+          setBrowser({ hostId, path: nextPath, entries: [], loading: false })
+          onError && onError(String((error && error.message) || error))
+        }
+      }
+
+      const createDir = async () => {
+        const name = newDir.trim()
+        if (!name || !browser) return
+        const next = (browser.path === '/' ? '' : browser.path) + '/' + name
+        try {
+          const res = await withTimeout(deps.mkdirRemote(browser.hostId, next), 20_000, '新建文件夹')
+          if (!res || res.ok !== true) onError && onError(resError(res, '新建文件夹失败'))
+          else { setNewDir(''); await browseTo(browser.hostId, browser.path) }
+        } catch (error) {
+          onError && onError(String((error && error.message) || error))
+        }
+      }
+
+      const useRemoteDir = async () => {
+        if (!browser || creating) return
+        setCreating(true)
+        try {
+          const res = await withTimeout(deps.createPlaceholder(browser.hostId, browser.path), 30_000, '创建工作区')
+          const value = unwrap(res, null)
+          if (value) onPicked(value.localPath)
+          else onError && onError(resError(res, '创建云端工作区失败'))
+        } catch (error) {
+          onError && onError(String((error && error.message) || error))
+        }
+        setCreating(false)
+      }
+
+      const dirRows = []
+      if (browser) {
+        if (browser.path !== '/') {
+          dirRows.push(h('div', { key: '..', className: 'dri-dirRow', onClick: () => {
+            const parent = browser.path.split('/').slice(0, -1).join('/') || '/'
+            void browseTo(browser.hostId, parent)
+          } }, h('span', null, '..')))
+        }
+        for (const e of browser.entries || []) {
+          if (e.type === 'dir') {
+            dirRows.push(h('div', { key: e.name, className: 'dri-dirRow', onClick: () => {
+              const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
+              void browseTo(browser.hostId, next)
+            } },
+              h('span', null, h('span', { className: 'dri-dirIcon' }, '›'), e.name)))
+          }
+        }
+        if (browser.loading) dirRows.push(h('div', { key: 'loading', className: 'dri-dirRow', style: { cursor: 'default' } }, '连接中…'))
+      }
+
+      const tabBtn = (id, label) => h('button', {
+        className: 'dri-btn' + (tab === id ? ' dri-btn-primary' : ''),
+        onClick: () => setTab(id),
+      }, label)
+
+      const hostSelect = h('div', { className: 'dri-field' },
+        h('label', null, 'SSH 主机'),
+        h('select', { value: browser ? browser.hostId : '', onChange: (e) => {
+          const hostId = e.target.value
+          if (hostId) void browseTo(hostId, '/')
+          else setBrowser(null)
+        } },
+          h('option', { value: '' }, '选择主机…'),
+          hostList.map((host) => h('option', { key: host.id, value: host.id }, (host.name || host.id) + '（' + host.user + '@' + host.host + '）'))),
+        hostList.length === 0 ? h('span', { className: 'dri-hint' }, '还没有主机。') : null,
+        h('button', { className: 'dri-btn', style: { alignSelf: 'flex-start', marginTop: 6 }, onClick: () => setAddingHost(!addingHost) },
+          addingHost ? '收起' : '+ 添加主机'),
+      )
+
+      return h('div', { className: 'dri-pickerOverlay', role: 'dialog', 'aria-label': '选择工作区' },
+        h('div', { className: 'dri-picker' },
+          h('div', { className: 'dri-pickerHead' },
+            h('div', { className: 'dri-tabs' }, tabBtn('local', '本机'), tabBtn('cloud', '云端（SSH）')),
+            h('button', { className: 'dri-close', onClick: onCancel, 'aria-label': '取消' }, '×')),
+
+          tab === 'local'
+            ? h('div', { className: 'dri-pickerBody' },
+                h('p', { className: 'dri-intro' }, '选择 DSH 所在电脑上的一个文件夹作为工作区。'),
+                h('button', { className: 'dri-btn dri-btn-primary dri-pickLocal', disabled: localBusy || busy, onClick: pickLocal },
+                  localBusy ? '等待系统对话框…' : '选择文件夹…'),
+                h('p', { className: 'dri-hint', style: { marginTop: 10 } }, '将打开系统文件夹选择对话框。'))
+            : h('div', { className: 'dri-pickerBody' },
+                h('p', { className: 'dri-intro' }, '连接一台 SSH 服务器，把服务器上的目录作为工作区——之后的会话里，文件 / 搜索 / 编辑 / 终端都直接在该服务器上执行，和本地一样。'),
+                addingHost
+                  ? h(HostForm, {
+                      initial: null,
+                      onCancel: () => setAddingHost(false),
+                      onSave: async (patch) => {
+                        const id = slugId(patch.name || patch.host)
+                        const res = await deps.saveHost(id, patch)
+                        if (!res || res.ok !== true) { onError && onError(resError(res, '保存失败')); return }
+                        setAddingHost(false)
+                        await deps.load()
+                      },
+                    })
+                  : hostSelect,
+                browser ? h('div', null,
+                  h('div', { className: 'dri-dirPath' }, browser.path),
+                  h('div', { className: 'dri-dirList', style: { maxHeight: 200 } }, ...dirRows),
+                  h('div', { className: 'dri-dirActions' },
+                    h('input', {
+                      className: 'dri-newDir', value: newDir, placeholder: '新建文件夹名称…',
+                      onChange: (e) => setNewDir(e.target.value),
+                      onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); void createDir() } },
+                    }),
+                    h('button', { className: 'dri-btn', disabled: !newDir.trim(), onClick: createDir }, '新建文件夹')),
+                  h('div', { className: 'dri-formActions', style: { marginTop: 12 } },
+                    h('button', { className: 'dri-btn dri-btn-primary', disabled: busy || creating, onClick: useRemoteDir },
+                      busy || creating ? '正在创建…' : '使用「' + browser.path + '」作为工作区')))
+                  : null),
+
+          h('div', { className: 'dri-pickerFoot' },
+            h('span', { className: 'dri-hint' }, '选择后会创建工作区并开始使用。')),
+        ),
+      )
+    }
+
+    /** apply() 注入给 WorkspacePicker 的动作集合（模块级，供闭包读取）。 */
+    let pickerDeps = null
+
     function apply(ctx) {
+      try {
+        applyInner(ctx)
+      } catch (error) {
+        // apply 抛错会让整个 client 模块加载失败（选择器/设置卡全挂）——
+        // 必须在 console 留下可辨识的现场。
+        console.error('[dsh-remote-ide] client apply failed:', error)
+      }
+    }
+
+    function applyInner(ctx) {
       const styleEl = document.createElement('style')
       styleEl.dataset.pluginCss = 'dsh-remote-ide/client'
       styleEl.textContent = CSS
@@ -474,18 +739,28 @@ window.__ModuleLoader__.load({
       let mounted = false
       // namespace 服务 remote.ssh-remote：用 ctx.get 读取（无 inject 要求——
       // 直接 ctx.remote['ssh-remote'] 属性访问会被 cordis 的 inject 检查拒绝）。
-      const remote = () => ctx.get('remote.ssh-remote')
+      // 缺失（host 半未加载/未就绪）时给出可见错误，绝不 undefined.method 崩溃。
+      const svc = () => {
+        const s = ctx.get('remote.ssh-remote')
+        if (!s) throw new Error('SSH 远程服务未就绪（插件 host 半未加载），请刷新页面重试')
+        return s
+      }
 
       const refresh = async () => {
         if (!mounted) return
-        const [hostsRes, phRes] = await Promise.all([
-          remote().listHosts(),
-          remote().listPlaceholders(),
-        ])
-        const value = unwrap(hostsRes, null)
-        if (value) store.set({ status: 'ready', hosts: value.hosts || {}, secrets: value.secrets || {}, error: null })
-        else store.set({ status: 'error', error: resError(hostsRes, '无法读取主机配置') })
-        store.set({ placeholders: unwrap(phRes, []) || [] })
+        try {
+          const s = svc()
+          const [hostsRes, phRes] = await Promise.all([
+            s.listHosts(),
+            s.listPlaceholders(),
+          ])
+          const value = unwrap(hostsRes, null)
+          if (value) store.set({ status: 'ready', hosts: value.hosts || {}, secrets: value.secrets || {}, error: null })
+          else store.set({ status: 'error', error: resError(hostsRes, '无法读取主机配置') })
+          store.set({ placeholders: unwrap(phRes, []) || [] })
+        } catch (error) {
+          store.set({ status: 'error', error: String((error && error.message) || error) })
+        }
       }
 
       ctx.effect(async () => {
@@ -498,18 +773,20 @@ window.__ModuleLoader__.load({
       const load = () => refresh()
       const reloadPlaceholders = async () => {
         if (!mounted) return
-        store.set({ placeholders: unwrap(await remote().listPlaceholders(), []) || [] })
+        try {
+          store.set({ placeholders: unwrap(await svc().listPlaceholders(), []) || [] })
+        } catch { /* 主机列表刷新时的附带数据，失败不阻断主流程 */ }
       }
-      const saveHost = (id, patch) => remote().saveHost(id, patch)
-      const deleteHost = (id) => remote().deleteHost(id)
-      const testConnection = (host) => remote().testConnection(host.id, {
+      const saveHost = (id, patch) => svc().saveHost(id, patch)
+      const deleteHost = (id) => svc().deleteHost(id)
+      const testConnection = (host) => svc().testConnection(host.id, {
         host: host.host, port: host.port, user: host.user,
         authType: host.authType || 'key', privateKeyPath: host.privateKeyPath,
       })
-      const listRemoteDir = (hostId, path) => remote().listRemoteDir(hostId, path)
-      const mkdirRemote = (hostId, path) => remote().mkdirRemote(hostId, path)
-      const removeRemote = (hostId, path) => remote().removeRemote(hostId, path)
-      const createPlaceholder = (hostId, remotePath) => remote().createPlaceholder(hostId, remotePath)
+      const listRemoteDir = (hostId, path) => svc().listRemoteDir(hostId, path)
+      const mkdirRemote = (hostId, path) => svc().mkdirRemote(hostId, path)
+      const removeRemote = (hostId, path) => svc().removeRemote(hostId, path)
+      const createPlaceholder = (hostId, remotePath) => svc().createPlaceholder(hostId, remotePath)
 
       ctx.effect(() => {
         const disposers = [ctx.remote.$on('settings/document-updated', () => { void refresh() })]
@@ -530,8 +807,46 @@ window.__ModuleLoader__.load({
         locale: 'settings.ssh',
         inject: injected,
       }, SshHostsSection))
+
+      // 工作区选择器：填充官方 ui-workspace 的两个 directory-flow 洞
+      // （conversation hero + sidebar 的「添加工作区」入口只在洞被占用时
+      // 出现；onPicked(路径) 交给官方 createWorkspace 收养）。
+      const workspaces = () => {
+        try { return ctx.get('workspaces') } catch { return undefined }
+      }
+      pickerDeps = {
+        load,
+        saveHost,
+        listRemoteDir,
+        mkdirRemote,
+        createPlaceholder,
+        pickDirectory: async () => {
+          const surface = workspaces()
+          if (!surface || typeof surface.pickDirectory !== 'function') return null
+          return surface.pickDirectory()
+        },
+      }
+      ctx.slots.inject('conversation.hero.workspace.directoryFlow', () =>
+        ctx.slots.inject('sidebar.workspaces.directoryFlow', function* () {
+          yield ctx.slots.register({ name: 'conversation.hero.workspace.directoryFlow', id: 'dsh-remote-ide', priority: -100 }, WorkspacePicker)
+          yield ctx.slots.register({ name: 'sidebar.workspaces.directoryFlow', id: 'dsh-remote-ide', priority: -100 }, WorkspacePicker)
+        }),
+      )
+
+      // 本插件渲染错误的可观测性：带上前缀，浏览器 console 一眼可辨。
+      ctx.effect(() => {
+        const onError = (event) => {
+          const message = event && event.error ? String(event.error && event.error.stack || event.error) : String(event && event.message)
+          console.error('[dsh-remote-ide] window error:', message)
+        }
+        window.addEventListener('error', onError)
+        return () => window.removeEventListener('error', onError)
+      }, 'dsh-remote-ide: window error log')
     }
 
+    // 'workspaces' 面不经 exports.inject 声明（loader 解析不了会连累整个
+    // client 加载）；运行时面走 package.json dsh.client.inject 声明的
+    // dsh-client-runtime，apply 内 ctx.get('workspaces') 防御式获取。
     return { apply, inject: ['slots', 'connection', 'remote'] }
   },
 })

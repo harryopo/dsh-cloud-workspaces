@@ -1,0 +1,11 @@
+# ⚠️ 已弃用（legacy）——不再部署到 ~/.dsh/.agent-presets/。
+#
+# 远程开发已并入「选择工作区 → 云端（SSH）」流程：云端工作区会话由插件在
+# agent/created 钩子里自动接管（会话级遮蔽工具 + 动态 system prompt 段），
+# 模式选择器不再出现独立的「服务器开发」preset。
+#
+# 保留本目录仅作为 fs/subprocess 真 seam 替换路线的参考实现（官方工具零改造
+# 的深度透明方案）；如需临时启用，手动复制回 ~/.dsh/.agent-presets/remote/。
+name: 服务器开发
+description: 以远程 Linux 服务器为开发环境的编码 Agent——通过 SSH 在服务器上执行命令、读写文件、安装工具链。
+order: 20

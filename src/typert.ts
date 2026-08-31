@@ -22,6 +22,7 @@ import type { SettingsProvider, SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { SshRuntime } from './ssh-service'
 import { HOSTS_NAMESPACE, hostsOf, redactHosts, secretFlags, toHostPayload, type SshHostConfig } from './host-settings'
 import { createPlaceholderDir, listPlaceholders } from './workspace'
+import { jsonSafe } from './jsonsafe'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 
 /** ctx.workspaceRegistry 的形状（可选服务，经 ctx.get 读取，无 inject 要求）。 */
@@ -58,6 +59,14 @@ function hostInvocation(method: string, parameters: string[]): HostInvocation {
     result: SRC_JSON,
   }
 }
+
+/**
+ * 网关边界校验（assertJsonValue）要求业务结果纯 JSON-safe：显式赋值的
+ * `error: undefined` 也是 own property，网关直接拒绝（"business result
+ * failed boundary validation"）。实现移至 ./jsonsafe（工具输出同用），
+ * 此处 re-export 保持既有导入路径。
+ */
+export { jsonSafe } from './jsonsafe'
 
 /** host 半贡献（ctx.typert.register 消费；face:'host' + invocations）。 */
 export interface HostTypertContribution {
@@ -148,8 +157,7 @@ export class SshRemoteService extends Service {
 
   /** 列出全部主机（脱敏）+ 口令已设标记。 */
   listHosts(): { hosts: Record<string, Omit<SshHostConfig, 'password'>>; secrets: Record<string, boolean> } {
-    const hosts = this.hosts()
-    return { hosts: redactHosts(hosts), secrets: secretFlags(hosts) }
+    return jsonSafe({ hosts: redactHosts(this.hosts()), secrets: secretFlags(this.hosts()) })
   }
 
   /** 创建或更新主机：写 settings + 桥接 store。口令留空 = 保持已存。 */
@@ -226,13 +234,14 @@ export class SshRemoteService extends Service {
         : { kind: 'key', keyPath: privateKeyPath },
       proxyJump: cfg.proxyJump,
     })
-    return { ok: result.ok, latencyMs: result.latencyMs, error: result.error }
+    // 成功时 error === undefined：必须剥离，否则网关边界校验拒绝整个结果。
+    return jsonSafe({ ok: result.ok, latencyMs: result.latencyMs, error: result.error })
   }
 
   /** 列远端目录（工作区创建浏览；需主机已在 store，未保存先桥接）。 */
   async listRemoteDir(hostId: string, path: string): Promise<unknown> {
     this.syncStore()
-    return this.runtime.engine.ls(hostId, path)
+    return jsonSafe(await this.runtime.engine.ls(hostId, path))
   }
 
   /** 在远端创建目录（递归创建父级）。 */
@@ -253,17 +262,27 @@ export class SshRemoteService extends Service {
   async createPlaceholder(hostId: string, remotePath: string): Promise<{ localPath: string; hostId: string; remotePath: string }> {
     this.syncStore()
     const created = await createPlaceholderDir({ hostId, remotePath })
-    // 注册进 DSH 工作区注册表 → 「选择工作区」对话框直接出现该占位目录。
+    // 注册进 registry 只是「出现在选择列表」的锦上添花，绝不阻塞端点：
+    // registry 启动依赖 sessionPersistence 完成引导，在部分作用域可能永远
+    // 未就绪——await 它会让端点无限挂起（真机「卡退」的根因）。选择器流程
+    // 由官方收养（onPicked → createWorkspace），这里的注册是设置页流程的补充。
+    void this.registerWorkspace(created.localPath, `${hostId} / ${remotePath.split('/').filter(Boolean).pop() || 'root'}`)
+    return created
+  }
+
+  /** 后台注册占位目录进 DSH 工作区注册表（5s 超时；失败静默——目录本身已可用）。 */
+  private async registerWorkspace(localPath: string, title: string): Promise<void> {
     try {
-      const registry = this.runtimeCtx.get('workspaceRegistry')
+      const registry = await Promise.race([
+        Promise.resolve(this.runtimeCtx.get('workspaceRegistry') as WorkspaceRegistryLike),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5_000)),
+      ])
       if (registry !== undefined && typeof registry.create === 'function') {
-        const basename = remotePath.split('/').filter(Boolean).pop() || 'root'
-        await registry.create(created.localPath, `${hostId} / ${basename}`)
+        await registry.create(localPath, title)
       }
     } catch {
       // 注册失败不影响占位目录本身（用户仍可手动添加路径）。
     }
-    return created
   }
 
   /** 列出全部占位工作区。 */

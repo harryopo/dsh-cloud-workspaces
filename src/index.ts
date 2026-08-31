@@ -1,14 +1,14 @@
 /**
- * dsh-remote-ide — host half (standalone tools edition).
+ * dsh-remote-ide — host half.
  *
- * Provides the remote-development agent tools (ssh_list / ssh_exec / ssh_ls /
- * ssh_read / ssh_write) backed by a persistent ssh2 engine with jump-host
- * support. Together with the `remote` agent preset (agent-presets/remote) this
- * turns the DSH coding agent's working environment into a remote Linux server.
+ * 免 preset 的「云端工作区」模式：工作区选择器（client 半双 tab）选定远程
+ * 目录后，会话内官方同名工具（bash/read/write/edit/glob/grep）经 agent/created
+ * 钩子在 agent scope 遮蔽为 SSH 实现（session-tools），另有全局 ssh_* 工具
+ * （tools）、设置卡主机管理（host-settings + typert）。agent-presets/remote-legacy
+ * 保留 fs/subprocess 真 seam 替换路线作参考，不再部署。
  *
- * No browser half, no UI: everything the model needs rides the tools registry
- * (schemas flow into the system prompt automatically), and host entries live
- * in ~/.dsh/dsh-remote-ide.json (0600, import from ~/.ssh/config).
+ * Host entries live in ~/.dsh/dsh-remote-ide.json (0600, import from
+ * ~/.ssh/config) plus the settings namespace the web settings card edits.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -20,6 +20,8 @@ import SshRuntime from './ssh-service'
 import { sshExecTool, sshListTool, sshLsTool, sshReadTool, sshWorkspaceTool, sshWriteTool } from './tools'
 import { installHostSettings } from './host-settings'
 import { HOST_TYPERT_CONTRIBUTION, REMOTE_SERVICE, SshRemoteService } from './typert'
+import { installSessionRouting, sessionSectionText } from './session-tools'
+import { routeByCwd } from './workspace'
 
 /** Stable cordis plugin name. */
 export const name = 'remote-ide'
@@ -55,7 +57,7 @@ const DEFAULT_ENABLED = true
 const DEFAULT_ANNOUNCE = true
 
 /** Model-facing announcement: plugin presence and limits. */
-export const REMOTE_GUIDANCE = '本机已安装 dsh-remote-ide（服务器开发模式工具）：ssh_list 列出主机、ssh_exec 在远程 Linux 执行命令、ssh_ls 列远程目录、ssh_read/ssh_write 通过 SFTP 读写远程文件。主机配置存 ~/.dsh/dsh-remote-ide.json（可从 ~/.ssh/config 导入）。限制：需先配置主机；远程命令消耗真实服务器资源；密码以明文存在用户主目录私有文件（0600）。用户提到「服务器开发 / SSH / 远程服务器 / 远程开发」时即指本插件。'
+export const REMOTE_GUIDANCE = '本机已安装 dsh-remote-ide（远程工作区）：在「添加工作区」里选「云端（SSH）」即可把服务器目录绑定为工作区——该会话的 bash/read/write/edit/glob/grep 与 ssh_* 工具会自动在该服务器上执行，和本地一样。也可用 ssh_list 列出已配置主机、ssh_workspace 绑定远程目录。限制：需先在 设置 → SSH 连接 配置主机；远程命令消耗真实服务器资源；密码以明文存在用户主目录私有文件（0600）。用户提到「SSH / 远程服务器 / 远程开发 / 云端工作区」时即指本插件。'
 
 /** Tool-guidance band order. */
 const SECTION_ORDER = 150
@@ -101,6 +103,7 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
   ]
   let disposeTools: (() => void) | undefined
   let disposeSection: (() => void) | undefined
+  let disposeSessionSection: (() => void) | undefined
 
   const sync = (): void => {
     if (disposeTools !== undefined) {
@@ -110,6 +113,10 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
     if (disposeSection !== undefined) {
       disposeSection()
       disposeSection = undefined
+    }
+    if (disposeSessionSection !== undefined) {
+      disposeSessionSection()
+      disposeSessionSection = undefined
     }
     const value = resolve()
     if (!value.enabled) return
@@ -125,6 +132,16 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
         name: 'plugin:dsh-remote-ide',
         order: SECTION_ORDER,
         text: REMOTE_GUIDANCE,
+      })
+      // 会话级动态段：cwd 落在 ~/.dsh/remote/ 下的会话获得远程身份宣告；
+      // 本地会话该函数返回空串，零注入（免 preset 透明模式的一半）。
+      disposeSessionSection = ctx.systemPrompt.section({
+        name: 'plugin:dsh-remote-ide:session',
+        order: SECTION_ORDER + 1,
+        text: (context) => {
+          const agent = (context as { agent?: { session?: { header?: { cwd?: string } } } }).agent
+          return sessionSectionText(agent?.session?.header?.cwd)
+        },
       })
     }
   }
@@ -149,6 +166,12 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
     scope.typert.register(HOST_TYPERT_CONTRIBUTION)
     scope.logger?.info('[dsh-remote-ide] typert remote ' + REMOTE_SERVICE + ' registered')
   })
+
+  // 免 preset 的透明会话路由（核心竞争力）：agent/created 看会话 cwd，占位
+  // 工作区会话在 agent scope 注册与官方同名的 bash/read/write/edit/glob/grep
+  // 遮蔽工具（经共享 SshEngine 落远程）。enabled 开关在事件时求值——设置面
+  // 的启停即时生效。工具注册仍走上面的 sync()（announceToAgent 开关）。
+  installSessionRouting(ctx, runtime, () => resolve().enabled === true)
 
   // Initial registration from the composition entry (covers deployments with
   // no settings service, whose installSettingsSection never fires its hooks).
