@@ -89,6 +89,50 @@ describe('buildSessionTools', () => {
     expect(command).toContain("--include='*.ts'")
     expect(command).toContain("-e 'it'\\''s'")
   })
+
+  it('bash presenter：terminal 视图（官方 BashRow 可展开的前提）', () => {
+    const tools = buildSessionTools(stubRuntime(), route())
+    const bash = tools.find((t) => t.name === 'bash')! as {
+      presentCall?: (args: unknown) => { card: string; title?: string; description?: string; cwd?: string }
+      presentResult?: (args: unknown, result: unknown) => { card: string; output?: string; exitCode?: number } | undefined
+    }
+    expect(bash.presentCall).toBeTruthy()
+    const callView = bash.presentCall!({ command: 'uptime', description: '看负载', workdir: 'sub' })
+    expect(callView.card).toBe('terminal')
+    expect(callView.title).toBe('uptime')
+    expect(callView.description).toBe('看负载')
+    expect(callView.cwd).toBe('sub')
+
+    const resultView = bash.presentResult!({ command: 'uptime', description: '看负载' }, {
+      content: [{ type: 'text', text: '[exit code: 0]\nstdout:\nup 14:44\nduration: 12 ms' }],
+      isError: false,
+    })
+    expect(resultView?.card).toBe('terminal')
+    expect(resultView?.exitCode).toBe(0)
+    expect(resultView?.output).toContain('up 14:44')
+    expect(resultView?.output).not.toContain('duration:')
+    // 出错结果软落到通用卡（undefined）
+    expect(bash.presentResult!({ command: 'uptime', description: '看负载' }, { content: [], isError: true })).toBeUndefined()
+  })
+
+  it('read presenter：read 卡视图带行号窗口', () => {
+    const tools = buildSessionTools(stubRuntime(), route())
+    const read = tools.find((t) => t.name === 'read')! as {
+      presentResult?: (args: unknown, result: unknown) => {
+        card: string; path?: string; offset?: number; totalLines?: number
+        lines?: Array<{ number: number; text: string }>
+      } | undefined
+    }
+    const view = read.presentResult!({ file_path: '/remote/work/a.ts' }, {
+      content: [{ type: 'text', text: '/remote/work/a.ts (2/4 lines, from 2):\nl2\nl3' }],
+      isError: false,
+    })
+    expect(view?.card).toBe('read')
+    expect(view?.path).toBe('/remote/work/a.ts')
+    expect(view?.offset).toBe(2)
+    expect(view?.totalLines).toBe(4)
+    expect(view?.lines).toEqual([{ number: 2, text: 'l2' }, { number: 3, text: 'l3' }])
+  })
 })
 
 describe('sessionSectionText', () => {

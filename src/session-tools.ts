@@ -61,6 +61,67 @@ function renderLines(path: string, offset: number, lines: Array<{ number: number
   return `${path} (${lines.length}/${total} lines, from ${offset}):\n${body}`
 }
 
+/** presentResult 入形的最小形状（dsh-tools ToolResult 的结构子集）。 */
+interface PresentedResult {
+  content?: ReadonlyArray<{ type?: string; text?: string }>
+  isError?: boolean
+}
+
+/** 取唯一文本块；非单文本/出错返回 undefined（软落到通用卡）。 */
+function singleText(result: PresentedResult): string | undefined {
+  if (result.isError === true) return undefined
+  const only = result.content !== undefined && result.content.length === 1 ? result.content[0] : undefined
+  if (only === undefined || only.type !== 'text') return undefined
+  return only.text ?? ''
+}
+
+/**
+ * bash 渲染文本 → terminal 视图。官方 UI 对名为 bash 的工具走 keyed BashRow，
+ * 仅当宿主经 presentCall/presentResult 附上 terminal 视图时该行才可展开——
+ * 缺视图则整行 inert（真机「bash 调用无法展开」的根因）。
+ */
+function bashTerminalView(result: PresentedResult): { card: 'terminal'; output: string; exitCode?: number } | undefined {
+  const text = singleText(result)
+  if (text === undefined) return undefined
+  const kept = text.split('\n').filter((line) => !/^duration: \d+ ms$/.test(line))
+  const exit = /^\[exit code: (\d+)\]$/.exec(kept[0] ?? '')
+  const output = exit !== null || (kept[0] ?? '') === '[exit code: null]'
+    ? kept.slice(1).join('\n')
+    : kept.join('\n')
+  return {
+    card: 'terminal',
+    output,
+    ...(exit !== null ? { exitCode: Number(exit[1]) } : {}),
+  }
+}
+
+/** read 渲染文本 → read 视图（keyed read 行同款：无视图不可展开）。 */
+function readCardView(result: PresentedResult): {
+  card: 'read'
+  path: string
+  offset: number
+  lines: Array<{ number: number; text: string }>
+  totalLines: number
+  content: Array<{ type: 'text'; text: string }>
+} | undefined {
+  const text = singleText(result)
+  if (text === undefined) return undefined
+  const nl = text.indexOf('\n')
+  const head = nl === -1 ? text : text.slice(0, nl)
+  const match = /^(.*) \((\d+)\/(\d+) lines, from (\d+)\):$/.exec(head)
+  if (match === null) return undefined
+  const body = nl === -1 ? '' : text.slice(nl + 1)
+  const offset = Number(match[4])
+  return {
+    card: 'read',
+    path: match[1],
+    offset,
+    lines: body === '' ? [] : body.split('\n').map((line, i) => ({ number: offset + i, text: line })),
+    totalLines: Number(match[3]),
+    content: [{ type: 'text', text: body }],
+  }
+}
+
 /** 简单 glob → RegExp（支持 **、*、?；其余字符按字面量）。 */
 function globToRegExp(pattern: string): RegExp {
   let source = ''
@@ -119,6 +180,13 @@ export function buildSessionTools(runtime: SshRuntime, route: SessionRoute) {
       },
       render: (_args, value) => text(renderExec(value as ExecResult)),
     },
+    presentCall: (args) => ({
+      card: 'terminal',
+      title: args.command,
+      ...(args.description !== undefined && args.description !== '' ? { description: args.description } : {}),
+      ...(args.workdir !== undefined && args.workdir !== '' ? { cwd: args.workdir } : {}),
+    }),
+    presentResult: (_args, result) => bashTerminalView(result),
     async execute(args: { command: string; description?: string; timeoutMs?: number; workdir?: string }) {
       const cwd = args.workdir !== undefined && args.workdir !== '' ? resolveInSession(route, args.workdir) : route.remoteCwd
       const result = await engine.exec(route.hostId, args.command, { cwd, timeoutMs: args.timeoutMs })
@@ -151,6 +219,13 @@ export function buildSessionTools(runtime: SshRuntime, route: SessionRoute) {
         Number(value.totalLines),
       )),
     },
+    presentCall: (args) => ({
+      card: 'generic',
+      title: `Read ${args.file_path}`,
+      kind: 'read',
+      locations: [{ path: args.file_path, line: args.offset ?? 1 }],
+    }),
+    presentResult: (_args, result) => readCardView(result),
     async execute(args: { file_path: string; offset?: number; limit?: number }) {
       const path = resolveInSession(route, args.file_path)
       const file = await engine.readFile(route.hostId, path)
