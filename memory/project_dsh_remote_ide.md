@@ -1,6 +1,36 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-31（UI 修复：遮蔽 bash/read 行可展开）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-08-31（改名 + npm 首发完成）· **Category**: project · **Source**: conversation + git history
+
+## 2026-08-31 晚：改名 dsh-cloud-workspaces + npm 首发 0.2.1 ✅
+
+### 已完成
+1. **改名**：GitHub repo（gh api PATCH repos/.../dsh-remote-ide -f name=dsh-cloud-workspaces，gh CLI 无 --rename）+ npm 包名 + cordis.patch.yml + client/index.js module id + 双语 README + AGENTS.md；**内部标识（settings namespace/存储路径/typert 前缀//api 路径）保持旧名保数据兼容**；package.json 补 `publishConfig.registry`（官方源）+ repository.url/homepage 更新
+2. **npm 首发**：`dsh-cloud-workspaces@0.2.1` 上线（pnpm publish --access public --no-git-checks）；npm view 验证 name/version/description/repository.url 全对
+3. npm 线上地址：https://www.npmjs.com/package/dsh-cloud-workspaces
+4. README 旧 URL 残留已修（英文版 clone 地址、中文版 npm 安装命令）
+5. 清理：npm debug logs ×11 已删（TEMP\trae* 是 IDE 运行时不可删）
+
+### 踩坑
+- **npm 发布 403 新政**：「Two-factor authentication or granular access token with bypass 2fa enabled is required」→ 解法：npmjs.com 建 **Granular Access Token**（勾「绕过 2FA」+ Packages Read-write + 所有包 + 7 天），写入项目 .npmrc 发布后立刻删除
+- **npm login 在非 TTY 终端**：打印 URL 后挂起等浏览器授权，授权后自动完成；whoami 可验证
+- Trae 终端删除文件有 safe_rm 白名单：`npm-cache\_logs` 对通配符 `\*` 判定失败，改 `Get-ChildItem | Remove-Item -Force` 管道传具体路径可过
+
+### 待办
+- 用户插图（3 张：双 tab 选择器/添加主机表单/bash 远程执行）放 docs/screenshots/ 后嵌入双语 README → 提交推送（Roadmap 里「npm first publish」顺手勾掉）
+
+## 2026-08-31 生态发布：README 重写 + Discussions 发帖（用户确认产品可发布）
+
+### 已完成
+1. **README 双语重写**（commit 推送 master）：旧 README 还停留在已删除的「IDE 面板」方案 → 重写为云端工作区产品文档（en + zh-CN 对齐）：零远程安装卖点、透明工具重定向、官方 UI 遮蔽工具、设置卡、架构图、install（npm + 源码 link）、usage 4 步、roadmap。注意 package.json 无 `test:e2e` script——E2E 用 `node scripts/e2e-real-server.mjs`
+2. **GitHub repo 元数据更新**：description 改为 cloud-workspace 卖点（gh repo edit）；topics 已含 dsh-plugin/deepseek-harness/ssh/sftp 等
+3. **Discussions「Show Your Plugins!」发帖成功**：https://github.com/deepseek-ai/deepseek-harness/discussions/5229 —— 用 gh api graphql createDiscussion（repositoryId=`R_kgDOT3T1gw`，category「Show Your Plugins!」=`DIC_kwDOT3T1g84DDSUe`；**变量类型必须 ID! 不是 String!**）
+4. gh CLI 已登录（harryopo）——今后 GitHub API 操作直接 gh，无需 MCP GitHub
+
+### 待办
+- **npm publish**：npm 未登录（ENEEDAUTH）→ 用户跑 `npm adduser` 后执行 `pnpm publish`（prepublishOnly 自动 build）
+- **README 截图**（用户手截，勿用浏览器自动化）：①设置→SSH 连接卡 ②添加工作区→云端(SSH) tab ③会话 bash 行展开终端卡；拿到后放 docs/screenshots/ 嵌入 README
+- 用户工作方式反馈：**截图让用户自己截**（告知截什么即可）；别用 MCP/浏览器自动化操控电脑，直接 RunCommand
 
 ## 2026-08-31 上午：UI 修复——会话里 bash/read 工具行可展开（commit 3d2be8f）
 

@@ -9,13 +9,21 @@
 
 **服务器零安装。** 没有 vscode-server 式的远程组件、没有常驻进程、无需下载任何东西——一个标准 OpenSSH 服务端就是全部要求。
 
+<p align="center">
+  <img src="docs/screenshots/workspace-picker.png" width="420" alt="工作区选择器的云端 (SSH) tab" />
+  <img src="docs/screenshots/add-host-form.png" width="420" alt="添加 SSH 主机表单" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/remote-exec.png" width="860" alt="会话中 bash 在远程服务器执行" />
+</p>
+
 > English: [README.md](README.md)
 
 ---
 
 ## 为什么
 
-DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux 服务器上时，你只能另开 SSH 窗口，或折腾同步工具。同类远程方案首次连接要在服务器上下载几百 MB 的远程组件。`dsh-remote-ide` 走另一条路：一切都走**标准 SSH 通道**（exec / SFTP / PTY，基于 [ssh2](https://github.com/mscdex/ssh2)）——服务器上什么都不用装。
+DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux 服务器上时，你只能另开 SSH 窗口，或折腾同步工具。同类远程方案首次连接要在服务器上下载几百 MB 的远程组件。`dsh-cloud-workspaces` 走另一条路：一切都走**标准 SSH 通道**（exec / SFTP / PTY，基于 [ssh2](https://github.com/mscdex/ssh2)）——服务器上什么都不用装。
 
 ## 功能
 
@@ -55,7 +63,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 ### 从 npm
 
 ```sh
-dsh plugin --profile web add dsh-remote-ide
+dsh plugin --profile web add dsh-cloud-workspaces
 ```
 
 ### 从源码
@@ -67,7 +75,7 @@ pnpm install
 pnpm build
 
 # link 进 DSH web profile（Windows 路径含空格时用 junction）
-dsh plugin --profile web add link:C:\path\to\dsh-remote-ide
+dsh plugin --profile web add link:C:\path\to\dsh-cloud-workspaces
 ```
 
 安装或重新构建后需重启 `dsh web`（host 半加载在 Node 进程里）。
@@ -124,7 +132,7 @@ node scripts/e2e-real-server.mjs   # 25 个 E2E（真 SSH，WSL sshd 127.0.0.1:2
 - [ ] 远程后台任务（`ctx.jobs`）
 - [ ] 远程搜索调优（服务器端 ripgrep 探测）
 - [ ] SSH 隧道（本地端口转发）
-- [ ] npm 首次发布（进行中）
+- [x] npm 首次发布（`dsh-cloud-workspaces@0.2.1`）
 
 ## 致谢
 

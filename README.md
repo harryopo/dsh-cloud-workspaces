@@ -9,6 +9,14 @@ Pick **Cloud (SSH)** in DSH's workspace picker, and the coding agent works direc
 
 **Zero install on the server.** No vscode-server-style remote agent, no daemon, nothing to download — a standard OpenSSH server is all it takes.
 
+<p align="center">
+  <img src="docs/screenshots/workspace-picker.png" width="420" alt="Cloud (SSH) tab in the workspace picker" />
+  <img src="docs/screenshots/add-host-form.png" width="420" alt="Add SSH host form" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/remote-exec.png" width="860" alt="bash executing on the remote server in a DSH session" />
+</p>
+
 > 中文文档：[README.zh-CN.md](README.zh-CN.md)
 
 ---
@@ -17,7 +25,7 @@ Pick **Cloud (SSH)** in DSH's workspace picker, and the coding agent works direc
 
 DSH's agent runs on your local machine. When your code, data or production box lives on a remote Linux server, you either SSH in separately or fight with sync tools. Competing remote solutions ship a fat remote component (hundreds of MB) that must be downloaded to the server on first connect.
 
-`dsh-remote-ide` takes a different route: everything rides **standard SSH channels** (exec / SFTP / PTY via [ssh2](https://github.com/mscdex/ssh2)). The server needs nothing beyond what it already has.
+`dsh-cloud-workspaces` takes a different route: everything rides **standard SSH channels** (exec / SFTP / PTY via [ssh2](https://github.com/mscdex/ssh2)). The server needs nothing beyond what it already has.
 
 ## Features
 
@@ -63,13 +71,13 @@ dsh plugin --profile web add dsh-cloud-workspaces
 ### From source
 
 ```sh
-git clone https://github.com/harryopo/dsh-remote-ide.git
-cd dsh-remote-ide
+git clone https://github.com/harryopo/dsh-cloud-workspaces.git
+cd dsh-cloud-workspaces
 pnpm install
 pnpm build
 
 # link into the DSH web profile (use a junction on Windows if the path has spaces)
-dsh plugin --profile web add link:C:\path\to\dsh-remote-ide
+dsh plugin --profile web add link:C:\path\to\dsh-cloud-workspaces
 ```
 
 Restart `dsh web` after installing or rebuilding (the host half loads in the Node process).
@@ -126,7 +134,7 @@ node scripts/e2e-real-server.mjs   # 25 E2E tests over a real SSH server (WSL ss
 - [ ] Background remote jobs (`ctx.jobs`)
 - [ ] Remote search tuning (ripgrep detection on the server)
 - [ ] SSH tunnel (local port forwarding)
-- [ ] npm first publish (in progress)
+- [x] npm first release (`dsh-cloud-workspaces@0.2.1`)
 
 ## Acknowledgements
 
