@@ -1,8 +1,8 @@
-# dsh-remote-ide bundle patch: inserts the dual-face plugin row into the web
-# profile roster. Applied as a profile bundle layer (the `dsh.bundle.patch`
+# dsh-cloud-workspaces bundle patch: inserts the dual-face plugin row into the
+# web profile roster. Applied as a profile bundle layer (the `dsh.bundle.patch`
 # manifest field); activate with:
 #
-#   dsh plugin --profile <name> add dsh-remote-ide
+#   dsh plugin --profile <name> add dsh-cloud-workspaces
 #
 # The row is a bare plugin by package name: the node half (exports ".") runs
 # in the host process (SSH engine, /api/dsh-remote-ide routes), and the
@@ -10,4 +10,4 @@
 # (exports "./client", served at /plugins/<id>/client.js) load in the web GUI.
 - insert:
     - id: remote-ide
-      name: 'dsh-remote-ide'
+      name: 'dsh-cloud-workspaces'

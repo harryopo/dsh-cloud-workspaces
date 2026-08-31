@@ -1,6 +1,8 @@
-# AGENTS.md — dsh-remote-ide 项目交接文档
+# AGENTS.md — dsh-cloud-workspaces 项目交接文档
 
 > 任何 AI 开发工具（Claude Code / Trae / Qoder / Codex / Cursor / DSH）打开本仓库都应先读本文件。它说明项目是什么、架构怎么组织、怎么构建验证、有哪些坑。
+>
+> **曾用名 `dsh-remote-ide`**（2026-08-31 改名）。npm 包名 / GitHub 仓库 = `dsh-cloud-workspaces`；**内部标识（settings namespace `dsh-remote-ide-hosts`、存储 `~/.dsh/dsh-remote-ide.json`、typert 前缀、`/api/dsh-remote-ide`）保持旧名以保数据兼容**，勿改。
 
 ## 项目是什么
 

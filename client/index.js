@@ -16,7 +16,7 @@
  *   createPlaceholder(hostId, remotePath) / listPlaceholders()
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-remote-ide',
+  id: 'dsh-cloud-workspaces', // must equal the package name (loader contract)
   factory(require) {
     const React = require('react')
     const { useState, useEffect, useCallback, useRef } = React
@@ -24,7 +24,7 @@ window.__ModuleLoader__.load({
 
     // ------------------------------------------------------------ typert
 
-    const REMOTE_PACKAGE = 'dsh-remote-ide'
+    const REMOTE_PACKAGE = 'dsh-remote-ide' // typert descriptor prefix — protocol constant, keep in sync with src/typert.ts
     const REMOTE_NAMESPACE = 'ssh-remote'
 
     function passthroughSchema(typeSymbol) {

@@ -1,4 +1,4 @@
-# dsh-remote-ide
+# dsh-cloud-workspaces
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-100%20unit%20%2B%2025%20e2e-brightgreen.svg)](#development)
@@ -57,7 +57,7 @@ Requires DSH (web profile), Node ≥ 22, and a reachable SSH server.
 ### From npm
 
 ```sh
-dsh plugin --profile web add dsh-remote-ide
+dsh plugin --profile web add dsh-cloud-workspaces
 ```
 
 ### From source

@@ -1,4 +1,4 @@
-# dsh-remote-ide
+# dsh-cloud-workspaces
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-100%20%E5%8D%95%E6%B5%8B%20%2B%2025%20E2E-brightgreen.svg)](#开发)
@@ -61,8 +61,8 @@ dsh plugin --profile web add dsh-remote-ide
 ### 从源码
 
 ```sh
-git clone https://github.com/harryopo/dsh-remote-ide.git
-cd dsh-remote-ide
+git clone https://github.com/harryopo/dsh-cloud-workspaces.git
+cd dsh-cloud-workspaces
 pnpm install
 pnpm build
 

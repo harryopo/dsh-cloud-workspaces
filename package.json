@@ -1,5 +1,5 @@
 {
-  "name": "dsh-remote-ide",
+  "name": "dsh-cloud-workspaces",
   "version": "0.2.1",
   "description": "Cloud workspaces for DeepSeek Harness: pick \"Cloud (SSH)\" in the workspace chooser and the agent's bash/read/write/edit/glob/grep tools transparently run on your Linux server over SSH. Includes ssh_* agent tools, an SSH host settings card, jump-host support and persistent connection pooling.",
   "type": "module",
