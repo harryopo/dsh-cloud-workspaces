@@ -15,6 +15,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from 'schemastery'
 import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
+import { isSafeHostId } from './store'
 import type { HostPayload } from './protocol'
 
 /** settingsNamespace 强制 /^[a-z][a-z0-9-]*$/（kebab-case、无点）。 */
@@ -63,13 +64,18 @@ export const HostsSettingsSchema: z<{ hosts: Record<string, SshHostConfig> }> = 
   hosts: z.dict(HostConfigSchema).default({}),
 })
 
-/** 从 settings 文档取 hosts dict（容错 undefined/畸形）。 */
+/** 从 settings 文档取 hosts dict（容错 undefined/畸形；过滤原型污染键）。 */
 export function hostsOf(doc: unknown): Record<string, SshHostConfig> {
+  const out: Record<string, SshHostConfig> = {}
   if (doc !== null && typeof doc === 'object') {
     const hosts = (doc as { hosts?: unknown }).hosts
-    if (hosts !== null && typeof hosts === 'object') return hosts as Record<string, SshHostConfig>
+    if (hosts !== null && typeof hosts === 'object') {
+      for (const [id, cfg] of Object.entries(hosts as Record<string, unknown>)) {
+        if (isSafeHostId(id)) out[id] = cfg as SshHostConfig
+      }
+    }
   }
-  return {}
+  return out
 }
 
 /** 脱敏视图（wire 面）：口令永不回传。 */

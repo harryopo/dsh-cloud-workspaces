@@ -28,7 +28,6 @@ describe('HostStore CRUD', () => {
     const { store } = makeStore()
     store.upsert({ alias: 'beta', host: '10.0.0.2', user: 'root', auth: { kind: 'password', password: 's3cret' } })
     store.upsert({ alias: 'alpha', host: 'example.com', port: 2222, user: 'dev', auth: { kind: 'key', keyPath: '~/.ssh/id_ed25519' }, tags: ['prod'] })
-
     const list = store.list()
     expect(list.map(e => e.alias)).toEqual(['alpha', 'beta'])
     expect(list[0]!.port).toBe(2222)
@@ -50,6 +49,15 @@ describe('HostStore CRUD', () => {
     expect(() => store.upsert({ alias: 'a', host: 'x', user: '' })).toThrow('user')
     expect(() => store.upsert({ alias: 'a', host: 'x', user: 'u', auth: { kind: 'password', password: '' } })).toThrow('password')
     expect(() => store.upsert({ alias: 'a', host: 'x', user: 'u', auth: { kind: 'key' } })).toThrow('keyPath')
+  })
+
+  it('拒绝原型污染别名（__proto__ / constructor / prototype）', () => {
+    const { store } = makeStore()
+    for (const alias of ['__proto__', 'constructor', 'prototype']) {
+      expect(() => store.upsert({ alias, host: 'x', user: 'u', auth: { kind: 'password', password: 'p' } }))
+        .toThrow(/unsafe host alias/)
+      expect(store.get(alias)).toBeUndefined()
+    }
   })
 
   it('removes entries', () => {

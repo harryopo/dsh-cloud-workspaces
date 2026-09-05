@@ -4,6 +4,7 @@
  * the secret-free summary projection.
  */
 
+import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -14,6 +15,14 @@ export function expandHome(path: string): string {
   if (path === '~') return homedir()
   if (path.startsWith('~/') || path.startsWith('~\\')) return join(homedir(), path.slice(2))
   return path
+}
+
+/**
+ * 主机别名的安全白名单：作为对象键与目录段使用——拒绝原型污染键
+ * （__proto__ / constructor / prototype）与其余危险拼写。
+ */
+export function isSafeHostId(id: string): boolean {
+  return /^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)
 }
 
 /** Store file location (overridable for tests). */
@@ -140,6 +149,30 @@ export class HostStore {
       // Windows: chmod is a no-op for owner-only semantics.
     }
     renameSync(tmp, this.file)
+    this.tightenWindowsAcl()
+  }
+
+  /**
+   * Windows 收紧凭据文件的 ACL（best-effort）：chmod 在 Windows 是 no-op，
+   * 新文件继承目录 ACL——本机 `.dsh` 的继承链含沙箱用户组的读取权，明文口令
+   * 因此可被沙箱进程读到。断继承并仅授予管理员/SYSTEM/当前用户；非 Windows
+   * 或 icacls 不可用时静默跳过（下一次 save 会重试）。
+   */
+  private tightenWindowsAcl(): void {
+    if (process.platform !== 'win32') return
+    try {
+      const user = process.env.USERNAME ?? 'Administrator'
+      execFileSync('icacls', [
+        this.file,
+        '/inheritance:r',
+        '/grant:r',
+        '*S-1-5-32-544:F', // Administrators（用 SID 避免本地化组名问题）
+        '*S-1-5-18:F', // SYSTEM
+        `${user}:F`,
+      ], { stdio: 'ignore' })
+    } catch {
+      // ACL 收紧失败不阻断保存；口令面已有 settings 剥离兜底。
+    }
   }
 
   /** All entries, sorted by alias. */
@@ -174,6 +207,7 @@ export class HostStore {
     const now = Date.now()
     const alias = (existingAlias ?? payload.alias ?? '').trim()
     if (alias === '') throw new Error('alias is required')
+    if (!isSafeHostId(alias)) throw new Error(`unsafe host alias: ${JSON.stringify(alias)}`)
     const prev = this.entries.get(alias)
     const entry: SshHostEntry = {
       alias,
