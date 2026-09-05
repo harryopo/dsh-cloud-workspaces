@@ -90,6 +90,23 @@ describe('buildSessionTools', () => {
     expect(command).toContain("-e 'it'\\''s'")
   })
 
+  it('read_image：PNG 魔数识别 + base64 输出；非图片拒绝', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+    const sftp = { readFile: (p: string, cb: (e: Error | null, d?: Buffer) => void) => cb(null, png) }
+    const tools = buildSessionTools(stubRuntime({ getSftp: async () => sftp }), route())
+    const readImage = tools.find((t) => t.name === 'read_image')!
+    const output = await readImage.execute({ file_path: 'img/logo.png' })
+    expect(output.mediaType).toBe('image/png')
+    expect(output.path).toBe(REMOTE_CWD + '/img/logo.png')
+    expect(output.data).toBe(png.toString('base64'))
+    expect(output.bytes).toBe(png.length)
+
+    const badSftp = { readFile: (p: string, cb: (e: Error | null, d?: Buffer) => void) => cb(null, Buffer.from('plain text')) }
+    const tools2 = buildSessionTools(stubRuntime({ getSftp: async () => badSftp }), route())
+    const readImage2 = tools2.find((t) => t.name === 'read_image')!
+    await expect(readImage2.execute({ file_path: 'notes.txt' })).rejects.toThrow(/PNG\/JPEG\/WebP\/GIF/)
+  })
+
   it('bash presenter：terminal 视图（官方 BashRow 可展开的前提）', () => {
     const tools = buildSessionTools(stubRuntime(), route())
     const bash = tools.find((t) => t.name === 'bash')! as {
@@ -150,7 +167,7 @@ describe('sessionSectionText', () => {
 })
 
 describe('installSessionRouting', () => {
-  it('占位 cwd 的会话注册 6 个遮蔽工具并激活连接；本地会话不注册', () => {
+  it('占位 cwd 的会话注册 7 个遮蔽工具并激活连接；本地会话不注册', () => {
     const registered: string[] = []
     let listener: ((payload: { agent: unknown }) => void) | undefined
     // cordis 事件订阅 = ctx.on('agent/created', cb)；真实 effect 立即执行一次。
@@ -167,12 +184,12 @@ describe('installSessionRouting', () => {
 
     const scopeRegister = vi.fn((tool: { name: string }) => { registered.push(tool.name); return () => {} })
     listener!({ agent: { session: { header: { cwd: PLACEHOLDER } }, ctx: { tools: { register: scopeRegister } } } })
-    expect(registered.sort()).toEqual(['bash', 'edit', 'glob', 'grep', 'read', 'write'])
+    expect(registered.sort()).toEqual(['bash', 'edit', 'glob', 'grep', 'read', 'read_image', 'write'])
     // ssh_* 全局工具的无别名回退读 activeAlias——钩子必须把它切到会话主机。
     expect(connect).toHaveBeenCalledWith('dev')
 
     listener!({ agent: { session: { header: { cwd: 'C:\\local\\proj' } }, ctx: { tools: { register: scopeRegister } } } })
-    expect(scopeRegister).toHaveBeenCalledTimes(6)
+    expect(scopeRegister).toHaveBeenCalledTimes(7)
     expect(connect).toHaveBeenCalledTimes(1)
   })
 

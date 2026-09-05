@@ -16,13 +16,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import { appendFileSync, statSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import type { ExecResult } from './protocol'
 import type { SshRuntime } from './ssh-service'
 import { quoteSh } from './engine'
 import { jsonSafe } from './jsonsafe'
+import { debugLog } from './debug-log'
 import { resolveRemotePath, routeByCwd } from './workspace'
 
 /** 一个远程会话的路由（钩子时确定，此后全部工具共用）。 */
@@ -377,7 +375,57 @@ export function buildSessionTools(runtime: SshRuntime, route: SessionRoute) {
     },
   })
 
-  return [bashTool, readTool, writeTool, editTool, globTool, grepTool]
+  /** 图片魔数 → media type（read_image 只接受 PNG/JPEG/WebP/GIF）。 */
+  const imageSignatures: Array<{ mediaType: string; test: (b: Buffer) => boolean }> = [
+    { mediaType: 'image/png', test: b => b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
+    { mediaType: 'image/jpeg', test: b => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+    { mediaType: 'image/gif', test: b => b.length > 6 && b.toString('ascii', 0, 3) === 'GIF' },
+    { mediaType: 'image/webp', test: b => b.length > 12 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP' },
+  ]
+
+  const readImageTool = defineTool({
+    name: 'read_image',
+    description: 'Read a PNG/JPEG/WebP/GIF file on the remote server and return the image itself.',
+    parameters: {
+      file_path: { type: 'string', description: 'Path to the image file (relative paths resolve against the remote workspace).', required: true },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true },
+          mediaType: { type: 'string', required: true },
+          bytes: { type: 'integer', required: true },
+          data: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => {
+        const blocks: ContentBlock[] = [
+          { type: 'text', text: `${String(value.path)} (${String(value.mediaType)}, ${String(value.bytes)} bytes)` },
+          { type: 'image', source: { type: 'base64', media_type: String(value.mediaType), data: String(value.data) } } as unknown as ContentBlock,
+        ]
+        return blocks
+      },
+    },
+    async execute(args: { file_path: string }) {
+      const path = resolveInSession(route, args.file_path)
+      const sftp = await engine.getSftp(route.hostId)
+      const buffer = await new Promise<Buffer>((resolve, reject) => {
+        sftp.readFile(path, (error, data) => { if (error) reject(error); else resolve(data as Buffer) })
+      })
+      if (buffer.length > 8 * 1024 * 1024) {
+        throw new Error(`cannot read "${path}": image exceeds the 8 MiB cap; downscale or export a smaller copy`)
+      }
+      const mediaType = imageSignatures.find((signature) => signature.test(buffer))?.mediaType
+      if (mediaType === undefined) {
+        throw new Error(`cannot read "${path}": read_image only accepts PNG/JPEG/WebP/GIF files`)
+      }
+      return jsonSafe({ path, mediaType, bytes: buffer.length, data: buffer.toString('base64') })
+    },
+  })
+
+  return [bashTool, readTool, writeTool, editTool, globTool, grepTool, readImageTool]
 }
 
 /** 会话动态 prompt 段文本（cwd 非占位时返回空串 = 本地会话零注入）。 */
@@ -400,25 +448,6 @@ interface AgentLike {
 }
 
 /** 轻量文件诊断日志（scope.logger 不落盘，钩子链路必须自己留痕）。超上限重置文件，避免无限增长。 */
-const DEBUG_LOG_LIMIT = 512 * 1024
-let debugLogBytes = -1
-function debugLog(message: string): void {
-  try {
-    const file = join(homedir(), '.dsh', 'dsh-remote-ide-debug.log')
-    const line = `${new Date().toISOString()} ${message}\n`
-    if (debugLogBytes < 0) {
-      try { debugLogBytes = statSync(file).size } catch { debugLogBytes = 0 }
-    }
-    if (debugLogBytes > DEBUG_LOG_LIMIT) {
-      writeFileSync(file, line, 'utf8')
-      debugLogBytes = Buffer.byteLength(line)
-      return
-    }
-    appendFileSync(file, line, 'utf8')
-    debugLogBytes += Buffer.byteLength(line)
-  } catch { /* 诊断日志绝不影响主流程 */ }
-}
-
 /**
  * 安装会话路由：agent/created 看会话 cwd，占位会话在 agent scope 注册遮蔽
  * 工具。订阅走 cordis 事件总线 **ctx.on(...)**（AgentRegistry 服务上没有

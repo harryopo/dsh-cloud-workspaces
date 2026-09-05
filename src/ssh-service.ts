@@ -218,6 +218,11 @@ export class SshRuntime extends Service {
     return this.engine_.get(alias)
   }
 
+  /** 完整已存条目（含口令）——仅 host 平面内部使用（typert 补回口令），绝不进 wire 面。 */
+  getStoredEntry(alias: string) {
+    return this.engine_.getEntry(alias)
+  }
+
   /** 创建或更新主机。 */
   upsertHost(payload: HostPayload, existingAlias?: string) {
     return this.engine_.upsertHost(payload, existingAlias)

@@ -228,6 +228,11 @@ export class SshEngine {
     return entry === undefined ? undefined : this.store.summarize(entry)
   }
 
+  /** Full stored entry (secrets included) — host-plane internal use only. */
+  getEntry(alias: string): SshHostEntry | undefined {
+    return this.store.get(alias)
+  }
+
   /** Create or update a host. */
   upsertHost(payload: Parameters<HostStore['upsert']>[0], existingAlias?: string) {
     return this.store.upsert(payload, existingAlias)

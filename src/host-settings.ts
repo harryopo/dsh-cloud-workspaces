@@ -82,25 +82,22 @@ export function redactHosts(hosts: Record<string, SshHostConfig>): Record<string
   return out
 }
 
-/** 各主机的口令是否已设置（UI 显示"已保存口令"指示）。 */
-export function secretFlags(hosts: Record<string, SshHostConfig>): Record<string, boolean> {
-  const out: Record<string, boolean> = {}
-  for (const [id, cfg] of Object.entries(hosts)) {
-    out[id] = cfg.authType === 'password' && typeof cfg.password === 'string' && cfg.password !== ''
-  }
-  return out
-}
-
-/** settings HostConfig → HostStore 条目 payload（桥接给 ssh_* 工具）。 */
+/** settings HostConfig → HostStore 条目 payload（桥接给 ssh_* 工具）。
+ *
+ * 口令安全边界：settings 文档**永不持久化口令**（明文落盘面收敛到 0600 的
+ * dsh-remote-ide.json）。因此 settings 视图里 password 字段恒缺省——此时
+ * auth 返回 undefined，HostStore.upsert 的 `payload.auth ?? prev?.auth`
+ * 语义会保留既有条目的完整 auth（含口令），同步不会清掉密钥。 */
 export function toHostPayload(cfg: SshHostConfig): HostPayload {
+  const auth = cfg.authType === 'key'
+    ? (cfg.privateKeyPath ? { kind: 'key' as const, keyPath: cfg.privateKeyPath } : undefined)
+    : (cfg.password ? { kind: 'password' as const, password: cfg.password } : undefined)
   return {
     alias: cfg.id,
     host: cfg.host,
     port: cfg.port,
     user: cfg.user,
-    auth: cfg.authType === 'key'
-      ? { kind: 'key', keyPath: cfg.privateKeyPath }
-      : { kind: 'password', password: cfg.password },
+    auth,
     proxyJump: cfg.proxyJump,
     description: cfg.description ?? cfg.name,
   }

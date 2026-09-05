@@ -20,9 +20,10 @@ import { bindTypertRemote } from '@deepseek-ai/dsh-typert-protocol'
 import type { TypertCodec } from '@deepseek-ai/dsh-typert-protocol'
 import type { SettingsProvider, SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { SshRuntime } from './ssh-service'
-import { HOSTS_NAMESPACE, hostsOf, redactHosts, secretFlags, toHostPayload, type SshHostConfig } from './host-settings'
+import { HOSTS_NAMESPACE, hostsOf, redactHosts, toHostPayload, type SshHostConfig } from './host-settings'
 import { createPlaceholderDir, listPlaceholders } from './workspace'
 import { jsonSafe } from './jsonsafe'
+import { debugLog } from './debug-log'
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 
 /** ctx.workspaceRegistry 的形状（可选服务，经 ctx.get 读取，无 inject 要求）。 */
@@ -131,6 +132,39 @@ export class SshRemoteService extends Service {
   /** 注入 settings scope（index.ts 的 inject 段在构造后立即调用）。 */
   setSettings(scope: SettingsScope<{ hosts: Record<string, SshHostConfig> }>): void {
     this.settingsScope = scope
+    // 一次性迁移：历史版本把明文口令随 settings 落盘（settings.yaml 的 ACL
+    // 宽于专属 store）——迁入 0600 store 并从 settings 文档剥离。
+    void this.migratePasswordsIntoStore().catch((error) => {
+      debugLog(`migration crashed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
+
+  /** 一次性迁移：settings 既有明文口令迁入 0600 store 并从 settings 文档剥离。 */
+  private async migratePasswordsIntoStore(): Promise<void> {
+    const hosts = this.hosts()
+    const withPassword = Object.entries(hosts).filter(([, cfg]) => typeof cfg.password === 'string' && cfg.password !== '')
+    debugLog(`migration: start hosts=${Object.keys(hosts).length} withPassword=${withPassword.length}`)
+    let changed = false
+    for (const [id, cfg] of withPassword) {
+      changed = true
+      try {
+        this.runtime.engine.upsertHost(toHostPayload({ ...cfg }), id)
+        debugLog(`migration: password migrated to store for ${id}`)
+      } catch (error) {
+        debugLog(`migration: store upsert failed for ${id}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      const stripped: SshHostConfig = { ...cfg }
+      delete stripped.password
+      hosts[id] = stripped
+    }
+    if (changed) {
+      try {
+        await this.settings.update({ hosts })
+        debugLog('migration: settings.update committed (password stripped)')
+      } catch (error) {
+        debugLog(`migration: settings.update failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
   }
 
   private get settings(): SettingsScope<{ hosts: Record<string, SshHostConfig> }> {
@@ -155,12 +189,20 @@ export class SshRemoteService extends Service {
 
   // ------------------------------------------------------------ endpoints
 
-  /** 列出全部主机（脱敏）+ 口令已设标记。 */
+  /** 列出全部主机（脱敏）+ 口令已设标记（从 0600 store 权威读取）。 */
   listHosts(): { hosts: Record<string, Omit<SshHostConfig, 'password'>>; secrets: Record<string, boolean> } {
-    return jsonSafe({ hosts: redactHosts(this.hosts()), secrets: secretFlags(this.hosts()) })
+    const secrets: Record<string, boolean> = {}
+    for (const summary of this.runtime.engine.list()) {
+      secrets[summary.alias] = summary.auth === 'password'
+    }
+    return jsonSafe({ hosts: redactHosts(this.hosts()), secrets })
   }
 
-  /** 创建或更新主机：写 settings + 桥接 store。口令留空 = 保持已存。 */
+  /**
+   * 创建或更新主机：非敏感配置写 settings；**口令只写 0600 的
+   * dsh-remote-ide.json**——settings.yaml 的 ACL 宽于专属 store（沙箱用户组
+   * 可读），明文口令落那里就是泄露。口令留空 = 沿用 store 既有口令。
+   */
   async saveHost(id: string, patch: Partial<SshHostConfig>): Promise<{ id: string }> {
     const current = this.hosts()
     const prev = current[id]
@@ -172,19 +214,31 @@ export class SshRemoteService extends Service {
       user: (patch.user ?? prev?.user ?? '').trim(),
       authType: patch.authType ?? prev?.authType ?? 'key',
       privateKeyPath: patch.privateKeyPath ?? prev?.privateKeyPath,
-      // write-only：只有提交了新口令才覆盖，否则沿用已存值。
-      password: typeof patch.password === 'string' && patch.password !== ''
-        ? patch.password
-        : prev?.password,
       proxyJump: patch.proxyJump ?? prev?.proxyJump,
       description: patch.description ?? prev?.description,
     }
     if (next.host === '' || next.user === '') {
       throw new Error('host and user are required')
     }
+    // 口令解析：新提交的口令优先，否则沿用 0600 store 既有口令。
+    const stored = this.runtime.getStoredEntry(id)
+    const password = typeof patch.password === 'string' && patch.password !== ''
+      ? patch.password
+      : (stored?.auth.kind === 'password' ? stored.auth.password : undefined)
+    // 口令先进 0600 store（权威存储）；store 校验失败则 settings 不落半套配置。
+    this.runtime.engine.upsertHost({
+      alias: id,
+      host: next.host,
+      port: next.port,
+      user: next.user,
+      auth: next.authType === 'password'
+        ? { kind: 'password', password: password ?? '' }
+        : { kind: 'key', keyPath: next.privateKeyPath ?? '' },
+      proxyJump: next.proxyJump ?? [],
+      description: next.description,
+    }, id)
     const hosts = { ...current, [id]: next }
     await this.settings.update({ hosts })
-    this.syncStore()
     return { id }
   }
 
@@ -200,7 +254,7 @@ export class SshRemoteService extends Service {
 
   /**
    * 测试连接：用表单配置直连探测。对已保存主机（hostId 非空），密码/密钥
-   * 从 settings 补回（UI 拿到的是脱敏视图，password 已被剥离——测试不带
+   * 从 0600 store 补回（UI 拿到的是脱敏视图，password 已被剥离——测试不带
    * 密码必然 "All configured authentication methods failed"）。
    */
   async testConnection(hostId: string, cfg: {
@@ -214,22 +268,20 @@ export class SshRemoteService extends Service {
   }): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
     let password = cfg.password
     let privateKeyPath = cfg.privateKeyPath
-    if (hostId !== '') {
-      const stored = this.hosts()[hostId]
-      if (stored !== undefined) {
-        if (stored.authType === 'password' && (password === undefined || password === '')) {
-          password = stored.password
-        }
-        if (stored.authType === 'key' && (privateKeyPath === undefined || privateKeyPath === '')) {
-          privateKeyPath = stored.privateKeyPath
-        }
+    const stored = hostId === '' ? undefined : this.runtime.getStoredEntry(hostId)
+    if (stored !== undefined) {
+      if (stored.auth.kind === 'password' && (password === undefined || password === '')) {
+        password = stored.auth.password
+      }
+      if (stored.auth.kind === 'key' && (privateKeyPath === undefined || privateKeyPath === '')) {
+        privateKeyPath = stored.auth.keyPath
       }
     }
     const result = await this.runtime.engine.testConfig({
       host: cfg.host,
       port: cfg.port,
       user: cfg.user,
-      auth: cfg.authType === 'password' || (hostId !== '' && this.hosts()[hostId]?.authType === 'password')
+      auth: cfg.authType === 'password' || (hostId !== '' && this.runtime.getStoredEntry(hostId)?.auth.kind === 'password')
         ? { kind: 'password', password }
         : { kind: 'key', keyPath: privateKeyPath },
       proxyJump: cfg.proxyJump,

@@ -1,6 +1,50 @@
 # 项目进展 — dsh-remote-ide（服务器开发模式）
 
-**Date**: 2026-08-31（改名 + npm 首发完成）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-09-05（免 preset 透明模式全链路打通）· **Category**: project · **Source**: conversation + git history
+
+## 2026-09-05：免 preset 透明模式全链路打通（含钩子修复验证）
+
+### 「选工作区闪退」根因闭环（browser-use 自复现）
+- 用户报点击工作区闪退 → 用 browser-use 开浏览器 + 页面注入嗅探（WebSocket.send/fetch 包装带响应体）抓到：选择工作区时 `session.create {workspaceId}` → 宿主返回 `agent-preset-not-found: preset "remote" not found`
+- **根因**：`~/.dsh/settings.yaml` 的 `agent-presets.default: remote`（用户曾把服务器开发设为全局默认）——preset 下线后所有新会话都找不到它，全工作区炸，与插件无关。链路：session.create → ensureSession → composeAgent → presets.resolve 读 default → UnknownPresetError → 客户端静默弹回
+- **修复**：default → standard（原文件已备份），重启 4500；浏览器亲测端到端通过（会话创建 → agent 知道远程身份 → ssh_list → ssh_exec(192.168.45.200) → openEuler 返回 uname/hostname，7 秒）
+
+### 钩子从未生效的根因 + 修复（100/100 测试）
+- installSessionRouting 之前用 `agents.on(...)` 订阅 agent/created——**AgentRegistry 服务上没有 on 方法**（cordis 事件订阅在 Context 上：`ctx.on(name, listener)`），被防御分支静默跳过 → 钩子从未注册、遮蔽工具从未出现、activeAlias 从未激活
+- 修复：改 `ctx.on('agent/created', ...)`（cast 绕开 Events 增强未加载的类型问题）+ **文件级诊断日志** `~/.dsh/dsh-remote-ide-debug.log`（scope.logger 不落盘，钩子链路必须自己留痕）
+- **日志实测全通**：`agent/created: cwd=...remote\192.168.45.200\Lw → remote` → `remote session routed: ... (6 shadow tools)` ×2 次稳定触发
+
+### 排查方法论（重要沉淀）
+- **browser-use 自复现 + 页面注入嗅探**（WebSocket.send 包装 / fetch 包装带响应体 / PerformanceObserver longtask / window error 捕获）是定位 DSH 前端问题的最强手段
+- 宿主 stdout 日志基本无用（scope.logger 不落盘）——插件关键链路自己写文件日志
+- DSH 前端 Playwright actionability 大量失败 → cua 坐标 + 截图瞄准；截图超时≈渲染阻塞或截图子系统级联卡死
+- `settings.yaml` 的 `agent-presets.default` 是全局默认 preset——preset 增删部署时必须同步检查
+- 本轮伴随修复：ssh_list 输出字段与 schema 严格对齐（createdAt/updatedAt 剥离）；ssh_* 钩子激活连接切 activeAlias（免别名回退）；E2E 25/25
+
+## 2026-09-05 晚：系统安全审计（用户质疑误报判断）——1 个真实高危已修复
+
+用户要求系统性审查而非轻率判误报。全攻击面审计结论：
+
+### 审计通过项（证据）
+- **转义**：quoteSh/quoteShellArg/quotePosixArg 三处实现均为标准 POSIX 单引号惯用法（逐字符验证 ''' 关-转-开无隙）；所有远程命令构造点插值全部过转义（fs-ssh realpath/chmod/ln、engine cd 前缀、session-tools find/grep）；mode 为 octal 数字字面量
+- **注入路径**：hostId 只作 Map 键；SFTP 路径二进制安全无 shell；占位路径解码后词法规范化（containment 模型）
+- **网关面**：typert 仅本地 WS + 客户端挂载描述符；listHosts 脱敏 ✓
+
+### 真实发现（Mimosa 没找到的）
+- 🔴 **settings.yaml 明文口令 + ACL 泄露**：设置卡把口令随 DSH settings 命名空间落盘 settings.yaml（role('secret') 只保护 wire 面），该文件 ACL 含 CodexSandboxUsers: ReadAndExecute——沙箱用户组可读真实服务器 root 口令；连 0600 的 store 同样被该组可读（chmod 在 Windows no-op，文件继承目录 ACL）
+- **修复**：①口令架构收敛——settings 文档永不持久化口令，唯一权威存储 = 0600 store；saveHost 直写 store（新口令优先，留空沿用 getStoredEntry）；testConnection 补回从 store 读；listHosts.secrets 从 store 摘要推导；toHostPayload 无口令时 auth=undefined（upsert 保既有）②启动迁移：既有明文口令迁入 store 并从 settings 剥离（实测迁移+剥离成功）③手动剥离 settings.yaml 残留口令（应用重启解析验证 hosts=1 withPassword=0）
+- ⏳ **待用户决策**：~/.dsh 目录 ACL 收紧（icacls 断继承限管理员）——影响沙箱工具对 .dsh 的读取，需用户确认后执行
+
+### Mimosa 7 条误报甄别依据（保留备查）
+- exec(alias, command)「命令注入」×3：SSH 命令执行是产品定义本身（含 .d.ts 声明行）
+- subprocess-ssh「硬编码凭据」：getent passwd 读远端家目录，无凭据
+- lib/*.js「代码注入」×3：未跟踪构建产物（gitignore 已排除）
+
+### 伴生改动
+- debugLog 抽共享模块 src/debug-log.ts（512KiB 轮转），typert 迁移插桩
+- 迁移曾静默卡在 settings.update（无 committed 日志）→ catch 加日志定位；手动剥离后 withPassword=0 不再触发
+- read_image 遮蔽工具（SFTP 二进制读 + 魔数嗅探 + base64 图像块，8MiB cap）
+- 阻塞不变：Mimosa commit 拦截 + npm 令牌过期，均待用户
 
 ## 2026-08-31 晚：改名 dsh-cloud-workspaces + npm 首发 0.2.1 ✅
 
