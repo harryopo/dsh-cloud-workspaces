@@ -1,23 +1,24 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-08-31 晚（发布闭环 ✅：改名 dsh-cloud-workspaces + npm 首发 0.2.1 + Discussions #5229）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-09-18 核对（基线 105/105 全绿；09-05 安全加固 + v0.2.2 本地就绪）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
 | 文件 | 内容 |
 |------|------|
-| `project_dsh_remote_ide.md` | **项目进展终态：发布闭环完成（2026-08-31：改名 dsh-cloud-workspaces + npm 首发 0.2.1 + 截图工作流）+ 真机验证 + 全量审查修复清单（P0×5/P1×7）** |
+| `project_dsh_remote_ide.md` | **项目进展终态：安全审计与加固（09-05：口令存储收敛/ACL/read_image/钩子修复）+ 发布闭环（08-31：npm 0.2.1 + Discussions #5229）+ 真机验证 + 审查修复清单** |
 | `user_profile.md` | 用户工作方式画像（能力受限直接给替代方案并执行、改需求零拖泥带水） |
 | `feedback_ui.md` | 用户 UI 反馈与最终决策（UI 全删，纯 host 工具） |
 | `reference_ecosystem.md` | 生态参考、关键路径、modlens 识图方法 |
 | `errors_learnings.md` | 14 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律、Trae safe_rm 白名单） |
 
-## 最新状态（2026-08-31 晚 · 发布闭环 ✅）
+## 最新状态（2026-09-18 核对）
 
-- **发布闭环全部完成**：GitHub（harryopo/dsh-cloud-workspaces，双语 README + 3 张截图，commit 19bf99f）+ npm（dsh-cloud-workspaces@0.2.1，https://www.npmjs.com/package/dsh-cloud-workspaces）+ 官方 Discussions「Show Your Plugins!」（#5229）；安装命令 `dsh plugin --profile web add dsh-cloud-workspaces`
-- **改名落地**：npm 包名 / GitHub repo = dsh-cloud-workspaces；**内部标识（settings namespace / 存储路径 / typert 前缀 / /api 路径）保持旧名 dsh-remote-ide 保数据兼容，勿改**
-- **无待办硬任务**。可选后续：Discussions 帖子补截图、npm 页面 topic 补充、DSH 生态新插件机会
-- 细节见 `project_dsh_remote_ide.md` 顶部节（含截图工作流、npm 403 新政踩坑）
+- **验证基线**：105/105 测试 + typecheck + build 全绿，工作区干净（f111ed3）
+- **安全加固（09-05）已落地**：口令存储收敛（settings 永不落口令，唯一权威 = 0600 store + icacls ACL + 启动迁移）、host-id 污染防护、ctx.on 钩子订阅修复、read_image 遮蔽工具、UI presenters 展开修复；v0.2.2 本地就绪
+- **发布状态**：GitHub + npm **0.2.1** + Discussions #5229 已闭环；**0.2.2 未发布**（npm 令牌过期，待用户更新后 `pnpm publish`）
+- **待用户决策**：`~/.dsh` 目录 ACL 收紧（icacls 断继承，影响沙箱工具读取）
+- 细节见 `project_dsh_remote_ide.md` 顶部节（09-05 审计全记录 + 截图工作流 + npm 403 新政踩坑）
 
 ## 架构概览（2026-08-28）
 

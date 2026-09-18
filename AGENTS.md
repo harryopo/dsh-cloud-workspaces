@@ -8,7 +8,7 @@
 
 **DeepSeek Harness (DSH) 的「云端工作区」**：让 DSH 的编码 agent 以**远程 Linux 服务器**为开发环境，**免 preset、与本地体验一致**。
 
-- 用户在「添加工作区」里选「云端（SSH）」tab → 选主机 + 远端目录 → 官方收养为工作区；之后该会话的官方工具（bash/read/write/edit/glob/grep）**透明落远程**（agent/created 钩子在 agent scope 注册同名遮蔽工具），另有全局 `ssh_*` 工具（`ssh_list`/`ssh_exec`/`ssh_ls`/`ssh_read`/`ssh_write`/`ssh_workspace`）。
+- 用户在「添加工作区」里选「云端（SSH）」tab → 选主机 + 远端目录 → 官方收养为工作区；之后该会话的官方工具（bash/read/write/edit/glob/grep，另有 `read_image` 识图遮蔽）**透明落远程**（agent/created 钩子在 agent scope 注册同名遮蔽工具），另有全局 `ssh_*` 工具（`ssh_list`/`ssh_exec`/`ssh_ls`/`ssh_read`/`ssh_write`/`ssh_workspace`）。
 - 本插件（`dsh-remote-ide`）双面：host 半（SSH 引擎 + 工具 + 端点）+ client 半（设置卡「SSH 连接」+ 双 tab 工作区选择器）。
 - 旧「服务器开发」preset 已下线（2026-08-30）；`agent-presets/remote-legacy/` 与 `src/fs-ssh.ts`/`subprocess-ssh.ts` 仅作 fs/subprocess 真 seam 路线的参考实现，**不再部署**。
 
@@ -18,15 +18,17 @@
 src/
   index.ts          # 插件入口：SshRuntime + 6 个 ssh_* 工具 + 设置 + typert 通道 + 会话路由安装
   session-tools.ts  # ★核心：agent/created 钩子 → 占位会话在 agent scope 注册
-                    #   bash/read/write/edit/glob/grep 遮蔽工具 + 动态 system prompt 段
+                    #   bash/read/write/edit/glob/grep/read_image 遮蔽工具（含官方富 UI presenters）
+                    #   + 动态 system prompt 段
   tools.ts          # defineTool：ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write/ssh_workspace
   ssh-service.ts    # SshRuntime extends Service（ctx.ssh，唯一连接所有者）
   engine.ts         # ssh2 引擎：连接池/ProxyJump/exec/SFTP CRUD/PTY/keyboard-interactive
   jsonsafe.ts       # 输出边界净化（跨边界输出一律过它，见「核心纪律」）
+  debug-log.ts      # 文件诊断日志共享模块（512KiB 轮转）
   workspace.ts      # 占位工作区路由（remote/<hostId>/<base64url>，纯函数+可注入 IO）
-  host-settings.ts  # 设置卡片 host 配置 namespace（settings）
+  host-settings.ts  # 设置卡片 host 配置 namespace（settings；口令不落 settings，唯一存储=store）
   typert.ts         # Typert 远程端点（主机 CRUD/测试连接/目录浏览/占位创建）
-  store.ts          # 主机配置 ~/.dsh/dsh-remote-ide.json（0600，~/.ssh/config 导入）
+  store.ts          # 主机配置 ~/.dsh/dsh-remote-ide.json（0600 + icacls ACL，~/.ssh/config 导入）
   protocol.ts       # 共享类型
   fs-ssh.ts         # [legacy 参考] SshFileSystem → ctx.fs 13 方法（真 seam 路线，不再部署）
   subprocess-ssh.ts # [legacy 参考] SshSubprocessRuntime → ctx.subprocess（同上）
@@ -38,7 +40,7 @@ agent-presets/
 scripts/
   start-dsh-web.ps1       # 一键启动 dsh web（4500；⚠️ npx 下载慢，见下）
   e2e-real-server.mjs     # 真机验收：node scripts/e2e-real-server.mjs [alias]（25 项检查）
-tests/          # vitest 98 用例（含 session-tools/engine-connection 并发与自愈回归）
+tests/          # vitest 105 用例（含 session-tools/engine-connection 并发与自愈回归）
 memory/         # 项目记忆（进度/反馈/踩坑/参考）——最新进展在 project 文件顶部节
 docs/           # 03 方案书（纲领）+ 06 开发方法论（依据），索引见 docs/README.md
 ```
@@ -93,12 +95,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 11. **搜官方代码要进内层**：dsh 全局包 `lib/` 只是引导 stub，真正的包在其 `node_modules/@deepseek-ai/`。
 12. **lefthook 死钩子导致 commit 静默失败**（2026-08-31 已根除）：`.git/hooks/` 残留 lefthook 的 `prepare-commit-msg`/`post-commit`/`post-checkout`，其 fallback 里含**未加引号的含空格绝对路径**（指向 `.research` 旧源码目录），sh 解析炸掉且零输出 → `git commit` 退出 1 无任何报错（`--no-verify` 救不了 prepare-commit-msg）。3 个死钩子已删除，commit 恢复正常。若复发先查 `.git/hooks/` 非 sample 文件。
 
-## 当前状态与下一步（2026-08-31 凌晨 · 真机验证通过）
+## 当前状态与下一步（2026-09-18 核对）
 
-- ✅ **方向转型完成**：去 preset 化——工作区选择器「本机 / 云端（SSH）」双 tab（client 填充官方 `directory-flow` 插槽，onPicked 官方收养）+ `src/session-tools.ts` agent/created 钩子在 agent scope 注册同名遮蔽工具（免 preset 透明模式，核心竞争力）。细节见 `memory/project_dsh_remote_ide.md` 顶部三节
-- ✅ **全量代码审查 + 修复**（v0.2.1）：P0×5（openShell 双重释放 / getConnection 陈旧 rejection 毒化 / 钩子全局污染防护 / ProxyJump 探测必挂+泄漏 / 前端同名主机覆盖）+ P1×7（大文件读、父目录创建、超时保护、服务缺失守卫、日志上限、空 old_string、浏览竞态）。**98/98 测试 + typecheck + build 全绿**；清单与已知遗留见 `memory/project_dsh_remote_ide.md` 深夜三节
-- ✅ **真机验证通过**（2026-08-31，真实 4500 + 浏览器 + 192.168.45.200）：双 tab 选择器 / 远端目录浏览 / 官方收养 / 会话钩子 6 遮蔽工具注册全部实锤；**核心风险点解除：`payload.agent.ctx` 在真实运行时存在**（`~/.dsh/dsh-remote-ide-debug.log` 有路由记录）；E2E 25/25 复过。改动已分三主题提交（44725fe / e5dcd86 / a3b7078）
-- ⏳ **待用户收尾**：云端工作区会话里发一条真实消息亲眼看 bash 落远程（消耗 LLM 额度，留给用户）→ git push → npm publish（需用户 `npm adduser`）→ 官方 Discussions「Show Your Plugins!」发帖（竞品迭代快，宜早）
+- ✅ **发布闭环完成**（08-31）：GitHub `harryopo/dsh-cloud-workspaces`（双语 README + 截图）+ npm **0.2.1** + 官方 Discussions #5229；安装 `dsh plugin --profile web add dsh-cloud-workspaces`
+- ✅ **免 preset 透明模式全链路真机验证通过**（08-31）：双 tab 选择器 / 官方收养 / 钩子遮蔽工具注册实锤（`payload.agent.ctx` 存在）；E2E 25/25
+- ✅ **安全审计与加固**（09-05，v0.2.2）：口令存储收敛（settings 永不落口令，唯一权威 = 0600 store + icacls ACL + 启动迁移）；host-id 污染防护；ctx.on 钩子订阅修复；read_image 遮蔽工具；UI 展开修复（presenters）。清单见 `memory/project_dsh_remote_ide.md` 顶部节
+- ✅ **验证基线**（09-18 实测）：105/105 测试 + typecheck + build 全绿，工作区干净（f111ed3）
+- ⏳ **待办**：① npm 0.2.2 发布（本地已是 0.2.2，线上仍 0.2.1；需用户更新 npm 令牌）② `~/.dsh` 目录 ACL 收紧（icacls 断继承）——影响沙箱工具读取，待用户决策 ③ 可选：Discussions 补截图、npm topic 完善
 - 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
 
 ## 参考资料（本地）
