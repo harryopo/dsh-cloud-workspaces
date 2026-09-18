@@ -1,7 +1,9 @@
 # dsh-cloud-workspaces
 
+[![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-100%20%E5%8D%95%E6%B5%8B%20%2B%2025%20E2E-brightgreen.svg)](#开发)
+[![Tests](https://img.shields.io/badge/tests-120%20%E5%8D%95%E6%B5%8B%20%2B%2029%20E2E-brightgreen.svg)](#开发)
 
 **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的云端工作区插件。**
 
@@ -32,6 +34,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 - **双 tab 工作区选择器** —— 「本机」/「云端 (SSH)」两个 tab；云端工作区经 DSH 官方工作区注册表收养，在选择器里显示为 `主机 / 路径`。
 - **工具集透明重定向** —— 会话 cwd 落在云端占位目录下时，插件把官方 `ctx.fs`（13 个文件方法）与 `ctx.subprocess` 换成 SSH 实现。本地会话完全不受影响；接缝按会话作用域替换。
 - **官方 UI 的遮蔽工具** —— 会话级远程 `bash` / `read` / `write` / `edit` / `glob` / `grep` 只注册进该会话的 agent scope，并实现官方 `presentCall` / `presentResult` 渲染器——聊天里的工具行渲染成真正的终端卡 / 阅读卡，可展开、可复制、原生观感。
+- **后台任务** —— `bash` / `ssh_exec` 传 `run_in_background: true` 即把命令起成 DSH 一等公民 job（官方 `job_output` / `job_list` / `job_kill`、完成通知、任务 UI 全部现成）：安装、构建、测试套件在服务器上跑，永不撞执行超时。
 
 ### SSH 设置卡片（DSH 设置 → SSH 连接）
 
@@ -128,8 +131,8 @@ node scripts/e2e-real-server.mjs   # 25 个 E2E（真 SSH，WSL sshd 127.0.0.1:2
 - [x] 云端工作区：双 tab 选择器、占位目录、官方收养
 - [x] `ctx.fs` / `ctx.subprocess` 透明重定向
 - [x] 官方终端卡/阅读卡的遮蔽工具
+- [x] 远程后台任务（`ctx.jobs` 生产者）：`run_in_background` + `job_output` / `job_list` / `job_kill`
 - [x] 设置卡：主机、密码/密钥认证（keyboard-interactive）、连接测试、远端目录浏览器
-- [ ] 远程后台任务（`ctx.jobs`）
 - [ ] 远程搜索调优（服务器端 ripgrep 探测）
 - [ ] SSH 隧道（本地端口转发）
 - [x] npm 首次发布（`dsh-cloud-workspaces@0.2.1`）

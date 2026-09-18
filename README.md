@@ -1,7 +1,9 @@
 # dsh-cloud-workspaces
 
+[![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-100%20unit%20%2B%2025%20e2e-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-120%20unit%20%2B%2029%20e2e-brightgreen.svg)](#development)
 
 **Cloud workspaces for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
 
@@ -34,6 +36,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 - **Dual-tab workspace picker** — "Local" and "Cloud (SSH)" tabs; cloud workspaces are adopted by DSH's official workspace registry and show up in every session picker as `host / path`.
 - **Transparent toolset redirect** — when a session's cwd falls under a cloud placeholder, the plugin replaces the official `ctx.fs` (13 file methods) and `ctx.subprocess` seams with SSH-backed implementations. Local sessions are untouched; the seam is swapped per session scope.
 - **Shadow tools with official UI** — session-scoped remote `bash` / `read` / `write` / `edit` / `glob` / `grep` register in the agent's scope only, and implement the official `presentCall` / `presentResult` presenters, so chat rows render as real terminal / read / search cards — expandable, copyable, native.
+- **Background jobs** — `run_in_background: true` on `bash` / `ssh_exec` starts the command as a first-class DSH job (`job_output` / `job_list` / `job_kill`, completion notices, jobs UI): installs, builds and test suites run on the server without ever hitting an exec timeout.
 
 ### SSH settings card (in DSH Settings → SSH Connections)
 
@@ -130,8 +133,8 @@ node scripts/e2e-real-server.mjs   # 25 E2E tests over a real SSH server (WSL ss
 - [x] Cloud workspaces: dual-tab picker, placeholder dirs, official adoption
 - [x] Transparent `ctx.fs` / `ctx.subprocess` redirect
 - [x] Shadow tools with official terminal/read cards
+- [x] Background remote jobs (`ctx.jobs` producer): `run_in_background` + `job_output` / `job_list` / `job_kill`
 - [x] Settings card: hosts, password/key auth (keyboard-interactive), test, remote dir browser
-- [ ] Background remote jobs (`ctx.jobs`)
 - [ ] Remote search tuning (ripgrep detection on the server)
 - [ ] SSH tunnel (local port forwarding)
 - [x] npm first release (`dsh-cloud-workspaces@0.2.1`)
