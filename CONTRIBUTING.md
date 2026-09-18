@@ -1,69 +1,48 @@
-# dsh-remote-ide — development notes
+# Contributing — dsh-cloud-workspaces
+
+Start with **[AGENTS.md](./AGENTS.md)** (architecture, commands, pitfalls) and **[docs/REPO-WIKI.md](./docs/REPO-WIKI.md)** (full capability map — check it before building anything new, reuse over reinvention).
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `pnpm gen:css` | Regenerate `src/client/panel/panel-css.ts` (Lightning CSS scoped classes) and `xterm.css.ts` (official xterm styles). |
-| `pnpm build` | gen:css → `tsc -p tsconfig.build.json` → tsdown (lib/index.js + lib/client.js). |
+| `pnpm install` | dependencies (Node ≥ 22) |
+| `pnpm build` | wipe `lib/` → `tsc` declarations (`lib/types`) → `tsdown` bundles (`lib/*.js`) |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | vitest unit tests (host store, engine helpers, protocol). |
-| `pnpm watch` | tsdown watch (rebuild on change). |
+| `pnpm test` | vitest (120 unit tests; fake ssh2 harness) |
+| `node scripts/e2e-real-server.mjs [alias]` | 29-check acceptance run against a real SSH server (see AGENTS.md for the WSL target) |
 
 ## Layout
 
 ```
 src/
-  protocol.ts            # shared wire contract (both halves)
-  store.ts               # host config store (~/.dsh/dsh-remote-ide.json, ssh-config import)
-  engine.ts              # ssh2 engine: pool, exec, PTY shell, SFTP CRUD
-  routes.ts              # /api/dsh-remote-ide/* + terminal WebSocket upgrade (loopback fence)
-  index.ts               # host half entry (apply)
-  client/
-    api.ts               # browser API client + WS terminal factory
-    locales.ts           # zh/en dictionaries
-    mount.tsx            # center-column panel mount (conversation takeover)
-    sidebar-entry.ts     # sidebar DOM injection (self-healing)
-    better-sidebar.ts    # optional dsh-better-sidebar tab integration
-    panel/               # React components + scoped CSS
-tests/                   # vitest unit tests
-scripts/                 # build-time generators (css, xterm css)
+  index.ts          plugin entry: runtime + tools + settings + typert + session routing
+  session-tools.ts  agent/created hook → shadow tools (bash/read/write/edit/glob/grep/read_image) in agent scope
+  engine.ts         ssh2 engine: pool, exec, SFTP, PTY, ProxyJump
+  job-runner.ts     background jobs producer (official ctx.jobs, kind ssh)
+  ssh-service.ts    SshRuntime (ctx.ssh, single connection owner)
+  tools.ts          global ssh_* agent tools
+  typert.ts         cross-half RPC endpoints (settings card data plane)
+  store.ts          host config store (~/.dsh/dsh-remote-ide.json, 0600 + ACL)
+  workspace.ts      placeholder-workspace routing (pure functions, injectable fs)
+  jsonsafe.ts       output-boundary sanitizer — every boundary return must pass through it
+client/index.js     browser half: settings card + dual-tab workspace picker (React.createElement, no JSX)
+tests/              vitest suites (mirror of src modules + fake ssh2 transport)
+scripts/            e2e acceptance + diagnostics
+docs/               03 design book · 06 methodology · 07 jobs spec · REPO-WIKI.md
 ```
 
 ## Conventions
 
-- **Dual-face plugin**: node half exports `.` (host), browser half exports `./client`.
-- **Never touch DSH source**: everything rides `@deepseek-ai/dsh-*` SDK packages; mounts via `cordis.patch.yml` + profile mechanism.
-- **Loopback fence on every route** that touches remote servers.
-- **Secrets never leave the host**: the browser gets `SshHostSummary` only; the store file is 0600.
-- **DOM mounting failures must not take the GUI down** — log, never throw.
-- Client-bundle purity: no value imports of other plugins (type-only imports are fine).
+- **Dual-face plugin**: host half `exports "."` (Node), browser half `exports "./client"` (web ModuleLoader executes the bundle directly — **plain `React.createElement`, never JSX**). Mounting rides `dsh.bundle.patch` → `cordis.patch.yml`.
+- **Boundaries**: every typert endpoint and tool `execute` return goes through `jsonSafe` (lossless-JSON validation rejects `undefined` own-values). Every remote command interpolation goes through `quoteSh`.
+- **Secrets**: passwords live only in the 0600 store; settings documents never persist them. The wire only ever sees `redactHosts` projections.
+- **Shadow tools** register in `payload.agent.ctx` (agent scope) only — never on the plugin ctx — and the hook must never throw into session creation.
+- **Rich UI**: tools shadowing official names (`bash`/`read`) must implement `presentCall`/`presentResult` or their chat rows render inert.
+- Host-half changes need a `dsh web` restart to load; never restart an instance hosting a live conversation.
+- Tests: reuse the `vi.mock('ssh2')` FakeClient harness (`tests/engine-connection.test.ts`); clear `FakeClient.instances` in every describe's `beforeEach`.
+- Commits: conventional prefixes (`feat:` / `fix:` / `docs:` / `chore:`), focused diffs.
 
-## Testing against a real server
+## Before opening a PR
 
-1. Add a host in the panel (or the API) with key auth.
-2. `POST /api/dsh-remote-ide/connect {alias}` → `connected`.
-3. `POST /api/dsh-remote-ide/fs/ls {path}` etc.
-4. WebSocket terminal: `ws://127.0.0.1:<port>/api/dsh-remote-ide/terminal?alias=<alias>` with the frame protocol in `protocol.ts`.
-
-## Source-checkout development instance (optional)
-
-A second dsh web on another port, run from the official source checkout, gives
-an isolated dev loop (restarting it never touches the production 4100
-instance, and client-bundle changes hot-reload via `pnpm run dev:web`):
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git   # or use a tarball
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web --port 4101        # same ~/.dsh/profiles/web — this plugin loads too
-```
-
-The plugin's host half still needs a restart after changes (engine code runs
-in the host process); client-half changes only need the bundle rebuilt:
-
-```sh
-pnpm build                      # plugin: gen:css + tsc + tsdown
-# browser hard-refresh picks up lib/client.js (served fresh per request)
-```
+`pnpm typecheck && pnpm test && pnpm build` all green; if a remote-behaviour changed, run the E2E script against a real server; update `docs/REPO-WIKI.md` capability rows and `CHANGELOG.md`.

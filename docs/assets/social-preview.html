@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:1280px;height:640px;overflow:hidden}
+  body{background:radial-gradient(1200px 700px at 78% 118%, #123a63 0%, #0d1420 55%), #0d1420;
+       color:#e8edf5;font-family:"Segoe UI",system-ui,sans-serif;display:flex;align-items:center;
+       position:relative}
+  .grid{position:absolute;inset:0;opacity:.10;
+        background-image:linear-gradient(#3b82f6 1px,transparent 1px),linear-gradient(90deg,#3b82f6 1px,transparent 1px);
+        background-size:48px 48px}
+  .left{padding:0 20px 0 56px;width:620px;flex:none;position:relative;z-index:2}
+  .kicker{font-size:16px;letter-spacing:.22em;color:#7fb1ff;text-transform:uppercase;margin-bottom:14px}
+  h1{font-family:Consolas,"Cascadia Code",monospace;font-size:44px;margin:0 0 16px;color:#fff;font-weight:700;white-space:nowrap}
+  .tag{font-size:21px;line-height:1.55;color:#b8c4d6;margin:0}
+  .tag b{color:#e8edf5}
+  .badges{margin-top:24px;display:flex;gap:10px;flex-wrap:wrap}
+  .b{font-family:Consolas,monospace;font-size:15px;padding:6px 14px;border-radius:999px;
+     border:1px solid #2c4a74;color:#9cc4f5;background:rgba(30,58,95,.35)}
+  .right{position:relative;z-index:2;flex:1;display:flex;align-items:center;justify-content:flex-end;padding-right:30px}
+  .flow{display:flex;align-items:center;gap:16px}
+  .card{background:#101b2e;border:1px solid #26405f;border-radius:18px;padding:22px 24px;
+        box-shadow:0 18px 50px rgba(0,0,0,.55);font-family:Consolas,monospace}
+  .term{width:302px}
+  .term .bar{display:flex;gap:7px;margin-bottom:12px}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .term pre{margin:0;font-size:14.5px;line-height:1.65;color:#9fe8b5;white-space:pre-wrap}
+  .term .dim{color:#5d7391}
+  .srv{text-align:center}
+  .srv .rack{width:120px;height:150px;border:2px solid #26405f;border-radius:14px;background:#0f1a2b;
+             display:flex;flex-direction:column;justify-content:center;gap:12px;padding:0 14px;margin:0 auto 12px}
+  .srv .u{height:16px;border-radius:4px;background:linear-gradient(90deg,#1f3c60,#2c5a8f);position:relative}
+  .srv .u::after{content:"";position:absolute;right:8px;top:5px;width:6px;height:6px;border-radius:50%;background:#63d27b}
+  .srv span{font-size:14px;color:#8fa6c4;white-space:nowrap}
+  .tun{display:flex;flex-direction:column;align-items:center;color:#7fb1ff;font-family:Consolas,monospace;font-size:15px;gap:6px}
+  .tun .dash{width:84px;border-top:3px dashed #3f6ea6}
+  .foot{position:absolute;bottom:26px;right:64px;font-size:15px;color:#5d7391;z-index:2}
+</style></head><body>
+  <div class="grid"></div>
+  <div class="left">
+    <div class="kicker">DeepSeek Harness · Cloud Workspaces</div>
+    <h1>dsh-cloud-workspaces</h1>
+    <p class="tag">Your coding agent works <b>directly on the remote Linux server</b> — bash, files, search, terminal, background jobs — over <b>standard SSH</b>. <b>Zero remote install.</b></p>
+    <div class="badges"><span class="b">exec</span><span class="b">SFTP</span><span class="b">PTY</span><span class="b">ProxyJump</span><span class="b">background jobs</span></div>
+  </div>
+  <div class="right"><div class="flow">
+    <div class="card term"><div class="bar">
+      <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+    </div><pre><span class="dim">$</span> apt install nginx
+<span class="dim">✓ started background job ssh-1</span>
+<span class="dim">$</span> pwd
+<span class="dim">/srv/project   ← on the server</span></pre></div>
+    <div class="tun"><span>SSH</span><div class="dash"></div><span>no agent</span></div>
+    <div class="srv card"><div class="rack"><div class="u"></div><div class="u"></div><div class="u"></div></div><span>Linux · stock sshd</span></div>
+  </div></div>
+  <div class="foot">github.com/harryopo/dsh-cloud-workspaces · Apache-2.0 · npm: dsh-cloud-workspaces</div>
+</body></html>

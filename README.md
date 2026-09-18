@@ -139,6 +139,12 @@ node scripts/e2e-real-server.mjs   # 25 E2E tests over a real SSH server (WSL ss
 - [ ] SSH tunnel (local port forwarding)
 - [x] npm first release (`dsh-cloud-workspaces@0.2.1`)
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=harryopo%2Fdsh-cloud-workspaces&type=date&legend=top-left">
+ <picture><source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=harryopo/dsh-cloud-workspaces&type=date&theme=dark&legend=top-left" /><source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=harryopo/dsh-cloud-workspaces&type=date&legend=top-left" /><img alt="Star History Chart" src="https://api.star-history.com/chart?repos=harryopo/dsh-cloud-workspaces&type=date&legend=top-left" /></picture>
+</a>
+
 ## Acknowledgements
 
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — the harness and its official plugin SDK (`@deepseek-ai/dsh-*`); this plugin builds only on official npm SDK packages.

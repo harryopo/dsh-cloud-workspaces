@@ -1,0 +1,26 @@
+name: "Feature request"
+description: Suggest an idea for cloud workspaces
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: A workflow that is awkward or impossible today (e.g. long builds, tunnels, multiple hosts).
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Preferred solution
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [session tools, ssh engine, settings card / picker, background jobs, security, other]
+  - type: checkboxes
+    id: checks
+    attributes:
+      options:
+        - label: I searched existing issues and discussions
+          required: true

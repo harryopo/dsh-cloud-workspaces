@@ -1,0 +1,41 @@
+name: "Bug report"
+description: Something not working as expected (plugin, remote execution, UI)
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! DSH version, plugin version and a redacted log excerpt speed things up a lot.
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH version
+      placeholder: "e.g. 0.1.1-rc.2 (`dsh --version`)"
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      placeholder: "e.g. 0.3.0 (npm ls dsh-cloud-workspaces)"
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Remote server
+      description: OS + sshd flavour (helps with keyboard-interactive / SFTP-extension issues)
+      placeholder: "openEuler 20.03 / Ubuntu 24.04 / ..."
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Steps to reproduce, expected vs actual. ⚠️ Redact hostnames, IPs and credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: "~/.dsh/dsh-remote-ide-debug.log (session routing) or dsh web output — redacted"
+      render: shell
