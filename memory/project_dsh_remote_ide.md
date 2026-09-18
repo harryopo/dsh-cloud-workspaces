@@ -1,6 +1,12 @@
 # 项目进展 — dsh-cloud-workspaces
 
-**Date**: 2026-09-18（远程后台任务落地 v0.3.0）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-09-18（GitHub 冲星部署收口）· **Category**: project · **Source**: conversation + git history
+
+## 2026-09-18（晚）：GitHub 冲星全套部署（goal 驱动，一夜收口）
+
+- **已完成**：① Discussions #5229 追加 v0.3.0 更新评论 + Release v0.3.0 + topics 扩充 + homepage→npm ② social preview：`docs/assets/social-preview.html`（手写 HTML）→ headless Edge 截图 `docs/assets/social-preview.png`（1280×640；坑：flex 子项 content-box padding 撑爆画布导致右卡片裁切，`*{box-sizing:border-box}` + 收窄 .left 到 620px 解决）③ 门面：CHANGELOG.md、`.github/ISSUE_TEMPLATE/`（bug/feature yml）、CONTRIBUTING.md 重写（修文档漂移）、README Star History ④ good-first issues **#2**（ssh_workspace create 漏注册 workspaceRegistry，tools.ts:378 vs typert.ts:321）、**#3**（遮蔽 grep/glob 优先探测 rg）、**#4**（/tmp/dsh-job-* 24h TTL 清扫）⑤ 推广成稿 `docs/promo/post-zh.md`（掘金/V2EX）+ `show-hn-en.md`——**只备稿未代发**（第三方平台发布不可逆，留用户）⑥ npm：令牌过期 ENEEDAUTH 未发，`docs/npm-publish.md` 三步手册就绪（Granular Token → .npmrc → `pnpm publish --access public --no-git-checks`）；`npm pack --dry-run` 验证过 78 文件/290kB；`.npmrc` 已进 .gitignore
+- **提交**：`66dfeab` docs: GitHub presence pack（含门面+promo+social preview）；本记录与 AGENTS.md 随后提交
+- **用户明日手动项**：① Settings→General→Social preview 上传图片（无 API）② 发掘金/V2EX/HN（用 docs/promo/ 成稿）③ npm 令牌 + 按 docs/npm-publish.md 发布 ④ 云端会话发一条 `run_in_background` 消息体验后台任务
 
 ## 2026-09-18：远程后台任务（ctx.jobs 生产者）+ Repo Wiki + 文档对齐
 

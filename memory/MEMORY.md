@@ -1,6 +1,6 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-09-18（远程后台任务落地 v0.3.0：ctx.jobs 生产者，120/120 + E2E 29/29）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-09-18（GitHub 冲星部署收口：门面四件套 + social preview + 推广成稿 + good-first issues×3；npm 发布手册 `docs/npm-publish.md` 就绪待令牌）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 

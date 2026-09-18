@@ -5,6 +5,7 @@ dist/
 .research/
 .pnpm-store-local/
 .env
+.npmrc
 .DS_Store
 *.log
 .playwright-mcp/
