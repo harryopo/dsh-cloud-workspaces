@@ -19,15 +19,15 @@ import { readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import SshRuntime from 'dsh-remote-ide/ssh-service'
-import SshFileSystem from 'dsh-remote-ide/fs-ssh'
-import { SshSubprocessRuntime } from 'dsh-remote-ide/subprocess-ssh'
+import SshRuntime from 'dsh-cloud-workspaces/ssh-service'
+import SshFileSystem from 'dsh-cloud-workspaces/fs-ssh'
+import { SshSubprocessRuntime } from 'dsh-cloud-workspaces/subprocess-ssh'
 import {
   createPlaceholderDir,
   routeByCwd,
   resolveRemotePath,
   listPlaceholders,
-} from 'dsh-remote-ide/src/workspace.ts'
+} from 'dsh-cloud-workspaces/src/workspace.ts'
 
 // ---------------------------------------------------------------- harness
 
@@ -190,11 +190,39 @@ try {
   check('spawn 退出码 0', outcome.exitCode === 0, JSON.stringify(outcome))
   check('子进程输出 REMOTE_PROC_OK', outText.includes('REMOTE_PROC_OK'), JSON.stringify(outText.trim()))
   check('pwd 落远程目录（占位→远程重锚定）', outText.includes(remoteWs), JSON.stringify(outText.trim()))
+
+  // --------------------------------------------- 9. 后台任务（job-runner）
+  section('9. 后台任务（job-runner：wrapper / dd 增量 / 杀进程组）')
+  {
+    const { startRemoteJob } = await import('dsh-cloud-workspaces/job-runner')
+    // 裸 Context 无 dsh-jobs——假 registry 捕获 spec，验证的是远端机制本身。
+    let hooks = null
+    const fakeJobs = { start: (s) => { queueMicrotask(() => { hooks = s.run() }); return 'ssh-e2e-1' } }
+    const sleepCmd = 'for i in 1 2 3 4 5; do echo tick$i; sleep 1; done'
+    const started = startRemoteJob({ engine, jobs: fakeJobs }, { hostId: targetAlias, command: sleepCmd, cwd: remoteWs })
+    check('startRemoteJob 返回 background+jobId', started.kind === 'background' && started.jobId === 'ssh-e2e-1')
+    await new Promise(r => setTimeout(r, 2500))
+    let mid = ''
+    for (let i = 0; i < 6 && !mid.includes('tick1'); i++) {
+      mid += hooks === null ? '' : hooks.readOutput()
+      await new Promise(r => setTimeout(r, 1500))
+    }
+    check('readOutput 中途见增量输出', mid.includes('tick1'), JSON.stringify(mid.slice(0, 40)))
+    const doneOutcome = await withTimeout(hooks.done, 20_000, 'job done')
+    check('done=completed + exit code 0', doneOutcome.status === 'completed' && doneOutcome.detail === 'exit code: 0', JSON.stringify(doneOutcome))
+    startRemoteJob({ engine, jobs: fakeJobs }, { hostId: targetAlias, command: 'sleep 120', cwd: remoteWs })
+    await new Promise(r => setTimeout(r, 800))
+    const kh = hooks
+    kh.cancel()
+    kh.cancel()
+    const ko = await withTimeout(kh.done, 15_000, 'cancel done')
+    check('cancel → killed（进程组终止，幂等）', ko.status === 'killed', JSON.stringify(ko))
+  }
 } finally {
   // ---------------------------------------------------------- cleanup
   section('清理')
   try {
-    await engine.exec(targetAlias, `rm -rf ${remoteBase} ${remoteWs} && rm -f "$HOME"/m4-e2e-*.txt`)
+    await engine.exec(targetAlias, `rm -rf ${remoteBase} ${remoteWs} && rm -f "$HOME"/m4-e2e-*.txt /tmp/dsh-job-*.log /tmp/dsh-job-*.pid`)
     console.log('远程临时目录已清理')
   } catch (e) { console.log(`远程清理失败（可忽略）: ${e.message}`) }
   try {

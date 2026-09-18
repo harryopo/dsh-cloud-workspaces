@@ -15,6 +15,7 @@ export default defineConfig({
     invariant: './src/invariant.ts',
     tools: './src/tools.ts',
     'ssh-service': './src/ssh-service.ts',
+    'job-runner': './src/job-runner.ts',
     'fs-ssh': './src/fs-ssh.ts',
     'subprocess-ssh': './src/subprocess-ssh.ts',
   },

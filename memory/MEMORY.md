@@ -1,12 +1,12 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-09-18 核对（基线 105/105 全绿；09-05 安全加固 + v0.2.2 本地就绪）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-09-18（远程后台任务落地 v0.3.0：ctx.jobs 生产者，120/120 + E2E 29/29）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
 | 文件 | 内容 |
 |------|------|
-| `project_dsh_remote_ide.md` | **项目进展终态：安全审计与加固（09-05：口令存储收敛/ACL/read_image/钩子修复）+ 发布闭环（08-31：npm 0.2.1 + Discussions #5229）+ 真机验证 + 审查修复清单** |
+| `project_dsh_remote_ide.md` | **项目进展终态：后台任务（09-18，ctx.jobs 生产者 + spec/plan 文档）+ 安全加固（09-05）+ 发布闭环（08-31）+ 真机验证 + 审查修复清单** |
 | `user_profile.md` | 用户工作方式画像（能力受限直接给替代方案并执行、改需求零拖泥带水） |
 | `feedback_ui.md` | 用户 UI 反馈与最终决策（UI 全删，纯 host 工具） |
 | `reference_ecosystem.md` | 生态参考、关键路径、modlens 识图方法 |

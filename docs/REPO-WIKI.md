@@ -1,6 +1,6 @@
 # Repo Wiki — dsh-cloud-workspaces
 
-> 生成：2026-09-18 · 基线 commit `7450806`（f111ed3 加固 + 文档对齐）· 105/105 测试全绿实测
+> 生成：2026-09-18（同日更新：后台任务落地）· 基线 commit `51a7e10` + v0.3.0 后台任务 · 120/120 测试 + E2E 29/29 全绿实测
 > 来源：全仓库文件逐个读取核验（src 15 文件 / client / tests 10 / scripts 3 / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
 
 ## 1. 项目概述
@@ -30,6 +30,8 @@
 │   ├── engine.ts          ★ ssh2 引擎（连接池/执行/SFTP/PTY/跳板）
 │   ├── ssh-service.ts     SshRuntime（ctx.ssh 唯一连接所有者）
 │   ├── tools.ts           6 个全局 ssh_* 工具
+│   ├── job-runner.ts      ★ 后台任务生产者：run_in_background → 官方 ctx.jobs（kind ssh）
+│   │                        常驻通道 wrapper + dd 增量日志 + 杀进程组；job_output/job_list/job_kill 白拿
 │   ├── typert.ts          9 个跨半 RPC 端点 + 口令迁移
 │   ├── host-settings.ts   settings namespace/schema/脱敏/桥接 payload
 │   ├── store.ts           主机配置 0600 存储（ACL/导入/防污染）
@@ -108,6 +110,8 @@ flowchart LR
 
 **会话路由（session-tools.ts）**：`installSessionRouting(ctx,runtime,isEnabled)`（agent scope 守卫，绝不全局）；`buildSessionTools`（7 工具，参数名对齐官方）；`sessionSectionText`（本地会话返回空串零注入）；presenters：`bashTerminalView`/`readCardView`（官方富 UI 展开的前提）。
 
+**后台任务（job-runner.ts，v0.3.0）**：`startRemoteJob({engine,jobs},{hostId,command,cwd?,agent?})` —— 遮蔽 bash 与 ssh_exec 的 `run_in_background` 入口；注册进官方 `ctx.jobs`（kind=`ssh`、id `ssh-N`，声明合并扩 JobKindMap）；常驻通道 wrapper（`printf %s $$ > pidfile && exec bash -c cmd > log`，sshd 每通道独立进程组 ⇒ pid=pgid）；done=通道 close 权威退出码（非零=completed+detail，signal=killed，断连探测 kill -0 如实报孤儿）；readOutput=dd 64KiB 块增量+3s 泵；cancel=TERM→5s→KILL 杀组、幂等。**消费面零新代码**：官方 `job_output`/`job_list`/`job_kill` + 完成 notice + jobs UI 直接可用。生命周期=宿主内存态（重启记录消失，设计已拍板）。spec：`docs/07-design-remote-jobs.md`。
+
 **占位工作区（workspace.ts）**：`remoteRoot()`（env 可覆盖）、`isValidHostId`、`encode/decodeRemotePath`（base64url 可逆+规范编码校验）、`mapRemoteToLocal/mapLocalToRemote`、`routeByCwd`、`resolveRemotePath`、`createPlaceholderDir`（幂等+manifest）、`listPlaceholders`、`readManifest`。
 
 **存储与安全（store.ts/host-settings.ts/typert.ts）**：0600+icacls ACL 收紧、`isSafeHostId` 原型污染防护（store 键 + settings 读取双侧过滤）、口令 write-only 边界（wire 脱敏 + settings 不落口令 + 启动迁移）、`~/.ssh/config` 导入、`getStoredEntry`（host 平面内部补回口令专用，绝不进 wire）。
@@ -163,12 +167,12 @@ flowchart LR
 
 ## 8. 技术债务、限制、TODO 清单
 
-**发布/决策（待用户）**：① npm 0.2.2 未发布（本地 0.2.2 vs 线上 0.2.1；令牌过期）② `~/.dsh` 目录 ACL 断继承待决策（影响沙箱工具读取）。
+**发布/决策（待用户）**：① npm 未发布（本地 0.3.0 vs 线上 0.2.1，0.2.2/0.3.0 积压；令牌过期）② `~/.dsh` 目录 ACL 断继承待决策（影响沙箱工具读取）。
 **架构限制**：单 `activeAlias` 全局语义——多主机多会话时 ssh_* 无别名回退跟随最后激活者（遮蔽工具不受影响）；`connect()` 失败路径建 2 个传输对象（瞬时浪费不泄漏）；M0 遗留：broken 重建成功后 engine state 语义未统一。
 **功能缺口**：`ssh_workspace` create 不注册 workspaceRegistry（typert 路径有）；远端删除用原生 `window.confirm`；选择器关闭后状态保留；`fs-ssh` 的 createIfAbsent 依赖 GNU `ln -T`。
-**文档漂移**：`CONTRIBUTING.md` 整篇过时（描述已删除的浏览器面板/gen:css/routes.ts）；`docs/README.md` 里程碑状态停在 M4 前；README「100 unit tests」实为 105、Security 节「口令在 settings namespace」措辞未跟上 09-05 收敛；`protocol.ts` 的 `REMOTE_API*` 常量已死（仅测试引用）；`session-tools.ts:450` 一行孤儿注释。
+**文档漂移**：`CONTRIBUTING.md` 整篇过时（描述已删除的浏览器面板/gen:css/routes.ts）；`docs/README.md` 里程碑状态停在 M4 前；README「100 unit tests」实为 120、Security 节「口令在 settings namespace」措辞未跟上 09-05 收敛；`protocol.ts` 的 `REMOTE_API*` 常量已死（仅测试引用）；`session-tools.ts` 一行孤儿注释（debugLog 提取遗留）。
 **测试缺口**：subprocess 锚定回归被 Mimosa 钩子拦截未补（E2E 覆盖）；readFile/writeFile 新分支无单测（E2E 覆盖）。
-**Roadmap（README 未勾）**：后台远程任务 `ctx.jobs`、服务器 ripgrep 探测调优、SSH 隧道（本地端口转发）。
+**Roadmap（README 未勾）**：~~后台远程任务 `ctx.jobs`~~ ✅（09-18 v0.3.0，见 §4 后台任务）、服务器 ripgrep 探测调优、SSH 隧道（本地端口转发）。
 **已知坑 12 条**：全列于 AGENTS.md（WinNAT 端口/junction 空格/tsdown clean/Mimosa 误报/同文件串行/vitest fake 泄漏/搜内层/lefthook 死钩子…）。
 
 ## 9. 复用开发指引
@@ -188,6 +192,7 @@ flowchart LR
 | 关键词 | 去哪 |
 |---|---|
 | 连接池/重连/sweep/跳板/PTY/SFTP | §4 引擎层 → `src/engine.ts` |
+| 后台任务/run_in_background/job_output | §4 后台任务 → `src/job-runner.ts`（spec `docs/07`） |
 | 遮蔽工具/agent/created/钩子不生效 | §3 session-tools → `src/session-tools.ts`；诊断 `~/.dsh/dsh-remote-ide-debug.log` |
 | 占位路径/base64/重锚定/manifest | §5 → `src/workspace.ts` |
 | 口令/ACL/原型污染/迁移 | §4 存储与安全 → `src/store.ts` `src/typert.ts` `src/host-settings.ts` |

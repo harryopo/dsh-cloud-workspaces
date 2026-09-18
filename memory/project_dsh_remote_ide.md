@@ -1,8 +1,25 @@
-# 项目进展 — dsh-remote-ide（服务器开发模式）
+# 项目进展 — dsh-cloud-workspaces
 
-**Date**: 2026-09-05（免 preset 透明模式全链路打通）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-09-18（远程后台任务落地 v0.3.0）· **Category**: project · **Source**: conversation + git history
+
+## 2026-09-18：远程后台任务（ctx.jobs 生产者）+ Repo Wiki + 文档对齐
+
+### 后台任务（本线主体）
+- **流程**：spec `docs/07-design-remote-jobs.md`（用户评审通过）→ 计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md` → 四任务 TDD 逐个提交
+- **架构**：生产者模式——`src/job-runner.ts` `startRemoteJob()` 把 job 注册进官方 `ctx.jobs`（LocalJobRegistry，dsh-base 自带，不替换不自造）；kind 声明合并 `ssh`；模型用现成 `job_output/job_list/job_kill` + 官方完成 notice/UI
+- **远端协议**：常驻 exec 通道跑 `printf %s $$ > /tmp/dsh-job-<uuid>.pid && exec bash -c '<cmd>' > <log> 2>&1`（sshd 每通道独立进程组 ⇒ pid=pgid）；done=通道 close 权威退出码（零轮询）；readOutput=dd 64KiB 块增量（块对齐无游标漂移）+ 3s 泵；cancel=杀组 TERM→5s→KILL
+- **语义对齐官方 d.ts**（关键核验点）：非零退出=completed+detail；流式 job 的 done **不带 output**（"stream jobs leave it unset"）；readOutput 同步接口→异步预取泵；断连如实报告孤儿（pid/log），不谎称停止；内存态生命周期（宿主重启=记录消失，用户拍板）
+- **入口**：遮蔽 `bash`（agent scope）+ 全局 `ssh_exec` 都加 `run_in_background`（用户拍板）；输出 schema 判别 `kind: foreground|background` + `jobId`；presentResult 识别 started 文案→generic 卡
+- **验证**：120/120 单测（+15）；E2E 29/29（+4：wrapper/增量 tick/completed/cancel→killed SIGTERM，wsl-e2e 真机）
+- **踩坑**：① pnpm install 清掉了旧包名 `dsh-remote-ide` 的 node_modules 自链接——E2E 脚本 `import 'dsh-remote-ide/...'` 全数改 `dsh-cloud-workspaces/`（改名遗留）② WSL sshd 掉线需 `wsl -u root /usr/sbin/sshd` 拉起 ③ 测试驱动异步通道 close 前必须等监听器挂上（awaitChannel）
+
+### 同日其他
+- **文档对齐**（用户批准）：AGENTS.md（98→105 测试、read_image、debug-log、状态节重写）、CLAUDE.md 全文重写（原描述已下线 preset 架构）、memory/MEMORY.md 索引头
+- **Repo Wiki**：`docs/REPO-WIKI.md`（10 章节全仓知识库，逐文件核验；npm 线上 0.2.1 vs 本地 0.2.2 未发布的缺口在此发现）
+- **待办**：真机后台任务体验（用户发一条 run_in_background 消息）→ npm 发布（0.2.2/0.3.0 积压，令牌待用户）
 
 ## 2026-09-05：免 preset 透明模式全链路打通（含钩子修复验证）
+
 
 ### 「选工作区闪退」根因闭环（browser-use 自复现）
 - 用户报点击工作区闪退 → 用 browser-use 开浏览器 + 页面注入嗅探（WebSocket.send/fetch 包装带响应体）抓到：选择工作区时 `session.create {workspaceId}` → 宿主返回 `agent-preset-not-found: preset "remote" not found`

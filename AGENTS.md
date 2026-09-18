@@ -21,6 +21,8 @@ src/
                     #   bash/read/write/edit/glob/grep/read_image 遮蔽工具（含官方富 UI presenters）
                     #   + 动态 system prompt 段
   tools.ts          # defineTool：ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write/ssh_workspace
+  job-runner.ts     # 后台任务生产者：bash/ssh_exec run_in_background → 官方 ctx.jobs（kind ssh）
+                    #   常驻通道 wrapper + dd 增量读日志 + 杀进程组；job_output/job_list/job_kill 白拿
   ssh-service.ts    # SshRuntime extends Service（ctx.ssh，唯一连接所有者）
   engine.ts         # ssh2 引擎：连接池/ProxyJump/exec/SFTP CRUD/PTY/keyboard-interactive
   jsonsafe.ts       # 输出边界净化（跨边界输出一律过它，见「核心纪律」）
@@ -95,13 +97,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 11. **搜官方代码要进内层**：dsh 全局包 `lib/` 只是引导 stub，真正的包在其 `node_modules/@deepseek-ai/`。
 12. **lefthook 死钩子导致 commit 静默失败**（2026-08-31 已根除）：`.git/hooks/` 残留 lefthook 的 `prepare-commit-msg`/`post-commit`/`post-checkout`，其 fallback 里含**未加引号的含空格绝对路径**（指向 `.research` 旧源码目录），sh 解析炸掉且零输出 → `git commit` 退出 1 无任何报错（`--no-verify` 救不了 prepare-commit-msg）。3 个死钩子已删除，commit 恢复正常。若复发先查 `.git/hooks/` 非 sample 文件。
 
-## 当前状态与下一步（2026-09-18 核对）
+## 当前状态与下一步（2026-09-18 · 后台任务落地）
 
-- ✅ **发布闭环完成**（08-31）：GitHub `harryopo/dsh-cloud-workspaces`（双语 README + 截图）+ npm **0.2.1** + 官方 Discussions #5229；安装 `dsh plugin --profile web add dsh-cloud-workspaces`
-- ✅ **免 preset 透明模式全链路真机验证通过**（08-31）：双 tab 选择器 / 官方收养 / 钩子遮蔽工具注册实锤（`payload.agent.ctx` 存在）；E2E 25/25
-- ✅ **安全审计与加固**（09-05，v0.2.2）：口令存储收敛（settings 永不落口令，唯一权威 = 0600 store + icacls ACL + 启动迁移）；host-id 污染防护；ctx.on 钩子订阅修复；read_image 遮蔽工具；UI 展开修复（presenters）。清单见 `memory/project_dsh_remote_ide.md` 顶部节
-- ✅ **验证基线**（09-18 实测）：105/105 测试 + typecheck + build 全绿，工作区干净（f111ed3）
-- ⏳ **待办**：① npm 0.2.2 发布（本地已是 0.2.2，线上仍 0.2.1；需用户更新 npm 令牌）② `~/.dsh` 目录 ACL 收紧（icacls 断继承）——影响沙箱工具读取，待用户决策 ③ 可选：Discussions 补截图、npm topic 完善
+- ✅ **远程后台任务**（v0.3.0）：遮蔽 `bash` 与 `ssh_exec` 获得 `run_in_background` → 官方 `ctx.jobs` 生产者（kind=`ssh`，`src/job-runner.ts`：常驻通道 wrapper + dd 增量读远端日志 + 杀进程组 TERM→KILL）。`job_output/job_list/job_kill`、完成通知、jobs UI 全部白拿官方实现。**120/120 单测 + E2E 29/29（新增后台 4 检查）+ typecheck + build 全绿**。设计 `docs/07-design-remote-jobs.md`，计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md`
+- ✅ **发布闭环**（08-31）：GitHub + npm **0.2.1** + Discussions #5229；**09-05 安全加固**（口令存储收敛/ACL/read_image/钩子修复，v0.2.2）；**09-18 文档对齐 + Repo Wiki**（`docs/REPO-WIKI.md`）
+- ✅ **真机验证基线**（08-31 免 preset 全链路；09-18 后台任务 E2E 全通）：双 tab / 官方收养 / 钩子 6+1 遮蔽工具实锤
+- ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布（0.2.2/0.3.0 都未上线，令牌待用户）③ `~/.dsh` 目录 ACL 收紧决策
 - 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
 
 ## 参考资料（本地）

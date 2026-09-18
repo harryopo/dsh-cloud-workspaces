@@ -5,8 +5,8 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import SshRuntime from 'dsh-remote-ide/ssh-service'
-import { SshSubprocessRuntime } from 'dsh-remote-ide/subprocess-ssh'
+import SshRuntime from 'dsh-cloud-workspaces/ssh-service'
+import { SshSubprocessRuntime } from 'dsh-cloud-workspaces/subprocess-ssh'
 
 const storePath = join(homedir(), '.dsh', 'dsh-remote-ide.json')
 const ctx = new Context()
