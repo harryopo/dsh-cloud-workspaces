@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { sshExecTool, sshListTool } from '../src/tools'
+import { sshExecTool, sshListTool, sshWorkspaceTool } from '../src/tools'
 import type { SshRuntime } from '../src/ssh-service'
 
 /** 轻量镜像 lossless-JSON 断言（同 dsh-session walkJsonValue 语义）。 */
@@ -141,5 +141,28 @@ describe('ssh_exec run_in_background', () => {
     const tool = sshExecTool(stubRuntime(), undefined)
     const rendered = tool.output.render({}, { kind: 'background', jobId: 'ssh-3' } as never)
     expect(rendered[0]?.text).toContain('started background job ssh-3')
+  })
+})
+
+
+describe('ssh_workspace registration', () => {
+  it('registers a created placeholder when workspaceRegistry is available', async () => {
+    const create = vi.fn(async () => undefined)
+    const ctx = { get: vi.fn(() => ({ create })) }
+    const runtime = Object.assign(stubRuntime(), { getConnectionFor: vi.fn(async () => undefined) })
+    const tool = sshWorkspaceTool(runtime, ctx as never)
+    const output = await tool.execute({ action: 'create', host: 'server', path: '/srv/my-project' })
+    assertLosslessJson(output)
+    expect(create).toHaveBeenCalledOnce()
+    expect(create).toHaveBeenCalledWith(output.localPath, 'server / my-project')
+  })
+
+  it('still succeeds when workspaceRegistry is unavailable', async () => {
+    const ctx = { get: vi.fn(() => undefined) }
+    const runtime = Object.assign(stubRuntime(), { getConnectionFor: vi.fn(async () => undefined) })
+    const tool = sshWorkspaceTool(runtime, ctx as never)
+    const output = await tool.execute({ action: 'create', host: 'server', path: '/srv/no-registry' })
+    assertLosslessJson(output)
+    expect(output).toMatchObject({ action: 'create', host: 'server', remotePath: '/srv/no-registry' })
   })
 })
