@@ -12,10 +12,11 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JobRegistry } from '@deepseek-ai/dsh-jobs'
+import type { Context } from '@deepseek-ai/cordis'
 import type { ExecResult, RemoteDirEntry, SshHostSummary } from './protocol'
 import type { SshRuntime } from './ssh-service'
 import { startRemoteJob } from './job-runner'
-import { createPlaceholderDir, listPlaceholders } from './workspace'
+import { createPlaceholderDir, listPlaceholders, registerWorkspace } from './workspace'
 import { jsonSafe } from './jsonsafe'
 
 /** One text content block (the only render shape these tools emit). */
@@ -312,7 +313,7 @@ export function sshWriteTool(runtime: SshRuntime) {
 }
 
 /** Create or list placeholder workspaces (a remote dir mapped to a local dir). */
-export function sshWorkspaceTool(runtime: SshRuntime) {
+export function sshWorkspaceTool(runtime: SshRuntime, ctx?: Pick<Context, 'get'>) {
   return defineTool({
     name: 'ssh_workspace',
     description: 'Bind a remote directory as a DSH workspace: create a local placeholder directory (~/.dsh/remote/<host>/<encoded>) ' +
@@ -376,6 +377,9 @@ export function sshWorkspaceTool(runtime: SshRuntime) {
         throw new Error('path must be an absolute remote directory path (e.g. /home/user/project)')
       }
       const created = await createPlaceholderDir({ hostId: alias, remotePath })
+      if (ctx !== undefined) {
+        await registerWorkspace(ctx, created.localPath, `${alias} / ${remotePath.split('/').filter(Boolean).pop() || 'root'}`)
+      }
       return jsonSafe({
         action: 'create' as const,
         localPath: created.localPath,

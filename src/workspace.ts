@@ -18,6 +18,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { posix } from 'node:path'
+import type { Context } from '@deepseek-ai/cordis'
+import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 
 /** 占位目录内的清单文件名（增强可诊断性：目录名即不依赖也能路由）。 */
 export const MANIFEST_NAME = '.dsh-remote-workspace.json'
@@ -204,4 +206,24 @@ export async function listPlaceholders(env?: NodeJS.ProcessEnv, fsImpl: typeof f
     }
   }
   return result
+}
+
+
+/** Best-effort registration of a placeholder in the official workspace picker. */
+export async function registerWorkspace(
+  ctx: Pick<Context, 'get'>,
+  localPath: string,
+  title: string,
+): Promise<void> {
+  try {
+    const registry = await Promise.race([
+      Promise.resolve(ctx.get('workspaceRegistry') as Pick<WorkspaceRegistry, 'create'> | undefined),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5_000)),
+    ])
+    if (registry !== undefined && typeof registry.create === 'function') {
+      await registry.create(localPath, title)
+    }
+  } catch {
+    // Registration is optional; the placeholder remains usable when unavailable.
+  }
 }

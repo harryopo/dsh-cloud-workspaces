@@ -101,7 +101,7 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
     sshLsTool(runtime),
     sshReadTool(runtime),
     sshWriteTool(runtime),
-    sshWorkspaceTool(runtime),
+    sshWorkspaceTool(runtime, ctx),
   ]
   let disposeTools: (() => void) | undefined
   let disposeSection: (() => void) | undefined

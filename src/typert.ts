@@ -21,13 +21,9 @@ import type { TypertCodec } from '@deepseek-ai/dsh-typert-protocol'
 import type { SettingsProvider, SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { SshRuntime } from './ssh-service'
 import { HOSTS_NAMESPACE, hostsOf, redactHosts, toHostPayload, type SshHostConfig } from './host-settings'
-import { createPlaceholderDir, listPlaceholders } from './workspace'
+import { createPlaceholderDir, listPlaceholders, registerWorkspace } from './workspace'
 import { jsonSafe } from './jsonsafe'
 import { debugLog } from './debug-log'
-import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
-
-/** ctx.workspaceRegistry 的形状（可选服务，经 ctx.get 读取，无 inject 要求）。 */
-type WorkspaceRegistryLike = Pick<WorkspaceRegistry, 'create'> | undefined
 
 /** npm 包名（描述符 id 前缀）。 */
 export const REMOTE_PACKAGE = 'dsh-remote-ide'
@@ -318,23 +314,8 @@ export class SshRemoteService extends Service {
     // registry 启动依赖 sessionPersistence 完成引导，在部分作用域可能永远
     // 未就绪——await 它会让端点无限挂起（真机「卡退」的根因）。选择器流程
     // 由官方收养（onPicked → createWorkspace），这里的注册是设置页流程的补充。
-    void this.registerWorkspace(created.localPath, `${hostId} / ${remotePath.split('/').filter(Boolean).pop() || 'root'}`)
+    void registerWorkspace(this.runtimeCtx, created.localPath, `${hostId} / ${remotePath.split('/').filter(Boolean).pop() || 'root'}`)
     return created
-  }
-
-  /** 后台注册占位目录进 DSH 工作区注册表（5s 超时；失败静默——目录本身已可用）。 */
-  private async registerWorkspace(localPath: string, title: string): Promise<void> {
-    try {
-      const registry = await Promise.race([
-        Promise.resolve(this.runtimeCtx.get('workspaceRegistry') as WorkspaceRegistryLike),
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5_000)),
-      ])
-      if (registry !== undefined && typeof registry.create === 'function') {
-        await registry.create(localPath, title)
-      }
-    } catch {
-      // 注册失败不影响占位目录本身（用户仍可手动添加路径）。
-    }
   }
 
   /** 列出全部占位工作区。 */
