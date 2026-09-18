@@ -173,7 +173,7 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
   // 工作区会话在 agent scope 注册与官方同名的 bash/read/write/edit/glob/grep
   // 遮蔽工具（经共享 SshEngine 落远程）。enabled 开关在事件时求值——设置面
   // 的启停即时生效。工具注册仍走上面的 sync()（announceToAgent 开关）。
-  installSessionRouting(ctx, runtime, () => resolve().enabled === true)
+  installSessionRouting(ctx, runtime, () => resolve().enabled === true, () => ctx.get('jobs') as JobRegistry | undefined)
 
   // Initial registration from the composition entry (covers deployments with
   // no settings service, whose installSettingsSection never fires its hooks).

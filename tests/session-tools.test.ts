@@ -38,7 +38,35 @@ describe('buildSessionTools', () => {
     const output = await bash.execute({ command: 'pwd', description: 'print cwd', workdir: 'sub' })
     expect(exec).toHaveBeenCalledWith('dev', 'pwd', { cwd: REMOTE_CWD + '/sub', timeoutMs: undefined })
     expect(output.success).toBe(true)
+    expect(output.kind).toBe('foreground')
     expect(Object.hasOwn(output, 'exitCode')).toBe(true)
+  })
+
+  it('bash 后台分支：注册 spec（kind ssh）返回 background，不跑前台 exec', async () => {
+    const exec = vi.fn()
+    const started: unknown[] = []
+    const jobs = { start: (s: { label: string }) => { started.push(s); return 'ssh-9' } }
+    const tools = buildSessionTools(stubRuntime({ exec }), route(), jobs as never)
+    const bash = tools.find((t) => t.name === 'bash')!
+    const out = await bash.execute({ command: 'apt-get update', description: '装包', run_in_background: true })
+    expect(out).toEqual({ kind: 'background', jobId: 'ssh-9' })
+    expect(exec).not.toHaveBeenCalled()
+    expect(started[0]).toMatchObject({ kind: 'ssh', label: 'apt-get update' })
+  })
+
+  it('bash presentResult：started 文案 → generic 卡；exit 文案 → terminal 卡', () => {
+    const tools = buildSessionTools(stubRuntime(), route())
+    const bash = tools.find((t) => t.name === 'bash')! as unknown as {
+      presentResult?: (a: unknown, r: unknown) => { card: string } | undefined
+    }
+    const bg = bash.presentResult!({ command: 'x', description: 'd' }, {
+      content: [{ type: 'text', text: 'started background job ssh-9 — poll with job_output' }], isError: false,
+    })
+    expect(bg?.card).toBe('generic')
+    const fg = bash.presentResult!({ command: 'x', description: 'd' }, {
+      content: [{ type: 'text', text: '[exit code: 0]\nstdout:\nok' }], isError: false,
+    })
+    expect(fg?.card).toBe('terminal')
   })
 
   it('read：相对路径落到远程工作区，offset/limit 切片', async () => {

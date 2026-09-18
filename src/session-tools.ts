@@ -16,11 +16,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { JobRegistry } from '@deepseek-ai/dsh-jobs'
 import type { ExecResult } from './protocol'
 import type { SshRuntime } from './ssh-service'
 import { quoteSh } from './engine'
 import { jsonSafe } from './jsonsafe'
 import { debugLog } from './debug-log'
+import { startRemoteJob } from './job-runner'
 import { resolveRemotePath, routeByCwd } from './workspace'
 
 /** 一个远程会话的路由（钩子时确定，此后全部工具共用）。 */
@@ -149,34 +151,41 @@ function matchGlob(regexp: RegExp, pattern: string, relative: string): boolean {
   return regexp.test(relative)
 }
 
-/** 构建一个远程会话的遮蔽工具集（bash/read/write/edit/glob/grep）。 */
-export function buildSessionTools(runtime: SshRuntime, route: SessionRoute) {
+/** 构建一个远程会话的遮蔽工具集（bash/read/write/edit/glob/grep/read_image）。 */
+export function buildSessionTools(runtime: SshRuntime, route: SessionRoute, jobs?: JobRegistry | undefined) {
   const engine = runtime.engine
 
   const bashTool = defineTool({
     name: 'bash',
-    description: 'Run a bash command on the remote server (this session\'s workspace host) and return stdout/stderr/exit code.',
+    description: 'Run a bash command on the remote server (this session\'s workspace host) and return stdout/stderr/exit code. For long-running commands (installs, builds, test suites) pass run_in_background:true — no timeout applies; poll with job_output / job_list, stop with job_kill.',
     parameters: {
       command: { type: 'string', description: 'The bash command to execute.', required: true },
       description: { type: 'string', description: 'Short active-voice description of what the command does (shown in the UI).', required: true },
-      timeoutMs: { type: 'integer', description: 'Timeout in milliseconds (default 60000).' },
+      timeoutMs: { type: 'integer', description: 'Timeout in milliseconds (default 60000; ignored when run_in_background).' },
       workdir: { type: 'string', description: 'Working directory (relative paths resolve against the session remote workspace).' },
+      run_in_background: { type: 'boolean', description: 'Start the command as a background job; no timeout applies. Poll with job_output / job_list, stop with job_kill.' },
     },
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          success: { type: 'boolean', required: true },
+          kind: { type: 'string', enum: ['foreground', 'background'], required: true },
+          jobId: { type: 'string' },
+          success: { type: 'boolean' },
           exitCode: { type: 'integer' },
-          timedOut: { type: 'boolean', required: true },
-          stdout: { type: 'string', required: true },
-          stderr: { type: 'string', required: true },
-          durationMs: { type: 'integer', required: true },
+          timedOut: { type: 'boolean' },
+          stdout: { type: 'string' },
+          stderr: { type: 'string' },
+          durationMs: { type: 'integer' },
           error: { type: 'string' },
         },
       },
-      render: (_args, value) => text(renderExec(value as ExecResult)),
+      render: (_args, value) => {
+        const v = value as { kind?: string; jobId?: string }
+        if (v.kind === 'background') return text(`started background job ${String(v.jobId)} — poll with job_output`)
+        return text(renderExec(value as ExecResult))
+      },
     },
     presentCall: (args) => ({
       card: 'terminal',
@@ -184,11 +193,26 @@ export function buildSessionTools(runtime: SshRuntime, route: SessionRoute) {
       ...(args.description !== undefined && args.description !== '' ? { description: args.description } : {}),
       ...(args.workdir !== undefined && args.workdir !== '' ? { cwd: args.workdir } : {}),
     }),
-    presentResult: (_args, result) => bashTerminalView(result),
-    async execute(args: { command: string; description?: string; timeoutMs?: number; workdir?: string }) {
+    presentResult: (_args, result) => {
+      const t = singleText(result)
+      // background 结果对齐官方：generic 卡（started 文案），不走 terminal 解析。
+      if (t !== undefined && t.startsWith('started background job')) {
+        return { card: 'generic', content: [{ type: 'text', text: t }] }
+      }
+      return bashTerminalView(result)
+    },
+    async execute(args: { command: string; description?: string; timeoutMs?: number; workdir?: string; run_in_background?: boolean }, exec?: { agent?: unknown }) {
       const cwd = args.workdir !== undefined && args.workdir !== '' ? resolveInSession(route, args.workdir) : route.remoteCwd
+      if (args.run_in_background === true) {
+        return jsonSafe(startRemoteJob({ engine, jobs }, {
+          hostId: route.hostId,
+          command: args.command,
+          cwd,
+          ...(exec?.agent !== undefined ? { agent: exec.agent as never } : {}),
+        }))
+      }
       const result = await engine.exec(route.hostId, args.command, { cwd, timeoutMs: args.timeoutMs })
-      return jsonSafe({ ...result, exitCode: result.exitCode ?? undefined })
+      return jsonSafe({ kind: 'foreground' as const, ...result, exitCode: result.exitCode ?? undefined })
     },
   })
 
@@ -436,6 +460,7 @@ export function sessionSectionText(cwd: string | undefined): string {
     '## Remote workspace session',
     `This session's workspace is a remote directory: ${route.remoteCwd} on host "${route.hostId}" (connected over SSH).`,
     'Your bash/read/write/edit/glob/grep tools execute on that server; relative paths resolve against the remote directory. Treat the server as your working machine.',
+    'For long-running commands (installs, builds, test suites) pass run_in_background: true to bash, then poll with job_output / job_list / job_kill.',
     'The ssh_exec/ssh_ls/ssh_read/ssh_write tools also target this host automatically (their alias parameter is optional here).',
     'The plugin configuration lives on the DSH host machine, not on the server — do not look for it there.',
   ].join('\n')
@@ -458,7 +483,12 @@ interface AgentLike {
  * ⚠️ 遮蔽工具只允许注册进 payload.agent.ctx（agent 作用域）。缺失时绝不
  * 退回插件级 ctx——那会让 bash/read 等在全局（含本地会话）遮蔽官方工具。
  */
-export function installSessionRouting(ctx: Context, runtime: SshRuntime, isEnabled?: () => boolean): void {
+export function installSessionRouting(
+  ctx: Context,
+  runtime: SshRuntime,
+  isEnabled?: () => boolean,
+  jobsProvider?: () => JobRegistry | undefined,
+): void {
   const emitter = ctx as unknown as {
     on?: (event: string, listener: (payload: { agent: AgentLike }) => void) => unknown
   }
@@ -488,7 +518,7 @@ export function installSessionRouting(ctx: Context, runtime: SshRuntime, isEnabl
             placeholderCwd: cwd ?? '',
           }
           let registered = 0
-          for (const tool of buildSessionTools(runtime, sessionRoute)) {
+          for (const tool of buildSessionTools(runtime, sessionRoute, jobsProvider?.())) {
             try {
               scope.tools.register(tool)
               registered += 1
