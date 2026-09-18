@@ -11,8 +11,10 @@
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { JobRegistry } from '@deepseek-ai/dsh-jobs'
 import type { ExecResult, RemoteDirEntry, SshHostSummary } from './protocol'
 import type { SshRuntime } from './ssh-service'
+import { startRemoteJob } from './job-runner'
 import { createPlaceholderDir, listPlaceholders } from './workspace'
 import { jsonSafe } from './jsonsafe'
 
@@ -145,43 +147,60 @@ export function sshListTool(runtime: SshRuntime) {
   })
 }
 
-/** Run a shell command on the remote server. */
-export function sshExecTool(runtime: SshRuntime) {
+/** Run a shell command on the remote server (foreground or background job). */
+export function sshExecTool(runtime: SshRuntime, jobs: JobRegistry | undefined) {
   return defineTool({
     name: 'ssh_exec',
     description: 'Run a shell command on the remote Linux server over SSH and return stdout/stderr/exit code. ' +
       'This is the model\'s shell on the server: use it for building, installing toolchains (apt/npm/pip), running tests, ' +
       'inspecting processes, and any other server-side work. The server is Linux; POSIX shell syntax applies. ' +
+      'For long-running commands (installs, builds, test suites) pass run_in_background:true — no timeout applies; ' +
+      'poll with job_output / job_list and stop with job_kill. ' +
       'Triggers: run a command on the server, deploy, build, test on remote, install packages, check server state.',
     parameters: {
       command: { type: 'string', description: 'The shell command to run (POSIX sh).', required: true },
       alias: { type: 'string', description: 'Host alias from ssh_list. Defaults to the active connection.' },
-      timeoutMs: { type: 'integer', description: 'Optional timeout in milliseconds (default 60000).' },
+      timeoutMs: { type: 'integer', description: 'Optional timeout in milliseconds (default 60000; ignored when run_in_background).' },
+      run_in_background: { type: 'boolean', description: 'Start the command as a background job; no timeout applies. Poll with job_output / job_list, stop with job_kill.' },
     },
     output: {
       schema: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          success: { type: 'boolean', required: true },
+          kind: { type: 'string', enum: ['foreground', 'background'], required: true },
+          jobId: { type: 'string' },
+          success: { type: 'boolean' },
           exitCode: { type: 'integer' },
-          timedOut: { type: 'boolean', required: true },
-          stdout: { type: 'string', required: true },
-          stderr: { type: 'string', required: true },
-          durationMs: { type: 'integer', required: true },
+          timedOut: { type: 'boolean' },
+          stdout: { type: 'string' },
+          stderr: { type: 'string' },
+          durationMs: { type: 'integer' },
           error: { type: 'string' },
         },
       },
-      render: (_args, value) => text(renderExec(value)),
+      render: (_args, value) => {
+        const v = value as { kind?: string; jobId?: string }
+        if (v.kind === 'background') return text(`started background job ${String(v.jobId)} — poll with job_output`)
+        return text(renderExec(value as Parameters<typeof renderExec>[0]))
+      },
     },
-    async execute(args: { command: string; alias?: string; timeoutMs?: number }) {
+    async execute(args: { command: string; alias?: string; timeoutMs?: number; run_in_background?: boolean }, exec?: { agent?: unknown }) {
       const alias = resolveAlias(runtime, args.alias)
+      if (args.run_in_background === true) {
+        // 后台无 cwd 参数（连接默认目录=远端 home）；owner 透传 exec.agent。
+        return jsonSafe(startRemoteJob({ engine: runtime.engine, jobs }, {
+          hostId: alias,
+          command: args.command,
+          ...(exec?.agent !== undefined ? { agent: exec.agent as never } : {}),
+        }))
+      }
       const result = await runtime.engine.exec(alias, args.command, { timeoutMs: args.timeoutMs })
       // The output schema models exitCode as optional (undefined when the
       // channel died without one); the engine reports null for that case.
       // jsonSafe strips the undefined own-key — lossless-JSON validation
       // rejects explicit undefined values.
-      return jsonSafe({ ...result, exitCode: result.exitCode ?? undefined })
+      return jsonSafe({ kind: 'foreground' as const, ...result, exitCode: result.exitCode ?? undefined })
     },
   })
 }

@@ -13,6 +13,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { JobRegistry } from '@deepseek-ai/dsh-jobs'
 import z from 'schemastery'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -57,7 +58,7 @@ const DEFAULT_ENABLED = true
 const DEFAULT_ANNOUNCE = true
 
 /** Model-facing announcement: plugin presence and limits. */
-export const REMOTE_GUIDANCE = '本机已安装 dsh-remote-ide（远程工作区）：在「添加工作区」里选「云端（SSH）」即可把服务器目录绑定为工作区——该会话的 bash/read/write/edit/glob/grep 与 ssh_* 工具会自动在该服务器上执行，和本地一样。也可用 ssh_list 列出已配置主机、ssh_workspace 绑定远程目录。限制：需先在 设置 → SSH 连接 配置主机；远程命令消耗真实服务器资源；密码以明文存在用户主目录私有文件（0600）。用户提到「SSH / 远程服务器 / 远程开发 / 云端工作区」时即指本插件。'
+export const REMOTE_GUIDANCE = '本机已安装 dsh-remote-ide（远程工作区）：在「添加工作区」里选「云端（SSH）」即可把服务器目录绑定为工作区——该会话的 bash/read/write/edit/glob/grep 与 ssh_* 工具会自动在该服务器上执行，和本地一样。也可用 ssh_list 列出已配置主机、ssh_workspace 绑定远程目录。长命令（安装/构建/测试套件）用 bash 或 ssh_exec 的 run_in_background:true 起后台，随后 job_output/job_list 轮询、job_kill 终止。限制：需先在 设置 → SSH 连接 配置主机；远程命令消耗真实服务器资源；密码以明文存在用户主目录私有文件（0600）。用户提到「SSH / 远程服务器 / 远程开发 / 云端工作区」时即指本插件。'
 
 /** Tool-guidance band order. */
 const SECTION_ORDER = 150
@@ -95,7 +96,8 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
 
   const tools = [
     sshListTool(runtime),
-    sshExecTool(runtime),
+    // 后台任务生产者：ctx.jobs 由 dsh-base 装入（可选服务，缺失=能力不可用）。
+    sshExecTool(runtime, ctx.get('jobs') as JobRegistry | undefined),
     sshLsTool(runtime),
     sshReadTool(runtime),
     sshWriteTool(runtime),

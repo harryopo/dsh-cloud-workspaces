@@ -116,10 +116,30 @@ describe('ssh_exec 输出边界', () => {
     const exec = vi.fn(async () => ({
       success: false, exitCode: null, timedOut: false, stdout: '', stderr: '', durationMs: 3, error: 'channel error',
     }))
-    const tool = sshExecTool(stubRuntime({ exec }))
+    const tool = sshExecTool(stubRuntime({ exec }), undefined)
     const output = await tool.execute({ command: 'true' })
     assertLosslessJson(output)
+    expect(output.kind).toBe('foreground')
     expect(Object.hasOwn(output, 'exitCode')).toBe(false)
     expect(output.error).toBe('channel error')
+  })
+})
+
+describe('ssh_exec run_in_background', () => {
+  it('后台分支：注册 spec（kind ssh）返回 {kind:background, jobId}，不跑前台 exec', async () => {
+    const exec = vi.fn()
+    const started: unknown[] = []
+    const jobs = { start: (s: { label: string }) => { started.push(s); return 'ssh-2' } }
+    const tool = sshExecTool(stubRuntime({ exec }), jobs as never)
+    const out = await tool.execute({ command: 'sleep 100', run_in_background: true }, { agent: undefined })
+    expect(out).toEqual({ kind: 'background', jobId: 'ssh-2' })
+    expect(exec).not.toHaveBeenCalled()
+    expect(started[0]).toMatchObject({ kind: 'ssh', label: 'sleep 100' })
+  })
+
+  it('render：background 结果渲染 started 文案', () => {
+    const tool = sshExecTool(stubRuntime(), undefined)
+    const rendered = tool.output.render({}, { kind: 'background', jobId: 'ssh-3' } as never)
+    expect(rendered[0]?.text).toContain('started background job ssh-3')
   })
 })
