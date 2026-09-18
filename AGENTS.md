@@ -102,7 +102,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 - ✅ **远程后台任务**（v0.3.0）：遮蔽 `bash` 与 `ssh_exec` 获得 `run_in_background` → 官方 `ctx.jobs` 生产者（kind=`ssh`，`src/job-runner.ts`：常驻通道 wrapper + dd 增量读远端日志 + 杀进程组 TERM→KILL）。`job_output/job_list/job_kill`、完成通知、jobs UI 全部白拿官方实现。**120/120 单测 + E2E 29/29（新增后台 4 检查）+ typecheck + build 全绿**。设计 `docs/07-design-remote-jobs.md`，计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md`
 - ✅ **发布闭环**（08-31）：GitHub + npm **0.2.1** + Discussions #5229；**09-05 安全加固**（口令存储收敛/ACL/read_image/钩子修复，v0.2.2）；**09-18 文档对齐 + Repo Wiki**（`docs/REPO-WIKI.md`）
 - ✅ **真机验证基线**（08-31 免 preset 全链路；09-18 后台任务 E2E 全通）：双 tab / 官方收养 / 钩子 6+1 遮蔽工具实锤
-- ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布（0.2.2/0.3.0 都未上线，令牌待用户）③ `~/.dsh` 目录 ACL 收紧决策
+- ✅ **GitHub 冲星部署**（09-18 夜）：v0.3.0 Release + topics 扩充 + Discussions #5229 更新评论；门面四件套（CHANGELOG.md / issue 模板 / CONTRIBUTING 重写 / star-history）；social preview 图 `docs/assets/social-preview.png`（**待用户手动上传**到 Settings→General→Social preview）；推广成稿 `docs/promo/`（掘金/V2EX + Show HN，**待用户发布**）；good-first issues #2 #3 #4
+- ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布（0.2.2/0.3.0 积压；**按 `docs/npm-publish.md` 三步即发**，只差新令牌）③ `~/.dsh` 目录 ACL 收紧决策
 - 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
 
 ## 参考资料（本地）
