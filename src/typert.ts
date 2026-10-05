@@ -29,6 +29,39 @@ import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
 /** ctx.workspaceRegistry 的形状（可选服务，经 ctx.get 读取，无 inject 要求）。 */
 type WorkspaceRegistryLike = Pick<WorkspaceRegistry, 'create'> | undefined
 
+/**
+ * 后台注册占位目录进 DSH 工作区注册表（5s 超时；失败静默——目录本身已可用）。
+ *
+ * 注册只是「出现在选择列表」的锦上添花，绝不阻塞调用方：registry 启动依赖
+ * sessionPersistence 完成引导，在部分作用域可能永远未就绪——await 它会让
+ * 端点/工具无限挂起（真机「卡退」的根因）。选择器流程由官方收养
+ * （onPicked → createWorkspace），这里的注册是补充。
+ *
+ * 端点与 ssh_workspace 工具共用本函数，保证两条创建路径行为一致。
+ */
+export async function registerPlaceholderWorkspace(
+  ctx: Context,
+  localPath: string,
+  title: string,
+): Promise<void> {
+  try {
+    const registry = await Promise.race([
+      Promise.resolve(ctx.get('workspaceRegistry') as WorkspaceRegistryLike),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5_000)),
+    ])
+    if (registry !== undefined && typeof registry.create === 'function') {
+      await registry.create(localPath, title)
+    }
+  } catch {
+    // 注册失败不影响占位目录本身（用户仍可手动添加路径）。
+  }
+}
+
+/** 占位工作区在注册表里的展示标题：<host> / <末段目录名>。 */
+export function placeholderTitle(hostId: string, remotePath: string): string {
+  return `${hostId} / ${remotePath.split('/').filter(Boolean).pop() || 'root'}`
+}
+
 /** npm 包名（描述符 id 前缀）。 */
 export const REMOTE_PACKAGE = 'dsh-remote-ide'
 /** Cordis service key。 */
@@ -314,27 +347,8 @@ export class SshRemoteService extends Service {
   async createPlaceholder(hostId: string, remotePath: string): Promise<{ localPath: string; hostId: string; remotePath: string }> {
     this.syncStore()
     const created = await createPlaceholderDir({ hostId, remotePath })
-    // 注册进 registry 只是「出现在选择列表」的锦上添花，绝不阻塞端点：
-    // registry 启动依赖 sessionPersistence 完成引导，在部分作用域可能永远
-    // 未就绪——await 它会让端点无限挂起（真机「卡退」的根因）。选择器流程
-    // 由官方收养（onPicked → createWorkspace），这里的注册是设置页流程的补充。
-    void this.registerWorkspace(created.localPath, `${hostId} / ${remotePath.split('/').filter(Boolean).pop() || 'root'}`)
+    void registerPlaceholderWorkspace(this.runtimeCtx, created.localPath, placeholderTitle(hostId, remotePath))
     return created
-  }
-
-  /** 后台注册占位目录进 DSH 工作区注册表（5s 超时；失败静默——目录本身已可用）。 */
-  private async registerWorkspace(localPath: string, title: string): Promise<void> {
-    try {
-      const registry = await Promise.race([
-        Promise.resolve(this.runtimeCtx.get('workspaceRegistry') as WorkspaceRegistryLike),
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5_000)),
-      ])
-      if (registry !== undefined && typeof registry.create === 'function') {
-        await registry.create(localPath, title)
-      }
-    } catch {
-      // 注册失败不影响占位目录本身（用户仍可手动添加路径）。
-    }
   }
 
   /** 列出全部占位工作区。 */

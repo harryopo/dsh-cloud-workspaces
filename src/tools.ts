@@ -16,6 +16,7 @@ import type { ExecResult, RemoteDirEntry, SshHostSummary } from './protocol'
 import type { SshRuntime } from './ssh-service'
 import { startRemoteJob } from './job-runner'
 import { createPlaceholderDir, listPlaceholders } from './workspace'
+import { placeholderTitle } from './typert'
 import { jsonSafe } from './jsonsafe'
 
 /** One text content block (the only render shape these tools emit). */
@@ -29,7 +30,7 @@ type HostRow = Pick<SshHostSummary,
 
 /** Host table render shared by list surfaces. */
 function renderHosts(hosts: readonly HostRow[]): string {
-  if (hosts.length === 0) return 'no hosts configured — run ssh_list and ask the user to add one in the panel, or add via ssh_config'
+  if (hosts.length === 0) return 'no hosts configured — ask the user to add one in 设置 → SSH 连接, or via the 云端（SSH）tab of 添加工作区'
   const rows = hosts.map(host => [
     host.alias,
     host.host,
@@ -232,6 +233,9 @@ export function sshLsTool(runtime: SshRuntime) {
                 type: { type: 'string', enum: ['dir', 'file', 'other'], required: true },
                 size: { type: 'integer', required: true },
                 mtimeMs: { type: 'integer', required: true },
+                // engine.ls() returns the raw POSIX mode; the schema must declare it or
+                // additionalProperties:false rejects every non-empty listing.
+                mode: { type: 'integer', required: true },
               },
             },
           },
@@ -311,8 +315,19 @@ export function sshWriteTool(runtime: SshRuntime) {
   })
 }
 
-/** Create or list placeholder workspaces (a remote dir mapped to a local dir). */
-export function sshWorkspaceTool(runtime: SshRuntime) {
+/**
+ * Create or list placeholder workspaces (a remote dir mapped to a local dir).
+ *
+ * `register` is injected by index.ts so the create path registers with the DSH
+ * workspace registry exactly like the settings-card typert endpoint does — a
+ * workspace bound through this tool must also show up in "select workspace".
+ * It is optional: headless runs have no registry, and the placeholder directory
+ * is usable regardless.
+ */
+export function sshWorkspaceTool(
+  runtime: SshRuntime,
+  register?: (localPath: string, title: string) => void,
+) {
   return defineTool({
     name: 'ssh_workspace',
     description: 'Bind a remote directory as a DSH workspace: create a local placeholder directory (~/.dsh/remote/<host>/<encoded>) ' +
@@ -376,6 +391,9 @@ export function sshWorkspaceTool(runtime: SshRuntime) {
         throw new Error('path must be an absolute remote directory path (e.g. /home/user/project)')
       }
       const created = await createPlaceholderDir({ hostId: alias, remotePath })
+      // Same fire-and-forget registration as the typert endpoint: best-effort,
+      // never blocks the tool result.
+      register?.(created.localPath, placeholderTitle(created.hostId, created.remotePath))
       return jsonSafe({
         action: 'create' as const,
         localPath: created.localPath,

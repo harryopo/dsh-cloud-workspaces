@@ -4,10 +4,17 @@
  *    `environment: undefined` own-keys → lossless-JSON 校验拒绝；
  * ② 修掉 ① 后下一层暴露：createdAt/updatedAt 未在 output schema 声明，
  *    additionalProperties:false 拒绝。输出必须与 schema 声明严格对齐。
+ * ③ ssh_ls 同类：engine.ls() 返回的 POSIX `mode` 未在 schema 声明，
+ *    任何非空目录都会抛 ToolOutputError。断言走 dsh-tools 自己的校验器
+ *    （宿主在 createSuccessResult 里无条件校验 output.schema）。
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { sshExecTool, sshListTool } from '../src/tools'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
+import { sshExecTool, sshListTool, sshLsTool, sshWorkspaceTool } from '../src/tools'
 import type { SshRuntime } from '../src/ssh-service'
 
 /** 轻量镜像 lossless-JSON 断言（同 dsh-session walkJsonValue 语义）。 */
@@ -39,6 +46,7 @@ function stubRuntime(engine: Record<string, unknown> = {}): SshRuntime {
       exec: async () => ({ success: true, exitCode: 0, timedOut: false, stdout: '', stderr: '', durationMs: 1 }),
       ...engine,
     },
+    getConnectionFor: async () => ({ alias: 'server', state: 'connected', home: '/root' }),
   } as unknown as SshRuntime
 }
 
@@ -141,5 +149,95 @@ describe('ssh_exec run_in_background', () => {
     const tool = sshExecTool(stubRuntime(), undefined)
     const rendered = tool.output.render({}, { kind: 'background', jobId: 'ssh-3' } as never)
     expect(rendered[0]?.text).toContain('started background job ssh-3')
+  })
+})
+
+/** engine.ls() 的真实返回形状（含 POSIX mode —— schema 必须声明它）。 */
+function dirEntriesFromSftp(): Array<Record<string, unknown>> {
+  return [
+    { name: 'myweb', type: 'dir', size: 4096, mtimeMs: 1758000000000, mode: 0o040755 },
+    { name: 'app.log', type: 'file', size: 2048, mtimeMs: 1758000000001, mode: 0o100644 },
+  ]
+}
+
+describe('ssh_ls 输出边界', () => {
+  it('输出通过 dsh-tools 校验器（mode 声明回归）', async () => {
+    const tool = sshLsTool(stubRuntime({ ls: () => dirEntriesFromSftp() }))
+    const output = await tool.execute({ path: '/root' })
+    assertLosslessJson(output)
+    // 宿主 createSuccessResult 对 output.schema 无条件校验，违反即 ToolOutputError。
+    const violations = validateJsonSchemaValue(
+      tool.output.schema as never,
+      output as never,
+      'value',
+    )
+    expect(violations).toEqual([])
+  })
+
+  it('输出字段与 schema 声明严格一致（mode 保留）', async () => {
+    const tool = sshLsTool(stubRuntime({ ls: () => dirEntriesFromSftp() }))
+    const output = await tool.execute({ path: '/root' })
+    const schema = tool.output.schema as unknown as {
+      properties: { entries: { items: { properties: Record<string, unknown> } } }
+    }
+    const declared = new Set(Object.keys(schema.properties.entries.items.properties))
+    expect(declared.has('mode')).toBe(true)
+    for (const entry of output.entries) {
+      for (const key of Object.keys(entry)) expect(declared.has(key)).toBe(true)
+    }
+    expect((output.entries[0] as Record<string, unknown>).mode).toBe(0o040755)
+  })
+
+  it('空目录同样通过校验', async () => {
+    const tool = sshLsTool(stubRuntime({ ls: () => [] }))
+    const output = await tool.execute({ path: '/empty' })
+    expect(validateJsonSchemaValue(tool.output.schema as never, output as never, 'value')).toEqual([])
+  })
+})
+
+describe('ssh_workspace create 注册', () => {
+  // createPlaceholderDir 写真实 fs；把占位根重定向到临时目录，别污染 ~/.dsh/remote。
+  const withTempRoot = async (fn: () => Promise<void>): Promise<void> => {
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'dsh-ws-test-'))
+    const previous = process.env.DSH_REMOTE_ROOT
+    process.env.DSH_REMOTE_ROOT = dir
+    try {
+      await fn()
+    } finally {
+      if (previous === undefined) delete process.env.DSH_REMOTE_ROOT
+      else process.env.DSH_REMOTE_ROOT = previous
+      await fs.promises.rm(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('create 调用注入的 register 并回传占位路径（issue #2 回归）', async () => {
+    await withTempRoot(async () => {
+      const register = vi.fn()
+      const tool = sshWorkspaceTool(stubRuntime({}), register)
+      const out = await tool.execute({ action: 'create', host: 'server', path: '/home/user/project' })
+      expect(register).toHaveBeenCalledTimes(1)
+      // 标题与 typert 端点一致：<host> / <末段目录名>
+      expect(register.mock.calls[0]?.[1]).toBe('server / project')
+      // 注册的 localPath 必须就是返回的占位路径（否则注册的是另一个目录）
+      expect(register.mock.calls[0]?.[0]).toBe(out.localPath)
+      expect(out.action).toBe('create')
+      expect(out.host).toBe('server')
+      expect(out.remotePath).toBe('/home/user/project')
+    })
+  })
+
+  it('未注入 register（headless）时不报错', async () => {
+    await withTempRoot(async () => {
+      const tool = sshWorkspaceTool(stubRuntime({}), undefined)
+      const out = await tool.execute({ action: 'create', host: 'server', path: '/srv/app' })
+      expect(out.action).toBe('create')
+    })
+  })
+
+  it('list 动作不触发注册', async () => {
+    const register = vi.fn()
+    const tool = sshWorkspaceTool(stubRuntime({}), register)
+    await tool.execute({ action: 'list' })
+    expect(register).not.toHaveBeenCalled()
   })
 })

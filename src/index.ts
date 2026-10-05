@@ -20,7 +20,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import SshRuntime from './ssh-service'
 import { sshExecTool, sshListTool, sshLsTool, sshReadTool, sshWorkspaceTool, sshWriteTool } from './tools'
 import { installHostSettings } from './host-settings'
-import { HOST_TYPERT_CONTRIBUTION, REMOTE_SERVICE, SshRemoteService } from './typert'
+import { HOST_TYPERT_CONTRIBUTION, REMOTE_SERVICE, registerPlaceholderWorkspace, SshRemoteService } from './typert'
 import { installSessionRouting, sessionSectionText } from './session-tools'
 import { routeByCwd } from './workspace'
 
@@ -101,7 +101,10 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
     sshLsTool(runtime),
     sshReadTool(runtime),
     sshWriteTool(runtime),
-    sshWorkspaceTool(runtime),
+    // 占位工作区注册走宿主 ctx（工具注册在插件级，拿不到注入的 scope）。
+    sshWorkspaceTool(runtime, (localPath, title) => {
+      void registerPlaceholderWorkspace(ctx, localPath, title)
+    }),
   ]
   let disposeTools: (() => void) | undefined
   let disposeSection: (() => void) | undefined

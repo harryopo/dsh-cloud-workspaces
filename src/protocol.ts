@@ -92,7 +92,8 @@ export interface RemoteDirEntry {
   type: 'dir' | 'file' | 'other'
   size: number
   mtimeMs: number
-  mode?: number
+  /** Raw POSIX mode from SFTP attrs. Always set by engine.ls. */
+  mode: number
 }
 
 /** Remote file read result (editor open). */
