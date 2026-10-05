@@ -1,9 +1,11 @@
 /**
- * Build config for dsh-remote-ide (host-only edition): ESM node bundles for
- * the plugin entry (index), the invariant companion, the remote-tools subpath
- * (consumed by the `remote` agent preset), and the remote capability services
- * (ssh-service / fs-ssh / subprocess-ssh — mounted by the preset composition,
- * never globally, so ctx.fs / ctx.subprocess stay local in ordinary sessions).
+ * Build config for dsh-cloud-workspaces (host half): ESM node bundles for the
+ * plugin entry (index), the invariant companion, the subpath exports other
+ * DSH packages may consume, and the capability services. The entry is
+ * index.ts — cloud sessions get their remote tools from the agent/created
+ * hook in session-tools.ts, not from replacing ctx.fs / ctx.subprocess.
+ * fs-ssh / subprocess-ssh remain entries only as the reference implementation
+ * of that retired seam-replacement route; nothing mounts them.
  * SDK peers resolve from the dsh profile at runtime, never bundled.
  */
 import { defineConfig } from 'tsdown'

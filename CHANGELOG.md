@@ -2,6 +2,24 @@
 
 All notable changes to `dsh-cloud-workspaces` are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **`ssh_ls` failed on every non-empty directory** — `engine.ls()` returns the raw POSIX `mode` on each entry, but the tool's output schema declared `additionalProperties: false` without it, so the host's output validation rejected every listing with `ToolOutputError`. The schema now declares `mode` (and `RemoteDirEntry.mode` is correctly non-optional).
+- **`ssh_workspace create` did not register the new workspace** — the settings-card path registered placeholders with DSH's workspace registry, the tool path did not, so a workspace bound from chat never appeared in "select workspace". Both paths now share one registration helper. (Closes good-first issue #2.)
+- Removed a hint pointing at `ssh_config`, a tool that is not registered.
+
+### Changed
+- **Settings card and workspace picker restyled to match the host design system.** The primary button used to render as white-on-dark text on a light fill (and would have inverted to invisible in the light theme); buttons, cards, tabs, inputs and the section hierarchy now use the host's semantic `--dsw-*` tokens, so both themes adapt as pairs. Removed 14 hardcoded Apple-light fallbacks, dropped the `color-mix` greying on cards, de-emphasised the monospace font on host addresses, and tightened the section copy.
+- Remote delete now uses an in-app confirmation dialog instead of the native `window.confirm`, matching the rest of the UI. The dialog traps focus, closes on `Escape`, and renders the remote path as inert text.
+- Client-side error logging now reports only the error message instead of dumping the error object, keeping host configuration out of the browser console.
+
+### Security
+- Added `scripts/verify-client-security.mjs` — an executable check (29 assertions) covering HTML-writing sinks, native dialogs, untrusted remote data staying in text position, secret hygiene and destructive-action safeguards. Run with `node scripts/verify-client-security.mjs`.
+
+### Documentation
+- Corrected the READMEs (en + zh) which still described the retired `ctx.fs` / `ctx.subprocess` seam-replacement architecture as the shipped headline feature; the real mechanism is per-session shadow tools registered via the `agent/created` hook. Also corrected the `preset scoping` claim (the `ssh_*` tools are global, not preset-gated), the credential-storage wording (passwords live only in the 0600 store, never in settings), and stale test/version counts across `agents.md`, `docs/REPO-WIKI.md`, `docs/README.md` and `memory/`.
+
 ## [v0.3.0] — 2026-09-18
 
 ### Added

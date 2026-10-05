@@ -10,3 +10,4 @@ dist/
 *.log
 .playwright-mcp/
 .mimosa/
+.qoder/

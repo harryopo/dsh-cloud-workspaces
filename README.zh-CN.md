@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-120%20%E5%8D%95%E6%B5%8B%20%2B%2029%20E2E-brightgreen.svg)](#开发)
+[![Tests](https://img.shields.io/badge/tests-126%20%E5%8D%95%E6%B5%8B%20%2B%2029%20E2E-brightgreen.svg)](#开发)
 
 **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的云端工作区插件。**
 
@@ -32,7 +32,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 ### 云端工作区（主打）
 
 - **双 tab 工作区选择器** —— 「本机」/「云端 (SSH)」两个 tab；云端工作区经 DSH 官方工作区注册表收养，在选择器里显示为 `主机 / 路径`。
-- **工具集透明重定向** —— 会话 cwd 落在云端占位目录下时，插件把官方 `ctx.fs`（13 个文件方法）与 `ctx.subprocess` 换成 SSH 实现。本地会话完全不受影响；接缝按会话作用域替换。
+- **工具集透明重定向** —— 会话 cwd 落在云端占位目录下时，插件把同名的 `bash` / `read` / `write` / `edit` / `glob` / `grep` / `read_image` 注册进**该会话自己的 agent scope**——agent 照旧调用它早已熟悉的工具名，每次调用却落在远程执行。本地会话完全不受影响：遮蔽只作用于云端会话，会话一旦不是云端的，立刻回落到官方本地工具。
 - **官方 UI 的遮蔽工具** —— 会话级远程 `bash` / `read` / `write` / `edit` / `glob` / `grep` 只注册进该会话的 agent scope，并实现官方 `presentCall` / `presentResult` 渲染器——聊天里的工具行渲染成真正的终端卡 / 阅读卡，可展开、可复制、原生观感。
 - **后台任务** —— `bash` / `ssh_exec` 传 `run_in_background: true` 即把命令起成 DSH 一等公民 job（官方 `job_output` / `job_list` / `job_kill`、完成通知、任务 UI 全部现成）：安装、构建、测试套件在服务器上跑，永不撞执行超时。
 
@@ -45,7 +45,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 
 ### Agent 工具
 
-- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` —— 任意会话里的显式远程操作（按 preset 作用域控制）。
+- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` —— 任意会话（本地或云端）里的显式远程操作。可选传 `alias`；不传则跟随最近激活的连接。
 - `ssh_workspace` —— 在对话里创建云端工作区绑定。
 
 ### 连接层
@@ -55,7 +55,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 
 ### 安全
 
-- 主机存于 DSH 设置命名空间；密码字段是**只写密文**——浏览器拿到的是脱敏视图，永远读不回凭据。
+- 主机配置存放在 `~/.dsh/` 下的用户私有文件（仅属主可读写）。**口令绝不写入 DSH 设置存储**——只落在该文件里；旧版本遗留在设置中的明文口令会在启动时迁出并剥离。设置卡只见脱敏视图，永远读不回凭据。
 - 远程会话按作用域隔离：遮蔽工具只存在于绑定了云端工作区的会话中，本地工作区永不受影响。
 - 远程读文件有上限；大文件流式读头部而非整读进内存。
 
@@ -95,14 +95,18 @@ dsh plugin --profile web add link:C:\path\to\dsh-cloud-workspaces
 ```
 DSH host 进程 (Node)
 ┌────────────────────────────────────────────────────────────┐
-│  ctx.fs ────────► fs-ssh 适配器 ───────┐                    │
-│  ctx.subprocess ► subprocess-ssh ──────┤   接缝按会话替换   │
-│  遮蔽工具 ──────► 会话作用域 ───────────┘                    │
-│                                          │                 │
-│  SshEngine (ssh2) ◄──────────────────────┘                 │
-│   ├─ 连接池 / keepalive / 断线重建                          │
-│   ├─ exec · SFTP CRUD · PTY                                │
-│   └─ ProxyJump 跳板                                        │
+│  agent/created 钩子                                        │
+│    └─ 会话 cwd 是云端占位目录？                             │
+│         └─ 把遮蔽 bash/read/write/edit/                     │
+│            glob/grep/read_image 注册进该 agent 的 ctx      │
+│                          │                                │
+│  全局 ssh_* 工具  ───────┤  （任意会话，可显式指定 alias）  │
+│                          ▼                                │
+│  SshRuntime (ctx.ssh) —— 唯一连接所有者                    │
+│   └─ SshEngine (ssh2)                                      │
+│      ├─ 连接池 / keepalive / 断线重建                      │
+│      ├─ exec · SFTP CRUD · PTY                             │
+│      └─ ProxyJump 跳板                                     │
 └──────────────┬─────────────────────────────────────────────┘
                │ SSH (exec / sftp / pty)  —— 仅此而已
         ┌──────▼──────┐
@@ -113,7 +117,7 @@ DSH host 进程 (Node)
 经官方 Typert remote 桥与 host 通信。
 ```
 
-- **Host 半**（`src/`，TypeScript）：`SshEngine`、`fs-ssh` / `subprocess-ssh` 适配器、会话工具注册、Typert remote 端点、设置 schema。
+- **Host 半**（`src/`，TypeScript）：`SshEngine` + `SshRuntime`、云端会话的遮蔽工具注册、全局 `ssh_*` 工具、Typert remote 端点、后台任务生产者、设置 schema。
 - **Client 半**（`client/`，纯 ESM React `createElement`）：经官方插槽（`settings.section`、`workspace.*`）注入设置卡与双 tab 选择器。无 JSX 构建步骤，只用 `--dsw-*` 设计 token。
 
 ## 开发
@@ -121,15 +125,15 @@ DSH host 进程 (Node)
 ```sh
 pnpm build        # tsc d.ts + tsdown 产物
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest —— 100 个单测
-node scripts/e2e-real-server.mjs   # 25 个 E2E（真 SSH，WSL sshd 127.0.0.1:2223）
+pnpm test         # vitest —— 126 个单测
+node scripts/e2e-real-server.mjs   # 29 个 E2E（真 SSH，WSL sshd 127.0.0.1:2223）
 ```
 
 ## 路线图
 
 - [x] SSH 引擎：连接池、keepalive、断线重建、ProxyJump
 - [x] 云端工作区：双 tab 选择器、占位目录、官方收养
-- [x] `ctx.fs` / `ctx.subprocess` 透明重定向
+- [x] 工具集透明重定向（遮蔽工具按云端会话注册）
 - [x] 官方终端卡/阅读卡的遮蔽工具
 - [x] 远程后台任务（`ctx.jobs` 生产者）：`run_in_background` + `job_output` / `job_list` / `job_kill`
 - [x] 设置卡：主机、密码/密钥认证（keyboard-interactive）、连接测试、远端目录浏览器

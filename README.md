@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-120%20unit%20%2B%2029%20e2e-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-126%20unit%20%2B%2029%20e2e-brightgreen.svg)](#development)
 
 **Cloud workspaces for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
 
@@ -34,7 +34,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 ### Cloud workspaces (the headline)
 
 - **Dual-tab workspace picker** — "Local" and "Cloud (SSH)" tabs; cloud workspaces are adopted by DSH's official workspace registry and show up in every session picker as `host / path`.
-- **Transparent toolset redirect** — when a session's cwd falls under a cloud placeholder, the plugin replaces the official `ctx.fs` (13 file methods) and `ctx.subprocess` seams with SSH-backed implementations. Local sessions are untouched; the seam is swapped per session scope.
+- **Transparent toolset redirect** — when a session's cwd falls under a cloud placeholder, the plugin registers same-named `bash` / `read` / `write` / `edit` / `glob` / `grep` / `read_image` tools **into that session's own agent scope**, so the agent keeps calling the tools it already knows while every call executes on the server. Local sessions are untouched — the shadowing is per session, and falls back to the official local tools the moment a session isn't a cloud one.
 - **Shadow tools with official UI** — session-scoped remote `bash` / `read` / `write` / `edit` / `glob` / `grep` register in the agent's scope only, and implement the official `presentCall` / `presentResult` presenters, so chat rows render as real terminal / read / search cards — expandable, copyable, native.
 - **Background jobs** — `run_in_background: true` on `bash` / `ssh_exec` starts the command as a first-class DSH job (`job_output` / `job_list` / `job_kill`, completion notices, jobs UI): installs, builds and test suites run on the server without ever hitting an exec timeout.
 
@@ -47,7 +47,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 
 ### Agent tools
 
-- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` — explicit remote access from any session (subject to preset scoping).
+- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` — explicit remote access from any session, local or cloud. They take an optional `alias`; without one they follow the most recently activated connection.
 - `ssh_workspace` — create a cloud workspace binding from chat.
 
 ### Connection layer
@@ -57,7 +57,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 
 ### Security
 
-- Hosts are stored in DSH's settings namespace; password fields are **write-only secrets** — the browser receives a redacted view and can never read stored credentials back.
+- Host configuration lives in a private per-user file under `~/.dsh/` with owner-only permissions. **Passwords are never written to DSH's settings store** — they go only to that file, and any plaintext passwords left in settings by earlier versions are migrated out and stripped on startup. The settings card sees a redacted view and can never read a stored credential back.
 - Remote sessions are scoped: shadow tools exist only inside sessions bound to a cloud workspace. Local workspaces are never affected.
 - Remote file reads are capped; large files stream instead of buffering into memory.
 
@@ -97,14 +97,18 @@ Restart `dsh web` after installing or rebuilding (the host half loads in the Nod
 ```
 DSH host process (Node)
 ┌────────────────────────────────────────────────────────────┐
-│  ctx.fs ────────► fs-ssh adapter ──────┐                    │
-│  ctx.subprocess ► subprocess-ssh ──────┤   seam swap per    │
-│  shadow tools ─► session scope ────────┘   session scope   │
-│                                          │                 │
-│  SshEngine (ssh2) ◄──────────────────────┘                 │
-│   ├─ connection pool / keepalive / rebuild                 │
-│   ├─ exec · SFTP CRUD · PTY                                │
-│   └─ ProxyJump hops                                        │
+│  agent/created hook                                        │
+│    └─ cloud-placeholder session?                           │
+│         └─ register shadow bash/read/write/edit/           │
+│            glob/grep/read_image into THAT agent's ctx      │
+│                          │                                │
+│  global ssh_* tools  ─────┤  (any session, explicit alias) │
+│                          ▼                                │
+│  SshRuntime (ctx.ssh) — single connection owner           │
+│   └─ SshEngine (ssh2)                                      │
+│      ├─ connection pool / keepalive / rebuild              │
+│      ├─ exec · SFTP CRUD · PTY                             │
+│      └─ ProxyJump hops                                     │
 └──────────────┬─────────────────────────────────────────────┘
                │ SSH (exec / sftp / pty)  — nothing else
         ┌──────▼──────┐
@@ -115,7 +119,7 @@ Browser (dsh web GUI): settings card + cloud-workspace picker
 speak to the host over the official Typert remote bridge.
 ```
 
-- **Host half** (`src/`, TypeScript): `SshEngine`, `fs-ssh` / `subprocess-ssh` adapters, session tool registration, Typert remote endpoints, settings schema.
+- **Host half** (`src/`, TypeScript): `SshEngine` + `SshRuntime`, shadow-tool registration for cloud sessions, the global `ssh_*` tools, Typert remote endpoints, background-job producer, settings schema.
 - **Client half** (`client/`, plain ESM React via `createElement`): settings section + dual-tab workspace picker injected through official slots (`settings.section`, `workspace.*`). No JSX build step, `--dsw-*` design tokens only.
 
 ## Development
@@ -123,15 +127,15 @@ speak to the host over the official Typert remote bridge.
 ```sh
 pnpm build        # tsc d.ts + tsdown bundle
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest — 100 unit tests
-node scripts/e2e-real-server.mjs   # 25 E2E tests over a real SSH server (WSL sshd on 127.0.0.1:2223)
+pnpm test         # vitest — 126 unit tests
+node scripts/e2e-real-server.mjs   # 29 E2E checks over a real SSH server (WSL sshd on 127.0.0.1:2223)
 ```
 
 ## Roadmap
 
 - [x] SSH engine: pooling, keepalive, broken-connection rebuild, ProxyJump
 - [x] Cloud workspaces: dual-tab picker, placeholder dirs, official adoption
-- [x] Transparent `ctx.fs` / `ctx.subprocess` redirect
+- [x] Transparent toolset redirect (shadow tools registered per cloud session)
 - [x] Shadow tools with official terminal/read cards
 - [x] Background remote jobs (`ctx.jobs` producer): `run_in_background` + `job_output` / `job_list` / `job_kill`
 - [x] Settings card: hosts, password/key auth (keyboard-interactive), test, remote dir browser

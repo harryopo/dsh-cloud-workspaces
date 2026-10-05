@@ -41,8 +41,9 @@ agent-presets/
   remote-legacy/    # [已下线] 旧「服务器开发」preset 模板，仅参考
 scripts/
   start-dsh-web.ps1       # 一键启动 dsh web（4500；⚠️ npx 下载慢，见下）
-  e2e-real-server.mjs     # 真机验收：node scripts/e2e-real-server.mjs [alias]（25 项检查）
-tests/          # vitest 105 用例（含 session-tools/engine-connection 并发与自愈回归）
+  e2e-real-server.mjs     # 真机验收：node scripts/e2e-real-server.mjs [alias]（29 项检查）
+  verify-client-security.mjs  # client 半安全断言：node scripts/verify-client-security.mjs（29 项）
+tests/          # vitest 126 用例（含 session-tools/engine-connection 并发与自愈回归、tools 输出边界）
 memory/         # 项目记忆（进度/反馈/踩坑/参考）——最新进展在 project 文件顶部节
 docs/           # 03 方案书（纲领）+ 06 开发方法论（依据），索引见 docs/README.md
 ```
@@ -99,16 +100,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 
 ## 当前状态与下一步（2026-09-18 · 后台任务落地）
 
-- ✅ **远程后台任务**（v0.3.0）：遮蔽 `bash` 与 `ssh_exec` 获得 `run_in_background` → 官方 `ctx.jobs` 生产者（kind=`ssh`，`src/job-runner.ts`：常驻通道 wrapper + dd 增量读远端日志 + 杀进程组 TERM→KILL）。`job_output/job_list/job_kill`、完成通知、jobs UI 全部白拿官方实现。**120/120 单测 + E2E 29/29（新增后台 4 检查）+ typecheck + build 全绿**。设计 `docs/07-design-remote-jobs.md`，计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md`
+- ✅ **远程后台任务**（v0.3.0）：遮蔽 `bash` 与 `ssh_exec` 获得 `run_in_background` → 官方 `ctx.jobs` 生产者（kind=`ssh`，`src/job-runner.ts`：常驻通道 wrapper + dd 增量读远端日志 + 杀进程组 TERM→KILL）。`job_output/job_list/job_kill`、完成通知、jobs UI 全部白拿官方实现。**126/126 单测 + E2E 29/29（新增后台 4 检查）+ typecheck + build 全绿**。设计 `docs/07-design-remote-jobs.md`，计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md`
 - ✅ **发布闭环**（08-31）：GitHub + npm **0.2.1** + Discussions #5229；**09-05 安全加固**（口令存储收敛/ACL/read_image/钩子修复，v0.2.2）；**09-18 文档对齐 + Repo Wiki**（`docs/REPO-WIKI.md`）
-- ✅ **真机验证基线**（08-31 免 preset 全链路；09-18 后台任务 E2E 全通）：双 tab / 官方收养 / 钩子 6+1 遮蔽工具实锤
+- ✅ **真机验证基线**（08-31 免 preset 全链路；09-18 后台任务 E2E 全通）：双 tab / 官方收养 / 钩子 7 遮蔽工具实锤
 - ✅ **GitHub 冲星部署**（09-18 夜）：v0.3.0 Release + topics 扩充 + Discussions #5229 更新评论；门面四件套（CHANGELOG.md / issue 模板 / CONTRIBUTING 重写 / star-history）；social preview 图 `docs/assets/social-preview.png`（**待用户手动上传**到 Settings→General→Social preview）；推广成稿 `docs/promo/`（掘金/V2EX + Show HN，**待用户发布**）；good-first issues #2 #3 #4
 - ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布（0.2.2/0.3.0 积压；**按 `docs/npm-publish.md` 三步即发**，只差新令牌）③ `~/.dsh` 目录 ACL 收紧决策
-- 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
+- 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）**且 output schema 必须与实际输出逐字段对齐**（宿主 `createSuccessResult` 无条件校验 `output.schema`，`additionalProperties:false` 下未声明字段一律 `ToolOutputError`——09-30 查了两天就漏在这一半）；**client 半只准 `h()` 渲染，零 HTML sink，远端返回的路径/目录名是不可信输入只能进 children 文本**（改完跑 `node scripts/verify-client-security.mjs`）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
 
 ## 参考资料（本地）
 
 - DSH 源码：`.research/dsh-source/deepseek-harness-master/`（**rc.5 旧版，仅历史参考；契约以 npm 0.1.1-rc.2 的 d.ts 为准**）
-- 官方文档：`docs/user/develop/`（插件开发）+ `docs/cookbook/`（extension-cookbook、adding-a-tool）
+- 官方文档：npm 包内 `node_modules/@deepseek-ai/*/lib/types/*.d.ts` 是**权威契约**（本仓库的坑多数来自读错全局包 stub）；方法论沉淀见 `docs/06-DSH插件开发方法论.md`
 - 项目记忆：`memory/`（进度/反馈/踩坑/参考）
 - 竞品（2026-08-28 调研）：`dsh-ssh/dsh-ssh`（工具层遮蔽路由）、`CrazyShout/dsh-ssh-remote`（服务层 monkey-patch）、`flymysql/dsh-remote`（SFTP 镜像）

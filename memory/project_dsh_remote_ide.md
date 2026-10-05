@@ -1,6 +1,111 @@
 # 项目进展 — dsh-cloud-workspaces
 
-**Date**: 2026-09-18（GitHub 冲星部署收口）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-10-01（UI 重构完成）· **Category**: project · **Source**: conversation + git history
+
+## 2026-10-01（续）：UI 重构落地（保守·贴合宿主 + 安全加固）
+
+### 改了什么（只动 `client/index.js`，`src/` 零改动 → 126 测试不受影响）
+1. **CSS 变量层**：新增 13 个 `--dri-*` 语义变量（值全指向宿主 token，**零 Apple 硬编码 fallback**），挂在 `.dri-section, .dri-pickerOverlay` 两个根上（fixed 定位的选择器不是前者的后代，必须双挂）。
+2. **主按钮修复**（核心）：`button-primary-fill` 当底色是错的（明色主题会翻成白底白字）。改为主流的 **ghost 风**：底 `bg-layer-2` + 字 `label-primary` + 1px 边，靠**字重 600** 而非实心填充分层。实测深色下 `#f9fafb` on `#2c2c2e`（对比度 13.34），与 DSH 自有按钮**完全一致**。
+3. 卡片去 `color-mix` 混色（脏灰薄膜）、去双层 box-shadow、圆角 16→12；hover 只改边框不浮起。
+4. 层次分级：主标题 20/700→18/600，子标题 13/600+次级色。⚠️ 子标题元素是 `h2`，需写 `.dri-section h2.dri-subtitle` 才不被 `h2` 规则覆盖（我第一版写成 `.dri-subtitle` 被压回 18px，截图才发现）。
+5. 主机地址去等宽字体（DSH 全站比例字体）；pill 改 `bg-layer-2`+边框、圆点 opacity 1；tab 新增 `.dri-tab`/`.dri-tab-active`（ghost-active + inset ring），不再复用主按钮。
+6. 文案收紧：两段 intro 从 62px 两行压到一行；选择器说明同样压缩。
+7. **原生 `window.confirm` → 自绘 `ConfirmDialog`**：焦点落确认键、Tab 焦点陷阱、Escape 关闭、`removing` 防双击。
+8. **错误日志脱敏**（安全）：新增 `errText()`，12 处 `String((error && error.message) || error)` 全替换；`console.error` 只打字符串。
+
+### 验证结果
+- **126/126 测试 + typecheck + build 全绿**；重启 4500 后 client bundle 48250→52718 bytes
+- **深色主题实测**：主按钮/普通按钮 600/500 字重分明、卡片 `#232324`、对比度全部 ≥AA（最低 danger 4.24，AA 需 4.5——`#f25a5a` 是宿主自带值，未改）
+- **明色主题实测**（注入 light token 验证成对翻转）：主按钮 `#1d1d1f` on `#f5f5f7`、卡片白底深字、次级 `#86868b` —— **此前的「白底白字」风险已消除**
+- **浏览器 console 全程 clean**（`Log.entryAdded` 零告警）
+- **安全**：`scripts/verify-client-security.mjs` **29 项断言全过**（HTML sink / 原生弹窗 / 远端数据只进文本位置 / 密钥卫生 / 危险操作护栏）。⚠️ 写该脚本时发现**注释里的 `window.confirm` 会让 grep 误报** → 脚本先剥注释再扫。已确认不进 npm tarball（`files[]` 不含 `scripts/`）。
+
+### 未完成
+- **真机确认框实测被环境挡住**：`192.168.45.200` 在 UI 验证期间掉线（22 端口不可达），E2E 独立复现同样 `Timed out while waiting for handshake` → **与本次改动无关**。恶意目录名（`<img src=x onerror=alert(1)>`）的**运行期**转义实测因此未完成，只有静态断言 + React 语义保证。**待真机恢复后补测**。
+- `docs/screenshots/` 三张旧截图已过时（架构不同），属发布内容，未动。
+
+### 踩坑
+- 见 `errors_learnings.md` 17-20 条（token 必须在真实元素上量 / 原生 CDP 驱动 / Git Bash 调 wsl 两个坑 / WSL sshd 排查序）。
+- **CDP 点击必须 `Input.dispatchMouseEvent`**，且定位元素要用**精确文本匹配 + 可见性过滤**（`getBoundingClientRect().width>0`）；用 `querySelectorAll('*')` + `children.length===0` 找「浅色」这类选项卡文字**找不到**（不是 leaf 节点），AX 树里也没有（`role=radio` 一个都没有）——最终用注入 light token 的方式验证明色主题。
+- **4500 端口的 `netstat` 查 LISTENING 有时返回空**，得用 `</dev/tcp/127.0.0.1/4500` 探活。
+
+## 2026-10-01：真机链路复验通过 + UI 诊断完成（重构待实施）
+
+### 连接链路：E2E 29/29 全通 ✅（用户接上虚拟机后实测）
+- 目标 `192.168.45.200`（openEuler，164ms 建连）。`node scripts/e2e-real-server.mjs 192.168.45.200` **29/29 全过**：引擎/SFTP/PTY/ctx.fs/占位路由/ctx.subprocess/后台任务（wrapper+dd 增量+killed SIGTERM）。
+- 09-30 的 `ssh_ls` schema 修复**已在运行产物中确认**：`lib/tools-CRYEE5s6.js` 里 `mtimeMs` 后紧跟 `mode: { type: "integer", required: true }`。
+- 调试日志实锤钩子链路：`agent/created: cwd=…\192.168.45.200\Lw → remote` → `remote session routed … (7 shadow tools)`。
+- **wsl-e2e 仍不可用**（与插件无关）：WSL root shadow 条目是 `!$y$…`（`!` = 账户锁定），需 `passwd` 重设才能跑。sshd 本身正常（`/run/sshd` 缺失需 `mkdir -p`，Git Bash 调 wsl 要加 `MSYS_NO_PATHCONV=1` 否则 `/usr/sbin/sshd` 被改写成 `C:/Program Files/…`）。
+
+### ⚠️ 排查工具链沉淀（本轮新增，重要）
+- **无 playwright/puppeteer 依赖**，但 `~/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe` 存在 → 用**原生 CDP over WebSocket** 驱动（`--remote-debugging-port` + page target 的 `webSocketDebuggerUrl`，不要用 browser 级 `Target.createTarget`，那条路返回 `undefined`）。
+- CDP 点击必须用 `Input.dispatchMouseEvent`（DSH 前端对合成 click 的 actionability 会失败）；`document.querySelector` 找元素 + 取 `getBoundingClientRect` 中心坐标。
+- **Git Bash 会把含中文的 wsl 输出标成 binary**，看不到内容 → 改用 `node -e` + `execFileSync(..., {encoding:'buffer'})` 读，或重定向到文件再 Read。
+- 截图脚本用完即删（`cdp-*.mjs` / `ui-*.png` 不许留在仓库）。
+
+### UI 诊断（CDP 实测 computed style，非目测）— 用户反馈「太丑、不整洁大气」
+**自我纠错（务必记住）**：初测读 `documentElement` 的 `--dsw-alias-*` 全返回空，误判「token 未解析、fallback 生效」。**错**——token 定义在宿主作用域选择器（`._button_*` 等 class 规则）里，**必须在真实 DSH 元素上 `getComputedStyle` 量**。实测全部正常解析（`bg-base #151517` / `label-primary #f9fafb` / `label-primary-foreground #0f1115` …）。**真正问题是语义映射错误。**
+
+10 项问题（严重度降序）：
+1. **主按钮白底黑字**（高）：`.dri-btn-primary` 用 `button-primary-fill`(#f9fafb 浅) 配 `label-primary-foreground`(#0f1115 深)。DSH 实际是**深底浅字 ghost 风**（实测 DSH「测试」按钮 `color:#f9fafb` / `bg:#151517@92%`），从不用实心填充。**明色主题下这组会翻成白底白字 → 不可见**。
+2. **卡片 `color-mix` 混色发灰**（高）：`.dri-card` bg 算出 `color(srgb .137 .137 .141 / .88)`，脏灰薄膜。
+3. 14 处硬编码 Apple 浅色 fallback（中）——token 能解析，fallback 纯噪音；真危害是明色下 token 缺失会静默退化成苹果浅色。
+4. `.dri-cardSub` 等宽字体显示 `user@host:port`（中）——DSH 全站比例字体，等宽仅用于真实路径。
+5. intro 文案冗长（实测 552×62px 占两行）（中）。
+6. `dri-section h2` 与 `dri-subtitle` 同为 20px/700，两级标题无层次（中）。
+7. pill「密码已保存」这个最关键状态做成最弱视觉（8% 灰底 + opacity .6）（中）。
+8. 远端删除用原生 `window.confirm`（`client/index.js:447`，全仓唯一非自绘 UI）（中）。
+9. 选择器 tab 复用 `dri-btn-primary` 表示选中（低）——DSH 用 `button-ghost-active-fill` + `inset 0 0 0 1px border-l2`。
+10. 两处 `console.error` 打印 error 对象（`:728`/`:840`）（低·安全）。
+
+**宿主设计基准（实测）**：设置行高 44px、label 14px/400、面板宽 564px / `padding:16px 0`、按钮 12px/500/10px 圆角/1px 边。
+
+**已验证存在的 token**（勿用 `--dsw-alias-button-ghost-fill`——**不存在**）：`bg-base/layer-1/layer-2/layer-3`、`label-primary/secondary/tertiary/dimmed/caption`、`label-primary-foreground`、`border-l1/l2/l3/l4`、`interactive-bg-hover/active`、`button-primary-fill/hover/dimmed`、`button-ghost-active-fill/hover/border`、`button-elevated-fill`、`state-success/error-primary`、`brand-primary/text`、`font-family`。
+
+### 安全审计结论（用户强调「特别注意安全性」）
+**现状无注入面**：`grep` 无 `innerHTML`/`eval`/`new Function`/`dangerouslySetInnerHTML`/`document.write`；无 `href`/`src`/`location.*`/`window.open`；口令编辑态传 `password: ''`（`client/index.js:369`）不预填；`listHosts` 脱敏；`autoComplete:'new-password'`；口令只在 0600 store。
+**本轮硬约束**：① 零新增 HTML 注入点（确认框只用 `h()`）② **远端目录名/主机名/路径是不可信输入**，只经 React children 转义，禁止拼进任何属性 ③ 确认框目标路径只作文本节点 ④ 删除限单个直接子项 ⑤ 错误只打 `error.message` 不打对象 ⑥ 归零 `window.confirm/alert/prompt` ⑦ 不新增任何持久化/凭据入 URL ⑧ 确认框焦点管理（打开时焦点落确认键，`Escape` 关闭——删除不可逆，焦点错位=误删）。
+
+### 用户已决策
+- 重启时机 = **现在直接重启**（4500 无承载对话，本轮新起）
+- 改造幅度 = **保守·贴合宿主**（只动 `client/index.js`，不碰 `src/`）
+- 计划文件：`C:\Users\Administrator\.qoder-cn\plans\noble-fjord-merlin.md`
+
+## 2026-09-30：系统调研 → 修 1 个真 BUG + 全量文档漂移对齐
+
+### 起因
+用户要求「先系统调研再修复」。派 3 个 Explore agent（文档漂移 / 技术债 / 发布就绪；第三个中断由主 agent 自行补完）交叉核验 6100 行代码 + 全部文档 + npm tarball。
+
+### 🔴 发现：`ssh_ls` 对任何非空目录 100% 抛异常（前次审计漏掉）
+- **根因**：`engine.ls()`（`engine.ts:729`）每个 entry 返回带 `mode`；`tools.ts` 的 output schema 声明 `additionalProperties:false` 却**未声明 `mode`** → 宿主 `dsh-tools` 的 `createSuccessResult`（`lib/index.js:3405-3407`）无条件校验 output.schema，违反即 `ToolOutputError`。
+- **为何 08-30 审计没抓到**：那次只验了边界的「lossless JSON」那一半（`jsonSafe` 剥离 undefined —— `ssh_ls` 通过），**没验「schema 与输出一致」那一半**。且 `tests/tools.test.ts` 当时零覆盖 `ssh_ls`。项目纪律「跨边界输出必须过 jsonSafe」把两半混为一谈了。
+- **实锤**：用 `validateJsonSchemaValue` 跑真实形状 → 2 violations。修复按用户决策**在 schema 补 `mode`**（保留信息；`typert.listRemoteDir` 也返回它，行为不变）。连带把 `protocol.ts` 的 `RemoteDirEntry.mode` 从可选改为必填（`engine.ls` 是唯一构造点且必设，tsc 也因此报了真实类型问题）。
+- **回归测试**：`tests/tools.test.ts` 走 **dsh-tools 自己的校验器**断言 `violations === []`（覆盖整类问题，不只是这一个字段）。
+
+### 其他代码修复
+- **`ssh_workspace` create 漏注册 workspaceRegistry**（= good-first issue #2，可关）：typert 路径注册了、工具路径没注册，导致从对话里建的工作区不出现在「选择工作区」。修法：把注册逻辑抽成 `typert.ts` 的 `registerPlaceholderWorkspace()` 导出函数，两条路径共用；工具通过可选回调 `register` 注入（工具注册在插件级，拿不到注入的 scope，故由 `index.ts` 用宿主 ctx 闭包注入）。
+- **`ssh_config` 悬空指引**：`tools.ts:32` 的空列表文案引导用户用一个从未注册的工具。改为指向真实的两个添加入口。
+
+### 文档漂移（用户选了「全量」）
+- **双语 README 的头条特性仍在宣传已下线的接缝替换架构**（`ctx.fs`/`ctx.subprocess` seam swap，还打了 `[x]`）——代码从不替换这两个接缝，真实机制是 `agent/created` 遮蔽工具。架构图、Host 半描述、Roadmap 三处一并改正。已用用户画像里的经验反向对齐措辞（工具名保留英文）。
+- 另修：`preset scoping` 措辞（与代码相反，`ssh_*` 是无门控全局工具）、Security 节口令位置（09-05 后口令只在 0600 store，settings 永不含）、测试数字（100→126、25→29，含两处 badge）、`agents.md` 的「6+1 遮蔽工具」→7、指向不存在的 `docs/user/develop/`、`docs/REPO-WIKI.md` 文件数与版本、`docs/07-design-remote-jobs.md` 状态「待评审」→已实现且 DoD 勾选、`docs/README.md` 重写（停在 M4 且差异化写的是已废弃路线）、`memory/MEMORY.md` 置顶无废弃标记的 08-28 三层架构图（加 ❌ 标记 + 现行图）、`errors_learnings.md` 少一个点的 preset 路径、`reference_ecosystem.md` 旧仓库名、`feedback_ui.md` 的「UI 全删」结论、`tsdown.config.ts` 头注、`package.json` keywords 里的 `agent-preset`。
+- **记忆文件教训**：MEMORY.md 是 agent 首读文件，把废弃架构图**置顶且无废弃标记**危害最大。以后架构图变更必须同时处理旧图。
+
+### 发布就绪核查结论（可发，无阻塞）
+- tarball 78 文件 / 290 kB，**零 secret 风险**（扫 .env/.pem/.npmrc/settings.yaml/口令文件，无命中）
+- manifest 干净：repository/homepage 指向改名后的 `dsh-cloud-workspaces`；`ssh2` 已 bundle、`@deepseek-ai/*` 全部 external 正确
+- **改名一致性双向正确**：内部标识刻意保留旧名（`dsh-remote-ide-hosts` / `~/.dsh/dsh-remote-ide.json` / `dsh-remote-ide-ping`）保老用户数据，外部标识全为新名（client id / patch yml）
+- 唯一阻塞仍是 npm 令牌过期（`docs/npm-publish.md` 三步手册就绪）
+
+### 本次调研发现但**按用户决策未修**（已记入 REPO-WIKI §8 与下方）
+`glob`/`grep` 30s 超时不检查 `timedOut`（静默报 0 匹配）· `connectHops` 泄漏 · `connectClient` reject 不 end · 远端 `/tmp` 无 TTL + 不可写时误报 exit 1 · 全局 `activeAlias` 跨会话串台（遮蔽工具免疫）· `window.confirm` · 选择器状态保留
+
+### 验证
+**126/126 单测**（120 + 6 新增）+ typecheck + build 全绿。
+
+### 踩坑
+- 写 `ssh_workspace` 测试时忘隔离 `DSH_REMOTE_ROOT`，`createPlaceholderDir` 写真实 fs → 在用户真实 `~/.dsh/remote/server/` 建了两个占位目录。已加 `withTempRoot` 包裹并清理（该目录 09-30 16:33 创建，确属本次产物；`192.168.45.200` / `wsl-e2e` 是旧的，未动）。**教训：任何调 `createPlaceholderDir` 的测试必须重定向 `DSH_REMOTE_ROOT`。**
 
 ## 2026-09-18（晚）：GitHub 冲星全套部署（goal 驱动，一夜收口）
 

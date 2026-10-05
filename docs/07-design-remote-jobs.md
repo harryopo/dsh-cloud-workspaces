@@ -1,6 +1,6 @@
 # 07 · 设计：SSH 远程后台任务（ctx.jobs 生产者）
 
-**日期**：2026-09-18 · **状态**：待评审 · **基线**：`51a7e10`（v0.2.2，105/105 测试全绿）
+**日期**：2026-09-18 · **状态**：✅ 已实现并合入（v0.3.0，commit `e62f802`；用户评审通过后落地）· **基线**：`51a7e10`（v0.2.2）
 **决策记录见 §9；验收标准见 §10。**
 
 ---
@@ -162,7 +162,7 @@ printf %s $$ > <pidfile> && exec bash -c '<command>' > <logfile> 2>&1
 | `src/index.ts` | ctx.get('jobs') + 两处注入 + 文案一句 |
 | `package.json` / `tsdown.config.ts` | dsh-jobs 依赖 + external |
 | `tests/job-runner.test.ts`（新）/ `tests/session-tools.test.ts` / `tests/tools.test.ts` | §7.1-2 |
-| `scripts/e2e-real-server.mjs` | +3 检查（25→28） |
+| `scripts/e2e-real-server.mjs` | +4 检查（25→29；实际比计划多一项取消路径） |
 | `AGENTS.md` / `memory/` / `docs/REPO-WIKI.md` | 收尾更新 |
 
 ## 9. 决策记录
@@ -175,8 +175,8 @@ printf %s $$ > <pidfile> && exec bash -c '<command>' > <logfile> 2>&1
 
 ## 10. 验收标准（DoD）
 
-- [ ] §7 全部测试绿（单测 + 回归 + E2E 28/28 + typecheck + build）
-- [ ] 真机：云端会话一条后台命令 → `job_output` 增量可见 → 完成 notice 到达（用户执行，机制层日志实锤）
-- [ ] 断连/孤儿路径 detail 如实（不谎称停止）
-- [ ] AGENTS.md 状态节、memory 顶部节、REPO-WIKI §4/§8 同步更新
-- [ ] 分主题提交并推送
+- [x] §7 全部测试绿（单测 + 回归 + **E2E 29/29** + typecheck + build）
+- [x] 断连/孤儿路径 detail 如实（不谎称停止）
+- [x] AGENTS.md 状态节、memory 顶部节、REPO-WIKI §4/§8 同步更新
+- [x] 分主题提交并推送
+- [ ] 真机：云端会话一条后台命令 → `job_output` 增量可见 → 完成 notice 到达（**待用户执行**，机制层已由 E2E 29/29 覆盖；此项耗用户 LLM 额度）

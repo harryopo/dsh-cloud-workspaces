@@ -1,6 +1,6 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-09-18（GitHub 冲星部署收口：门面四件套 + social preview + 推广成稿 + good-first issues×3；npm 发布手册 `docs/npm-publish.md` 就绪待令牌）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-10-01（真机 E2E 29/29 复验通过 + UI 诊断完成待重构；CDP 排查工具链沉淀）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
@@ -10,42 +10,54 @@
 | `user_profile.md` | 用户工作方式画像（能力受限直接给替代方案并执行、改需求零拖泥带水） |
 | `feedback_ui.md` | 用户 UI 反馈与最终决策（UI 全删，纯 host 工具） |
 | `reference_ecosystem.md` | 生态参考、关键路径、modlens 识图方法 |
-| `errors_learnings.md` | 14 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律、Trae safe_rm 白名单） |
+| `errors_learnings.md` | 20 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律、**DSH token 必须在真实元素上量**、**原生 CDP 驱动 Chromium**、Git Bash 调 wsl 的两个坑、Trae safe_rm 白名单） |
 
-## 最新状态（2026-09-18 核对）
+## 最新状态（2026-10-01）
 
-- **验证基线**：105/105 测试 + typecheck + build 全绿，工作区干净（f111ed3）
-- **安全加固（09-05）已落地**：口令存储收敛（settings 永不落口令，唯一权威 = 0600 store + icacls ACL + 启动迁移）、host-id 污染防护、ctx.on 钩子订阅修复、read_image 遮蔽工具、UI presenters 展开修复；v0.2.2 本地就绪
-- **发布状态**：GitHub + npm **0.2.1** + Discussions #5229 已闭环；**0.2.2 未发布**（npm 令牌过期，待用户更新后 `pnpm publish`）
-- **待用户决策**：`~/.dsh` 目录 ACL 收紧（icacls 断继承，影响沙箱工具读取）
-- 细节见 `project_dsh_remote_ide.md` 顶部节（09-05 审计全记录 + 截图工作流 + npm 403 新政踩坑）
+- **连接链路**：E2E **29/29 全通**（真机 `192.168.45.200`，164ms 建连）；09-30 的 `ssh_ls` 修复已在运行产物中确认
+- **UI 重构已完成**（保守贴合宿主 + 安全加固）：主按钮 ghost 风修复（明色主题不再白底白字）、卡片去混色、两级标题分层、tab 语义、14 处硬编码 fallback 清除、`window.confirm` → 自绘确认框（焦点陷阱 + Escape）、错误日志脱敏。**深浅双主题实测通过，console clean**，`scripts/verify-client-security.mjs` 29 项安全断言全过。
+- **待补测**：恶意目录名的**运行期**转义实测（真机在验证期间掉线，22 端口不可达，与改动无关）——静态断言已过，运行期待真机恢复
+- **验证基线**：**126/126 测试 + typecheck + build 全绿**
+- **发布状态**：GitHub + npm **0.2.1** 已闭环；**0.2.2 与 0.3.0 均未发布**（本地已是 0.3.0；令牌过期，按 `docs/npm-publish.md` 三步即发）
+- **待用户决策**：`~/.dsh` 目录 ACL 收紧；`docs/screenshots/` 三张旧截图已过时
+- 细节见 `project_dsh_remote_ide.md` 顶部节（10-01 UI 重构 / 链路复验 / 09-30 调研修复）
 
-## 架构概览（2026-08-28）
+## 架构概览（2026-08-30 转型后 · 现行）
+
+> ⚠️ 2026-08-28 的「三层架构 / preset 组合」图**已废弃**——preset 于 08-30 下线。现行架构见 `agents.md`，摘要：
 
 ```
-dsh-remote-ide — DSH「服务器开发模式」三层架构
+dsh-cloud-workspaces — DSH「云端工作区」（免 preset 透明模式）
 
-┌─ HOST PLANE（全局，所有会话可见）──────────────────────────────────┐
-│  src/index.ts    插件入口：注册 SshRuntime + 5 个 ssh_* 工具       │
-│  src/ssh-service.ts  SshRuntime (ctx.ssh) — Cordis Service        │
-│  src/engine.ts   ssh2 引擎：连接池/ProxyJump/exec/SFTP/PTY       │
-│  src/tools.ts    ssh_list / ssh_exec / ssh_ls / ssh_read / ssh_write │
-│  src/store.ts    主机配置 ~/.dsh/dsh-remote-ide.json (0600)       │
-└────────────────────────────────────────────────────────────────────┘
-           ↓ ctx.ssh 共享连接池（单一所有者）
-┌─ PRESET-SCOPED（仅「服务器开发」会话，isolate realm）─────────────┐
-│  src/fs-ssh.ts           SshFileSystem → ctx.fs (13 方法远程适配) │
-│  src/subprocess-ssh.ts   SshSubprocessRuntime → ctx.subprocess    │
-│                          (resolveExecutable/spawn/spawnTerminal)  │
-│  agent.cordis.yml  remote-caps isolate group:                     │
-│    fs-ssh + subprocess-ssh + tool-fs + tool-fs-search +           │
-│    str-replace-editor + pty + terminal-bash                      │
-└────────────────────────────────────────────────────────────────────┘
+┌─ HOST PLANE（全局，所有会话可见）──────────────────────────────┐
+│  src/index.ts     插件入口：SshRuntime + 6 个 ssh_* 工具       │
+│  src/ssh-service.ts  SshRuntime (ctx.ssh) — 唯一连接所有者     │
+│  src/engine.ts    ssh2 引擎：连接池/ProxyJump/exec/SFTP/PTY    │
+│  src/tools.ts     ssh_list/exec/ls/read/write/workspace       │
+│  src/job-runner.ts  后台任务生产者 → 官方 ctx.jobs (kind ssh)  │
+│  src/store.ts     主机配置 ~/.dsh/dsh-remote-ide.json (0600)   │
+└───────────────────────────────────────────────────────────────┘
+           ↓ ctx.ssh 共享连接池
+┌─ SESSION SCOPE（仅云端占位工作区的会话）───────────────────────┐
+│  src/session-tools.ts  agent/created 钩子 → 在 payload.agent.ctx│
+│    注册同名遮蔽工具（agent scope，绝不退回插件级 ctx）          │
+│    bash/read/write/edit/glob/grep/read_image（7 个）          │
+│    + 动态 system prompt 段                                    │
+└───────────────────────────────────────────────────────────────┘
+
+  [legacy 参考，不部署] src/fs-ssh.ts · src/subprocess-ssh.ts
+                       agent-presets/remote-legacy/
 ```
 
-**技术栈**：TypeScript 5.7 · Node ≥22 · ssh2 1.16 · Cordis 4.0 · tsdown 0.22 · vitest 3.0
-**依赖关系**：ssh2（运行时）；@deepseek-ai/dsh-{fs,subprocess,settings,system-prompt,tools}（peer）
-**构建**：`pnpm build`（tsc 声明 + tsdown 产物，16 文件）；测试：52/52 全过
+**技术栈**：TypeScript 5.7 · Node ≥22 · ssh2 1.17 · Cordis 4.0 · tsdown 0.22 · vitest 3.2
+**依赖关系**：ssh2（运行时，会 bundle）；@deepseek-ai/dsh-*（peer，运行时从 profile 解析，**不 bundle**）
+**构建**：`pnpm build`（tsc 声明 + tsdown 产物）；测试：126/126 全过
+
+## 历史：三层架构（2026-08-28 · ❌ 已废弃，勿据此理解现状）
+
+> 保留仅为历史脉络。preset 已于 2026-08-30 下线，`fs-ssh` / `subprocess-ssh` 改为参考实现不再部署；
+> 「isolate realm + 接缝替换」路线被「agent/created 遮蔽工具」取代。**接缝替换从未上线过**——
+> 双语 README 曾长期据此描述产品，09-30 已改正。
 
 ## 最新状态（2026-08-28 同步时）
 

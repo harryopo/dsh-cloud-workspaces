@@ -1,14 +1,14 @@
 # Repo Wiki — dsh-cloud-workspaces
 
-> 生成：2026-09-18（同日更新：后台任务落地）· 基线 commit `51a7e10` + v0.3.0 后台任务 · 120/120 测试 + E2E 29/29 全绿实测
-> 来源：全仓库文件逐个读取核验（src 15 文件 / client / tests 10 / scripts 3 / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
+> 生成：2026-09-18（同日更新：后台任务落地）· 基线 commit `51a7e10` + v0.3.0 后台任务 · 126/126 测试 + E2E 29/29 全绿实测
+> 来源：全仓库文件逐个读取核验（src 16 文件 / client / tests 11 / scripts 3 / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
 
 ## 1. 项目概述
 
 - **定位**：DeepSeek Harness（DSH）的「云端工作区」双面插件。用户在「添加工作区」选「云端（SSH）」→ 绑定远程目录为工作区 → 该会话的官方工具（bash/read/write/edit/glob/grep + read_image）**透明落远程 Linux 服务器**，与本地体验一致。
 - **业务目标**：免 preset、免远程安装（标准 sshd 即可，无 vscode-server 式远端组件）的 agent 远程开发；差异化 = 全生态唯一的「官方工具透明重定向」（竞品靠镜像同步或私有工具名）。
 - **技术栈**：TypeScript 5.7.2 · Node ≥22（es2024）· ssh2 1.17.0 · Cordis 4.0.1（DI/Scope/事件总线）· @deepseek-ai/* 0.1.1-rc.2（peer，运行时从 profile 解析）· tsdown 0.22.2（打包）· vitest 3.2.7 · schemastery 3.x。
-- **运行/部署**：`dsh plugin --profile web add dsh-cloud-workspaces`（npm）或 `link:` 源码；`dsh web --port 4500` 承载；host 半改动需重启 web 进程。发布：npm `dsh-cloud-workspaces`（线上 0.2.1，本地 0.2.2 待发）+ GitHub `harryopo/dsh-cloud-workspaces`（Apache-2.0）。
+- **运行/部署**：`dsh plugin --profile web add dsh-cloud-workspaces`（npm）或 `link:` 源码；`dsh web --port 4500` 承载；host 半改动需重启 web 进程。发布：npm `dsh-cloud-workspaces`（线上 0.2.1，本地 0.3.0 待发，0.2.2 跳过直接发 0.3.0）+ GitHub `harryopo/dsh-cloud-workspaces`（Apache-2.0）。
 - **命名注意**：包名/仓库已改 `dsh-cloud-workspaces`，**内部标识全部保留旧名 `dsh-remote-ide`**（settings namespace、存储文件、typert 前缀、cordis 插件名）以保数据兼容——新代码勿改。
 
 ## 2. 仓库目录结构
@@ -44,8 +44,8 @@
 │   └── subprocess-ssh.ts  [legacy] ctx.subprocess seam 替换（参考，不部署）
 ├── client/index.js        client 半：设置卡 + 双 tab 选择器（createElement，无 JSX）
 ├── agent-presets/remote-legacy/  [已下线] 旧 preset 模板
-├── scripts/               e2e-real-server.mjs（25 项真机验收）/ debug-spawn.mjs / start-dsh-web.ps1
-├── tests/                 vitest 105 用例（fake ssh2 harness）
+├── scripts/               e2e-real-server.mjs（29 项真机验收）/ debug-spawn.mjs / start-dsh-web.ps1
+├── tests/                 vitest 126 用例（fake ssh2 harness）
 ├── docs/                  03 方案书（纲领）/ 06 开发方法论 / screenshots/ / REPO-WIKI.md（本文件）
 └── memory/                项目记忆（编年进展/踩坑/用户画像/UI 决策/生态参考）
 ```
@@ -122,7 +122,7 @@ flowchart LR
 
 **测试基建**：`vi.mock('ssh2')` + MiniEmitter/FakeClient/FakeStream 可编程假传输（connect 行为可控 ready/error、instances 计数）——新引擎测试直接复用此模式。
 
-**脚本**：`e2e-real-server.mjs`（25 项真机全链路验收，驱动 lib/ 产物 + 真实 cordis Context）；`debug-spawn.mjs`（wrapper 发布诊断）；`start-dsh-web.ps1`（4500 一键起）。
+**脚本**：`e2e-real-server.mjs`（29 项真机全链路验收，驱动 lib/ 产物 + 真实 cordis Context）；`debug-spawn.mjs`（wrapper 发布诊断）；`start-dsh-web.ps1`（4500 一键起）。
 
 **接口（typert 9 端点 + 6 全局工具 + 7 遮蔽工具）**：见 §5/§3；host 贡献与 client 描述符一一对应（已核验 9=9）。
 
@@ -168,11 +168,11 @@ flowchart LR
 ## 8. 技术债务、限制、TODO 清单
 
 **发布/决策（待用户）**：① npm 未发布（本地 0.3.0 vs 线上 0.2.1，0.2.2/0.3.0 积压；令牌过期）② `~/.dsh` 目录 ACL 断继承待决策（影响沙箱工具读取）。
-**架构限制**：单 `activeAlias` 全局语义——多主机多会话时 ssh_* 无别名回退跟随最后激活者（遮蔽工具不受影响）；`connect()` 失败路径建 2 个传输对象（瞬时浪费不泄漏）；M0 遗留：broken 重建成功后 engine state 语义未统一。
-**功能缺口**：`ssh_workspace` create 不注册 workspaceRegistry（typert 路径有）；远端删除用原生 `window.confirm`；选择器关闭后状态保留；`fs-ssh` 的 createIfAbsent 依赖 GNU `ln -T`。
-**文档漂移**：`CONTRIBUTING.md` 整篇过时（描述已删除的浏览器面板/gen:css/routes.ts）；`docs/README.md` 里程碑状态停在 M4 前；README「100 unit tests」实为 120、Security 节「口令在 settings namespace」措辞未跟上 09-05 收敛；`protocol.ts` 的 `REMOTE_API*` 常量已死（仅测试引用）；`session-tools.ts` 一行孤儿注释（debugLog 提取遗留）。
+**架构限制**：单 `activeAlias` 全局语义——遮蔽工具按会话闭包 hostId 免疫，但**全局 `ssh_*` 无别名回退会跟随最后激活的会话**（`session-tools.ts` 每个 agent/created 都会改写它），多主机并发时无别名的 `ssh_exec` 可能落到错误主机；M0 遗留：broken 重建成功后 engine state 语义未统一。
+**功能缺口**：`glob`/`grep` 硬编码 30s 超时且**不检查 `timedOut`**——大仓超时会被报成「0 匹配」，与真实空结果无法区分；`connectHops` 无 try/finally，多跳链中途失败泄漏已建立的 client（`openPoolRecord` 有同款修复，此处漏）；`connectClient` reject 时不 `end()` 掉那个 client（疑似 fd 泄漏，ssh2 自身回收行为未验证）；远端 `/tmp` 无 TTL 清扫（issue #4），且 `/tmp` 不可写时 pid 写入失败会被报成「completed, exit code: 1」，与命令自身失败无法区分；远端删除用原生 `window.confirm`；选择器关闭后状态保留；`fs-ssh` 的 createIfAbsent 依赖 GNU `ln -T`。
+**文档漂移（09-30 已修）**：~~README 描述已下线的接缝替换架构~~、~~`preset scoping` 措辞与代码相反~~、~~Security 节口令位置~~、~~测试/版本数字（105/100/25/52、0.2.2）~~、~~`agents.md` 指向不存在的 `docs/user/develop/`~~、~~`memory/MEMORY.md` 置顶的废弃三层架构图~~ 均已对齐；`CONTRIBUTING.md` 与 `protocol.ts` 的 `REMOTE_API*` 死常量仍待清理。
 **测试缺口**：subprocess 锚定回归被 Mimosa 钩子拦截未补（E2E 覆盖）；readFile/writeFile 新分支无单测（E2E 覆盖）。
-**Roadmap（README 未勾）**：~~后台远程任务 `ctx.jobs`~~ ✅（09-18 v0.3.0，见 §4 后台任务）、服务器 ripgrep 探测调优、SSH 隧道（本地端口转发）。
+**Roadmap（README 未勾）**：服务器 ripgrep 探测调优（issue #3）、SSH 隧道（本地端口转发）。
 **已知坑 12 条**：全列于 AGENTS.md（WinNAT 端口/junction 空格/tsdown clean/Mimosa 误报/同文件串行/vitest fake 泄漏/搜内层/lefthook 死钩子…）。
 
 ## 9. 复用开发指引
