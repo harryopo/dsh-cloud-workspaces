@@ -67,6 +67,20 @@ window.__ModuleLoader__.load({
       const e = res && typeof res === 'object' ? res.error : null
       return (e && typeof e === 'object' && typeof e.message === 'string' && e.message) || fallback
     }
+    /**
+     * 错误转字符串：只取 message（叠一层 stack 首行）。绝不把 error 对象丢进
+     * console —— 它可能挂着主机配置/连接上下文，整对象 dump 等于泄进浏览器。
+     */
+    function errText(value) {
+      if (value === null || value === undefined) return 'unknown error'
+      if (typeof value === 'string') return value
+      if (typeof value.message === 'string' && value.message) {
+        const stack = typeof value.stack === 'string' ? value.stack : ''
+        const first = stack.split('\n')[0]
+        return first && first.indexOf(value.message) !== -1 ? first : value.message
+      }
+      try { return String(value) } catch { return 'unprintable error' }
+    }
     /** typert 调用超时保护：宿主侧挂起时给出可见错误，而不是无限转圈（卡退观感）。 */
     function withTimeout(promise, ms, label) {
       const guarded = Promise.resolve(promise)
@@ -112,117 +126,206 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------------- css
 
+    // 语义层：全部指向宿主 --dsw-* token。不写死 Apple 浅色 fallback——token
+    // 缺失时宁可继承宿主，也让明色主题成对翻转（bg 变白时 fg 自动变深）。
+    // 挂在两个根上：设置区块与 fixed 定位的工作区选择器（后者不是前者的后代）。
     const CSS = `
-      .dri-section { padding: 4px 6px 24px; color: var(--dsw-alias-label-primary, #1d1d1f); }
-      .dri-section h2 { font-size: 20px; margin: 0 0 6px; font-weight: 700; letter-spacing: -0.01em; }
-      .dri-intro { margin: 0 0 20px; font-size: 13px; color: var(--dsw-alias-label-secondary, #6e6e73); line-height: 1.6; }
-      .dri-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-      .dri-error { color: var(--dsw-alias-state-error-primary, #d70015); font-size: 13px; margin: 0 0 12px; }
-      .dri-empty { border: 1.5px dashed var(--dsw-alias-border-l2, #d2d2d7); border-radius: 16px; padding: 40px 20px;
-        text-align: center; color: var(--dsw-alias-label-tertiary, #86868b); font-size: 13px; line-height: 1.7; }
-      .dri-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-      .dri-card { border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.07)); border-radius: 16px; padding: 14px 16px;
-        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 88%, transparent);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.04);
-        transition: transform 0.15s ease, box-shadow 0.15s ease; }
-      .dri-card:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.05), 0 10px 28px rgba(0,0,0,0.07); }
+      .dri-section, .dri-pickerOverlay {
+        --dri-surface:   var(--dsw-alias-bg-layer-1);
+        --dri-surface-2: var(--dsw-alias-bg-layer-2);
+        --dri-border:    var(--dsw-alias-border-l1);
+        --dri-border-2:  var(--dsw-alias-border-l2);
+        --dri-fg:        var(--dsw-alias-label-primary);
+        --dri-fg-2:      var(--dsw-alias-label-secondary);
+        --dri-fg-3:      var(--dsw-alias-label-tertiary);
+        --dri-hover:     var(--dsw-alias-interactive-bg-hover);
+        --dri-accent:    var(--dsw-alias-brand-primary);
+        --dri-danger:    var(--dsw-alias-state-error-primary);
+        --dri-ok:        var(--dsw-alias-state-success-primary);
+        --dri-mono:      ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        color: var(--dri-fg);
+      }
+      .dri-section h2 { font-size: 18px; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.01em; }
+      .dri-intro { margin: 0 0 16px; font-size: 12px; color: var(--dri-fg-2); line-height: 1.6; }
+      .dri-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+      .dri-error { color: var(--dri-danger); font-size: 12px; margin: 0 0 12px; }
+      .dri-empty { border: 1px dashed var(--dri-border-2); border-radius: 12px; padding: 32px 20px;
+        text-align: center; color: var(--dri-fg-3); font-size: 12px; line-height: 1.7; }
+
+      .dri-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+      .dri-card { border: 1px solid var(--dri-border); border-radius: 12px; padding: 12px 14px;
+        background: var(--dri-surface); transition: border-color 0.15s ease; }
+      .dri-card:hover { border-color: var(--dri-border-2); }
       .dri-cardHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-      .dri-cardTitle { font-size: 14px; font-weight: 600; letter-spacing: -0.005em; }
-      .dri-cardSub { font-size: 12px; color: var(--dsw-alias-label-tertiary, #86868b); margin-top: 3px; font-family: var(--dsw-font-family, ui-monospace, SFMono-Regular, monospace); }
-      .dri-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 10px; border-radius: 999px;
-        background: color-mix(in srgb, var(--dsw-alias-label-secondary, #6e6e73) 8%, transparent);
-        color: var(--dsw-alias-label-secondary, #6e6e73); font-weight: 500; }
-      .dri-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%;
-        background: currentColor; opacity: 0.6; }
-      .dri-pill-ok { background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #1d9d6e) 12%, transparent);
-        color: var(--dsw-alias-state-success-primary, #1d9d6e); }
-      .dri-actions { display: flex; gap: 8px; align-items: center; }
-      .dri-btn { font-size: 12px; padding: 5px 14px; border-radius: 10px; border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12));
-        background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 92%, transparent); color: var(--dsw-alias-label-primary, #1d1d1f);
-        cursor: pointer; font-weight: 500; transition: background 0.15s ease, transform 0.1s ease; }
-      .dri-btn:hover { background: var(--dsw-alias-interactive-bg-hover, #f5f5f7); }
-      .dri-btn:active { transform: scale(0.97); }
-      .dri-btn-primary { background: var(--dsw-alias-button-primary-fill, #0071e3); border-color: transparent;
-        color: var(--dsw-alias-label-primary-foreground, #fff); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
-      .dri-btn-primary:hover { background: var(--dsw-alias-button-primary-hover, #0077ed); }
-      .dri-btn-danger { color: var(--dsw-alias-state-error-primary, #d70015); border-color: transparent; background: transparent; }
-      .dri-btn-danger:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #d70015) 8%, transparent); }
-      .dri-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
-      .dri-testResult { margin-top: 12px; font-size: 12px; padding: 9px 12px; border-radius: 12px; display: flex;
-        justify-content: space-between; align-items: center; gap: 8px; }
-      .dri-testOk { background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #1d9d6e) 10%, transparent);
-        color: var(--dsw-alias-state-success-primary, #1d9d6e); }
-      .dri-testFail { background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #d70015) 9%, transparent);
-        color: var(--dsw-alias-state-error-primary, #d70015); }
-      .dri-close { border: none; background: transparent; cursor: pointer; color: inherit; font-size: 14px; padding: 2px 4px;
-        border-radius: 6px; opacity: 0.7; }
-      .dri-close:hover { opacity: 1; background: rgba(0,0,0,0.05); }
-      .dri-form { display: flex; flex-direction: column; gap: 14px; margin-top: 16px;
-        border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.07)); border-radius: 16px; padding: 18px;
-        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 88%, transparent);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.04); }
+      .dri-cardTitle { font-size: 14px; font-weight: 600; }
+      /* 主机地址用比例字体（与宿主一致）；等宽只留给真实路径/代码。 */
+      .dri-cardSub { font-size: 12px; color: var(--dri-fg-3); margin-top: 2px; }
+
+      .dri-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 9px;
+        border-radius: 999px; border: 1px solid var(--dri-border); background: var(--dri-surface-2);
+        color: var(--dri-fg-2); font-weight: 500; white-space: nowrap; }
+      .dri-pill::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+      .dri-pill-ok { border-color: transparent; color: var(--dri-ok); }
+
+      .dri-actions { display: flex; gap: 6px; align-items: center; }
+
+      /* 按钮走宿主 ghost 风：深底浅字 + 1px 边，主按钮靠字重与更亮的边分层。
+         不用 button-primary-fill（浅色实心）——明色主题下会翻成白底白字。 */
+      .dri-btn { font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 8px;
+        border: 1px solid var(--dri-border-2); background: var(--dri-surface-2);
+        color: var(--dri-fg); cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease; }
+      .dri-btn:hover { background: var(--dri-hover); }
+      .dri-btn:focus-visible { outline: 2px solid var(--dri-accent); outline-offset: 2px; }
+      .dri-btn:disabled { opacity: 0.45; cursor: default; }
+      .dri-btn-primary { font-weight: 600; border-color: var(--dsw-alias-border-l3, var(--dri-border-2)); }
+      .dri-btn-danger { color: var(--dri-danger); border-color: transparent; background: transparent; }
+      .dri-btn-danger:hover { background: color-mix(in srgb, var(--dri-danger) 12%, transparent); }
+
+      /* tab 语义：选中用 ghost-active + inset ring（对齐宿主 nav），不占用主按钮。 */
+      .dri-tab { font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 8px; cursor: pointer;
+        border: 1px solid transparent; background: transparent; color: var(--dri-fg-2);
+        transition: background 0.15s ease, color 0.15s ease; }
+      .dri-tab:hover { background: var(--dri-hover); color: var(--dri-fg); }
+      .dri-tab-active { background: var(--dsw-alias-button-ghost-active-fill, var(--dri-surface-2));
+        color: var(--dri-fg); box-shadow: inset 0 0 0 1px var(--dri-border-2); }
+      .dri-tab-active:hover { background: var(--dsw-alias-button-ghost-active-hover, var(--dri-hover)); }
+
+      .dri-testResult { margin-top: 10px; font-size: 12px; padding: 8px 10px; border-radius: 8px;
+        display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      .dri-testOk { background: color-mix(in srgb, var(--dri-ok) 12%, transparent); color: var(--dri-ok); }
+      .dri-testFail { background: color-mix(in srgb, var(--dri-danger) 12%, transparent); color: var(--dri-danger); }
+      .dri-close { border: none; background: transparent; cursor: pointer; color: inherit; font-size: 15px;
+        padding: 2px 6px; border-radius: 6px; opacity: 0.7; line-height: 1; }
+      .dri-close:hover { opacity: 1; background: var(--dri-hover); }
+
+      .dri-form { display: flex; flex-direction: column; gap: 12px; margin-top: 14px;
+        border: 1px solid var(--dri-border); border-radius: 12px; padding: 16px; background: var(--dri-surface); }
       .dri-field { display: flex; flex-direction: column; gap: 5px; }
-      .dri-field label { font-size: 12px; color: var(--dsw-alias-label-secondary, #6e6e73); font-weight: 500; }
-      .dri-field input, .dri-field select { font-size: 13px; padding: 8px 12px; border-radius: 10px;
-        border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12));
-        background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #1d1d1f);
-        transition: border-color 0.15s ease, box-shadow 0.15s ease; outline: none; }
-      .dri-field input:focus, .dri-field select:focus { border-color: var(--dsw-alias-brand-primary, #0071e3);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary, #0071e3) 18%, transparent); }
+      .dri-field label { font-size: 12px; color: var(--dri-fg-2); font-weight: 500; }
+      .dri-field input, .dri-field select { font-size: 13px; padding: 7px 10px; border-radius: 8px;
+        border: 1px solid var(--dri-border-2); background: var(--dsw-alias-bg-base);
+        color: var(--dri-fg); transition: border-color 0.15s ease, box-shadow 0.15s ease; outline: none; }
+      .dri-field input:focus, .dri-field select:focus { border-color: var(--dri-accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--dri-accent) 18%, transparent); }
       .dri-pwWrap { position: relative; display: flex; align-items: center; }
       .dri-pwWrap input { width: 100%; padding-right: 34px; }
       .dri-eye { position: absolute; right: 6px; display: inline-flex; align-items: center; justify-content: center;
         width: 24px; height: 24px; border: none; background: transparent; cursor: pointer; border-radius: 6px;
-        color: var(--dsw-alias-label-tertiary, #86868b); padding: 0; transition: color 0.15s ease, background 0.15s ease; }
-      .dri-eye:hover { color: var(--dsw-alias-label-primary, #1d1d1f); background: var(--dsw-alias-interactive-bg-hover, #f5f5f7); }
-      .dri-field .dri-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary, #86868b); }
-      .dri-formActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-      .dri-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .dri-dirBrowser { margin-top: 16px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.07)); border-radius: 16px; padding: 18px;
-        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 88%, transparent);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.04); }
-      .dri-dirPath { font-family: var(--dsw-font-family, ui-monospace, monospace); font-size: 12px; color: var(--dsw-alias-label-secondary, #6e6e73);
-        margin: 10px 0; word-break: break-all; }
-      .dri-dirList { max-height: 240px; overflow: auto; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.06)); border-radius: 12px;
-        padding: 4px; }
-      .dri-dirRow { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; font-size: 13px;
-        border-radius: 8px; cursor: pointer; transition: background 0.12s ease; }
-      .dri-dirRow:hover { background: var(--dsw-alias-interactive-bg-hover, #f5f5f7); }
-      .dri-dirRow .dri-dirSize { color: var(--dsw-alias-label-tertiary, #999); font-size: 12px; }
-      .dri-dirIcon { display: inline-flex; align-items: center; justify-content: center; width: 20px; margin-right: 6px;
-        color: var(--dsw-alias-label-tertiary, #86868b); font-size: 12px; }
-      .dri-dirDel { border: none; background: transparent; color: var(--dsw-alias-label-tertiary, #86868b); cursor: pointer;
-        font-size: 14px; padding: 0 4px; border-radius: 6px; opacity: 0; transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease; }
+        color: var(--dri-fg-3); padding: 0; transition: color 0.15s ease, background 0.15s ease; }
+      .dri-eye:hover { color: var(--dri-fg); background: var(--dri-hover); }
+      .dri-field .dri-hint { font-size: 11px; color: var(--dri-fg-3); }
+      .dri-formActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+      .dri-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+      .dri-dirBrowser { margin-top: 14px; border: 1px solid var(--dri-border); border-radius: 12px;
+        padding: 16px; background: var(--dri-surface); }
+      .dri-dirPath { font-family: var(--dri-mono); font-size: 12px; color: var(--dri-fg-2);
+        margin: 8px 0; word-break: break-all; }
+      .dri-dirList { max-height: 240px; overflow: auto; border: 1px solid var(--dri-border);
+        border-radius: 8px; padding: 3px; }
+      .dri-dirRow { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        padding: 6px 9px; font-size: 13px; border-radius: 6px; cursor: pointer;
+        transition: background 0.12s ease; }
+      .dri-dirRow:hover { background: var(--dri-hover); }
+      /* 远端目录名不可信：只作文本截断显示，绝不拼进任何属性。 */
+      .dri-dirName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+      .dri-dirRow .dri-dirSize { color: var(--dri-fg-3); font-size: 12px; flex-shrink: 0; }
+      .dri-dirIcon { display: inline-flex; align-items: center; justify-content: center; width: 16px;
+        margin-right: 5px; color: var(--dri-fg-3); font-size: 12px; flex-shrink: 0; }
+      .dri-dirDel { border: none; background: transparent; color: var(--dri-fg-3); cursor: pointer;
+        font-size: 14px; padding: 0 4px; border-radius: 6px; opacity: 0; flex-shrink: 0;
+        transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease; }
       .dri-dirRow:hover .dri-dirDel { opacity: 1; }
-      .dri-dirDel:hover { color: var(--dsw-alias-state-error-primary, #d70015); background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #d70015) 8%, transparent); }
-      .dri-newDir { font-size: 13px; padding: 6px 12px; border-radius: 10px; flex: 1;
-        border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12)); background: var(--dsw-alias-bg-base, #fff);
-        color: var(--dsw-alias-label-primary, #1d1d1f); outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-      .dri-newDir:focus { border-color: var(--dsw-alias-brand-primary, #0071e3);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary, #0071e3) 18%, transparent); }
-      .dri-dirActions { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
-      .dri-created { margin-top: 12px; font-size: 12px; padding: 10px 12px; border-radius: 12px;
-        background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #1d9d6e) 10%, transparent);
-        color: var(--dsw-alias-state-success-primary, #1d9d6e); word-break: break-all; line-height: 1.7; }
-      .dri-wsRow { font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.05)); }
-      .dri-wsRow code { font-family: var(--dsw-font-family, ui-monospace, monospace); }
-      .dri-code { font-family: var(--dsw-font-family, ui-monospace, monospace); }
-      .dri-hint { font-size: 12px; color: var(--dsw-alias-label-tertiary, #86868b); }
-      .dri-subtitle { font-size: 14px; font-weight: 600; margin: 28px 0 4px; letter-spacing: -0.005em; }
-      .dri-pickerOverlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
-        background: rgba(0,0,0,0.35); backdrop-filter: blur(2px); }
-      .dri-picker { width: min(520px, calc(100vw - 48px)); max-height: min(560px, calc(100vh - 64px)); overflow: auto;
-        border-radius: 24px; padding: 20px 22px 16px; color: var(--dsw-alias-label-primary, #1d1d1f);
-        background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 92%, transparent);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 24px 60px rgba(0,0,0,0.22); }
+      .dri-dirDel:hover { color: var(--dri-danger);
+        background: color-mix(in srgb, var(--dri-danger) 10%, transparent); }
+      .dri-newDir { font-size: 13px; padding: 6px 10px; border-radius: 8px; flex: 1; min-width: 0;
+        border: 1px solid var(--dri-border-2); background: var(--dsw-alias-bg-base);
+        color: var(--dri-fg); outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+      .dri-newDir:focus { border-color: var(--dri-accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--dri-accent) 18%, transparent); }
+      .dri-dirActions { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+      .dri-created { margin-top: 10px; font-size: 12px; padding: 9px 11px; border-radius: 8px;
+        background: color-mix(in srgb, var(--dri-ok) 12%, transparent); color: var(--dri-ok);
+        word-break: break-all; line-height: 1.7; }
+      .dri-wsRow { font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--dri-border); }
+      .dri-wsRow code { font-family: var(--dri-mono); }
+      .dri-code { font-family: var(--dri-mono); }
+      .dri-hint { font-size: 12px; color: var(--dri-fg-3); }
+      /* 子分区标题：与主标题拉开权重差（主 18/600，子 13/600 + 次级色）。
+         元素是 h2，需与上面的 .dri-section h2 同等特指度才不被覆盖。 */
+      .dri-section h2.dri-subtitle, .dri-picker h2.dri-subtitle { font-size: 13px; font-weight: 600;
+        color: var(--dri-fg-2); margin: 24px 0 4px; letter-spacing: 0.01em; }
+
+      .dri-pickerOverlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center;
+        justify-content: center; background: var(--dsw-alias-bg-mask-1, rgba(0,0,0,0.4)); }
+      .dri-picker { width: min(520px, calc(100vw - 48px)); max-height: min(560px, calc(100vh - 64px));
+        overflow: auto; border-radius: 16px; padding: 18px 20px 14px; color: var(--dri-fg);
+        background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dri-border-2);
+        box-shadow: 0 24px 60px rgba(0,0,0,0.28); }
       .dri-pickerHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-      .dri-tabs { display: flex; gap: 8px; }
+      .dri-tabs { display: flex; gap: 4px; }
       .dri-pickerBody { display: flex; flex-direction: column; gap: 4px; }
-      .dri-pickLocal { font-size: 14px; padding: 12px 18px; border-radius: 14px; align-self: flex-start; }
-      .dri-pickerFoot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.05)); }
+      .dri-pickLocal { font-size: 13px; padding: 10px 16px; border-radius: 8px; align-self: flex-start; }
+      .dri-pickerFoot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--dri-border); }
+
+      /* 危险操作确认框（替换原生 window.confirm）。路径为远端不可信输入，
+         仅作文本节点渲染 + break-all 防超长撑破布局。 */
+      .dri-confirm { width: min(420px, calc(100vw - 48px)); }
+      .dri-confirmTitle { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+      .dri-confirmBody { font-size: 13px; color: var(--dri-fg-2); line-height: 1.7; margin: 0 0 4px; }
+      .dri-confirmPath { font-family: var(--dri-mono); font-size: 12px; color: var(--dri-fg);
+        background: var(--dri-surface-2); border: 1px solid var(--dri-border); border-radius: 8px;
+        padding: 8px 10px; margin: 8px 0 12px; word-break: break-all; }
     `
 
     // ---------------------------------------------------------- component
+
+    /**
+     * 危险操作确认框（替换原生 window.confirm）。
+     *
+     * 安全：`detail` 来自远端（不可信输入），只能作为 children 文本节点交给
+     * React 转义——本文件禁止 innerHTML / 模板拼 HTML（见文件头纪律）。
+     * 删除不可逆，故打开时把焦点放到确认键，Escape 关闭时焦点不外泄。
+     */
+    function ConfirmDialog({ title, body, detail, confirmLabel, danger, onConfirm, onCancel }) {
+      const confirmRef = useRef(null)
+      const cancelRef = useRef(null)
+
+      useEffect(() => {
+        if (confirmRef.current) confirmRef.current.focus()
+        else if (cancelRef.current) cancelRef.current.focus()
+      }, [])
+
+      useEffect(() => {
+        const onKey = (e) => {
+          if (e.key === 'Escape') { e.stopPropagation(); onCancel() }
+          // 焦点困在框内：模态未确认前不应能 Tab 到背景
+          if (e.key === 'Tab') {
+            const nodes = [confirmRef.current, cancelRef.current].filter(Boolean)
+            if (nodes.length === 0) return
+            const idx = nodes.indexOf(document.activeElement)
+            const next = nodes[(idx + (e.shiftKey ? -1 : 1) + nodes.length) % nodes.length]
+            if (next) { e.preventDefault(); next.focus() }
+          }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [onCancel])
+
+      return h('div', { className: 'dri-pickerOverlay', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title },
+        h('div', { className: 'dri-picker dri-confirm' },
+          h('h2', { className: 'dri-confirmTitle' }, title),
+          h('p', { className: 'dri-confirmBody' }, body),
+          detail ? h('div', { className: 'dri-confirmPath' }, detail) : null,
+          h('div', { className: 'dri-formActions' },
+            h('button', { type: 'button', ref: cancelRef, className: 'dri-btn', onClick: onCancel }, '取消'),
+            h('button', {
+              type: 'button', ref: confirmRef,
+              className: 'dri-btn' + (danger ? ' dri-btn-danger' : ' dri-btn-primary'),
+              onClick: onConfirm,
+            }, confirmLabel))))
+    }
 
     /** 主机行：名称/地址/认证 + 测试/编辑/删除。 */
     function HostRow({ host, hasSecret, onTest, onEdit, onDelete }) {
@@ -237,7 +340,7 @@ window.__ModuleLoader__.load({
             ? { ok: true, message: '连接成功（' + value.latencyMs + 'ms）' }
             : { ok: false, message: (value && value.error) || resError(res, '连接失败') })
         } catch (error) {
-          setResult({ ok: false, message: String((error && error.message) || error) })
+          setResult({ ok: false, message: errText(error) })
         }
         setTesting(false)
       }, [onTest])
@@ -347,7 +450,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'dri-section' },
         h('h2', null, 'SSH 连接'),
         h('p', { className: 'dri-intro' },
-          '配置远程开发主机。之后在「添加工作区」里选「云端（SSH）」即可把服务器目录绑定为工作区——该会话的文件 / 搜索 / 编辑 / 终端全部在该主机上执行，和本地一样（无需选择任何特殊模式）。'),
+          '配置远程开发主机，之后在「添加工作区」里选「云端（SSH）」即可使用。'),
         h('div', { className: 'dri-head' },
           state.error ? h('p', { className: 'dri-error', role: 'alert' }, state.error) : null,
           h('span', null),
@@ -375,7 +478,7 @@ window.__ModuleLoader__.load({
             try {
               res = await saveHost(id, patch)
             } catch (error) {
-              res = { ok: false, error: { message: String((error && error.message) || error) } }
+              res = { ok: false, error: { message: errText(error) } }
             }
             if (!res || res.ok !== true) store.set({ error: resError(res, '保存失败') })
             else { setEditing(null); await load() }
@@ -391,13 +494,12 @@ window.__ModuleLoader__.load({
               try {
                 await deleteHost(pendingDelete); setPendingDelete(null); await load()
               } catch (error) {
-                store.set({ error: String((error && error.message) || error) })
+                store.set({ error: errText(error) })
               }
             } }, '确认删除'))) : null,
 
         h('h2', { className: 'dri-subtitle' }, '远端工作区'),
-        h('p', { className: 'dri-intro' },
-          '选择一个已配置主机，浏览远端目录并绑定为 DSH 工作区；绑定后到「选择工作区」里选返回的本地路径即可。'),
+        h('p', { className: 'dri-intro' }, '浏览服务器目录，一键绑定为工作区。'),
 
         h(DirBrowserSection, {
           hosts,
@@ -412,6 +514,8 @@ window.__ModuleLoader__.load({
       const [browser, setBrowser] = useState(null) // { hostId, path, entries, loading }
       const [created, setCreated] = useState(null)
       const [newDir, setNewDir] = useState('')
+      const [pendingRemove, setPendingRemove] = useState(null) // { hostId, fullPath } 待确认删除
+      const [removing, setRemoving] = useState(false)
       const seq = useRef(0) // 浏览请求序号：乱序返回不覆盖最新目录
 
       const fail = (res, fallback) => { store.set({ error: resError(res, fallback) }) }
@@ -423,7 +527,7 @@ window.__ModuleLoader__.load({
         try {
           res = await withTimeout(listRemoteDir(hostId, nextPath), 20_000, '读取远端目录')
         } catch (error) {
-          res = { ok: false, error: { message: String((error && error.message) || error) } }
+          res = { ok: false, error: { message: errText(error) } }
         }
         if (my !== seq.current) return
         setBrowser({ hostId, path: nextPath, entries: unwrap(res, []) || [], loading: false })
@@ -439,19 +543,27 @@ window.__ModuleLoader__.load({
           if (!res || res.ok !== true) fail(res, '新建文件夹失败')
           else { setNewDir(''); await browseTo(browser.hostId, browser.path) }
         } catch (error) {
-          store.set({ error: String((error && error.message) || error) })
+          store.set({ error: errText(error) })
         }
       }
 
       const doRemove = async (hostId, fullPath) => {
-        if (!window.confirm('删除远端 ' + fullPath + '？\n（仅删除空目录或文件，非空目录请先清空）')) return
+        setPendingRemove({ hostId, fullPath })
+      }
+
+      const confirmRemove = async () => {
+        const target = pendingRemove
+        if (!target || removing) return
+        setRemoving(true)
         try {
-          const res = await withTimeout(removeRemote(hostId, fullPath), 20_000, '删除')
+          const res = await withTimeout(removeRemote(target.hostId, target.fullPath), 20_000, '删除')
           if (!res || res.ok !== true) fail(res, '删除失败')
-          else if (browser) await browseTo(hostId, browser.path)
+          else if (browser) await browseTo(target.hostId, browser.path)
         } catch (error) {
-          store.set({ error: String((error && error.message) || error) })
+          store.set({ error: errText(error) })
         }
+        setRemoving(false)
+        setPendingRemove(null)
       }
 
       const bindWorkspace = async () => {
@@ -461,7 +573,7 @@ window.__ModuleLoader__.load({
           if (value) { setCreated({ localPath: value.localPath }); await reloadPlaceholders() }
           else fail(res, '创建工作区失败')
         } catch (error) {
-          store.set({ error: String((error && error.message) || error) })
+          store.set({ error: errText(error) })
         }
       }
 
@@ -481,14 +593,16 @@ window.__ModuleLoader__.load({
               const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
               void browseTo(browser.hostId, next)
             } },
-              h('span', null, h('span', { className: 'dri-dirIcon' }, '›'), e.name),
+              h('span', { className: 'dri-dirName' },
+                h('span', { className: 'dri-dirIcon' }, '›'), e.name),
               h('button', { className: 'dri-dirDel', 'aria-label': '删除 ' + e.name, onClick: (ev) => {
                 ev.stopPropagation()
-                void doRemove(browser.hostId, (browser.path === '/' ? '' : browser.path) + '/' + e.name)
+                doRemove(browser.hostId, (browser.path === '/' ? '' : browser.path) + '/' + e.name)
               } }, '×')))
           } else {
             dirRows.push(h('div', { key: e.name, className: 'dri-dirRow', style: { cursor: 'default' } },
-              h('span', null, h('span', { className: 'dri-dirIcon', style: { opacity: 0.35 } }, '·'), e.name),
+              h('span', { className: 'dri-dirName' },
+                h('span', { className: 'dri-dirIcon', style: { opacity: 0.35 } }, '·'), e.name),
               h('span', { className: 'dri-dirSize' }, String(e.size))))
           }
         }
@@ -530,6 +644,16 @@ window.__ModuleLoader__.load({
               ' → ',
               h('code', { className: 'dri-code' }, w.remotePath)))) : null,
         ) : null,
+        pendingRemove ? h(ConfirmDialog, {
+          title: '删除远端目录？',
+          body: '仅删除空目录或文件；非空目录请先清空内容。此操作不可撤销。',
+          // 远端路径（不可信输入）只作 children 文本节点，React 负责转义
+          detail: pendingRemove.fullPath,
+          confirmLabel: removing ? '删除中…' : '确认删除',
+          danger: true,
+          onConfirm: () => { void confirmRemove() },
+          onCancel: () => { if (!removing) setPendingRemove(null) },
+        }) : null,
       )
     }
 
@@ -583,7 +707,7 @@ window.__ModuleLoader__.load({
           const path = await deps.pickDirectory()
           if (path) onPicked(path)
         } catch (error) {
-          onError && onError(String((error && error.message) || error))
+          onError && onError(errText(error))
         }
         setLocalBusy(false)
       }
@@ -598,7 +722,7 @@ window.__ModuleLoader__.load({
         } catch (error) {
           if (my !== seq.current) return
           setBrowser({ hostId, path: nextPath, entries: [], loading: false })
-          onError && onError(String((error && error.message) || error))
+          onError && onError(errText(error))
         }
       }
 
@@ -611,7 +735,7 @@ window.__ModuleLoader__.load({
           if (!res || res.ok !== true) onError && onError(resError(res, '新建文件夹失败'))
           else { setNewDir(''); await browseTo(browser.hostId, browser.path) }
         } catch (error) {
-          onError && onError(String((error && error.message) || error))
+          onError && onError(errText(error))
         }
       }
 
@@ -624,7 +748,7 @@ window.__ModuleLoader__.load({
           if (value) onPicked(value.localPath)
           else onError && onError(resError(res, '创建云端工作区失败'))
         } catch (error) {
-          onError && onError(String((error && error.message) || error))
+          onError && onError(errText(error))
         }
         setCreating(false)
       }
@@ -643,14 +767,17 @@ window.__ModuleLoader__.load({
               const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
               void browseTo(browser.hostId, next)
             } },
-              h('span', null, h('span', { className: 'dri-dirIcon' }, '›'), e.name)))
+              h('span', { className: 'dri-dirName' }, h('span', { className: 'dri-dirIcon' }, '›'), e.name)))
           }
         }
         if (browser.loading) dirRows.push(h('div', { key: 'loading', className: 'dri-dirRow', style: { cursor: 'default' } }, '连接中…'))
       }
 
       const tabBtn = (id, label) => h('button', {
-        className: 'dri-btn' + (tab === id ? ' dri-btn-primary' : ''),
+        type: 'button',
+        className: 'dri-tab' + (tab === id ? ' dri-tab-active' : ''),
+        role: 'tab',
+        'aria-selected': tab === id ? 'true' : 'false',
         onClick: () => setTab(id),
       }, label)
 
@@ -681,7 +808,7 @@ window.__ModuleLoader__.load({
                   localBusy ? '等待系统对话框…' : '选择文件夹…'),
                 h('p', { className: 'dri-hint', style: { marginTop: 10 } }, '将打开系统文件夹选择对话框。'))
             : h('div', { className: 'dri-pickerBody' },
-                h('p', { className: 'dri-intro' }, '连接一台 SSH 服务器，把服务器上的目录作为工作区——之后的会话里，文件 / 搜索 / 编辑 / 终端都直接在该服务器上执行，和本地一样。'),
+                h('p', { className: 'dri-intro' }, '把服务器上的目录作为工作区，会话即在该服务器执行。'),
                 addingHost
                   ? h(HostForm, {
                       initial: null,
@@ -724,8 +851,9 @@ window.__ModuleLoader__.load({
         applyInner(ctx)
       } catch (error) {
         // apply 抛错会让整个 client 模块加载失败（选择器/设置卡全挂）——
-        // 必须在 console 留下可辨识的现场。
-        console.error('[dsh-remote-ide] client apply failed:', error)
+        // 必须在 console 留下可辨识的现场。只打 message：error 对象可能挂着
+        // 主机配置等上下文，整对象 dump 会把它们泄进浏览器控制台。
+        console.error('[dsh-cloud-workspaces] client apply failed: ' + errText(error))
       }
     }
 
@@ -759,7 +887,7 @@ window.__ModuleLoader__.load({
           else store.set({ status: 'error', error: resError(hostsRes, '无法读取主机配置') })
           store.set({ placeholders: unwrap(phRes, []) || [] })
         } catch (error) {
-          store.set({ status: 'error', error: String((error && error.message) || error) })
+          store.set({ status: 'error', error: errText(error) })
         }
       }
 
@@ -836,8 +964,7 @@ window.__ModuleLoader__.load({
       // 本插件渲染错误的可观测性：带上前缀，浏览器 console 一眼可辨。
       ctx.effect(() => {
         const onError = (event) => {
-          const message = event && event.error ? String(event.error && event.error.stack || event.error) : String(event && event.message)
-          console.error('[dsh-remote-ide] window error:', message)
+          console.error('[dsh-cloud-workspaces] window error: ' + errText(event && (event.error || event.message)))
         }
         window.addEventListener('error', onError)
         return () => window.removeEventListener('error', onError)
