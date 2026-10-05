@@ -218,6 +218,21 @@ window.__ModuleLoader__.load({
       .dri-formActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
       .dri-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+      /* 测试连接：验证先于持久化。测通才允许保存（产品级不变式）。
+         底色用 surface（与卡片同层）而非 surface-2：state-error-primary 在深色下
+         对 surface-2 只有 4.24:1，达不到 AA；surface 上实测 5.32:1。 */
+      .dri-verify { display: flex; flex-direction: column; gap: 8px; margin-top: 14px;
+        padding: 12px 14px; border-radius: 10px; border: 1px solid var(--dri-border);
+        background: var(--dri-surface); }
+      .dri-verifyRow { display: flex; align-items: center; gap: 10px; }
+      .dri-verifyText { font-size: 12px; color: var(--dri-fg-2); line-height: 1.6; flex: 1; min-width: 0; }
+      .dri-verifyOk { color: var(--dri-ok); font-weight: 600; }
+      .dri-verifyFail { color: var(--dri-danger); font-weight: 600; }
+      /* 测通后的凭据摘要：等宽 + 可换行。用 fg-2 而非 fg-3——11px 文字在浅色
+         主题下 tertiary 只有 3.33:1，达不到 AA 的 4.5。 */
+      .dri-verifyDetail { font-family: var(--dri-mono); font-size: 11px; color: var(--dri-fg-2);
+        word-break: break-all; line-height: 1.6; }
+
       .dri-dirBrowser { margin-top: 14px; border: 1px solid var(--dri-border); border-radius: 12px;
         padding: 16px; background: var(--dri-surface); }
       .dri-dirPath { font-family: var(--dri-mono); font-size: 12px; color: var(--dri-fg-2);
@@ -365,31 +380,79 @@ window.__ModuleLoader__.load({
     }
 
     /** 主机表单（添加/编辑）。 */
-    function HostForm({ initial, onCancel, onSave }) {
+    /**
+     * 主机表单：填凭据 → 测试连接 → 保存。
+     *
+     * 产品级不变式：**未测通的凭据不允许保存**。SSH 配置最大的成本是「存了才发现
+     * 连不上」，而排查要 SSH 知识——测试按钮把那份知识内建进 UI。
+     *
+     * 关键细节：
+     *  - 测试针对「当前表单快照」（含口令），不是某个已存主机；任一字段改动即作废
+     *    已有测试结果（凭据变了，旧结论不再成立）。
+     *  - 编辑态口令留空 = 沿用已存口令（后端按 hostId 从 0600 store 取），无需重填。
+     *  - 后端 testConnection 对未保存的凭据只做建连探测，不落盘。
+     */
+    function HostForm({ initial, hostId, onCancel, onSave, onTest }) {
       const [form, setForm] = useState(initial || {
         name: '', host: '', port: '22', user: '', authType: 'key', privateKeyPath: '', password: '',
       })
       const [error, setError] = useState(null)
       const [showPw, setShowPw] = useState(false)
-      const set = (key) => (e) => setForm({ ...form, [key]: e.target.value })
-      const submit = () => {
-        if (!form.host.trim()) { setError('主机名/IP 必填'); return }
-        if (!form.user.trim()) { setError('登录用户必填'); return }
-        const port = Number.parseInt(form.port, 10)
-        if (!Number.isInteger(port) || port < 1 || port > 65535) { setError('端口须为 1–65535'); return }
-        if (form.authType === 'key' && !form.privateKeyPath.trim()) {
-          setError('请填写私钥路径，或改用密码认证'); return
-        }
-        onSave({
-          name: form.name.trim() || undefined,
-          host: form.host.trim(),
-          port,
-          user: form.user.trim(),
-          authType: form.authType,
-          privateKeyPath: form.authType === 'key' ? form.privateKeyPath.trim() : undefined,
-          password: form.authType === 'password' ? form.password : undefined,
-        })
+      // { state: 'idle'|'testing'|'ok'|'fail', latencyMs?, error? }
+      const [verify, setVerify] = useState({ state: 'idle' })
+      const set = (key) => (e) => {
+        const value = e.target.value
+        setForm({ ...form, [key]: value })
+        // 凭据变了，之前的测试结论不再成立——回到未测试。
+        setVerify({ state: 'idle' })
       }
+      const authType = (e) => { setForm({ ...form, authType: e.target.value }); setVerify({ state: 'idle' }) }
+
+      // 与 submit 共用的校验：测试和保存都必须过同一道门。
+      const validate = () => {
+        if (!form.host.trim()) return '主机名/IP 必填'
+        if (!form.user.trim()) return '登录用户必填'
+        const port = Number.parseInt(form.port, 10)
+        if (!Number.isInteger(port) || port < 1 || port > 65535) return '端口须为 1–65535'
+        if (form.authType === 'key' && !form.privateKeyPath.trim()) {
+          return '请填写私钥路径，或改用密码认证'
+        }
+        return null
+      }
+      const payload = () => ({
+        name: form.name.trim() || undefined,
+        host: form.host.trim(),
+        port: Number.parseInt(form.port, 10),
+        user: form.user.trim(),
+        authType: form.authType,
+        privateKeyPath: form.authType === 'key' ? form.privateKeyPath.trim() : undefined,
+        password: form.authType === 'password' ? form.password : undefined,
+      })
+
+      const runTest = async () => {
+        const invalid = validate()
+        if (invalid) { setError(invalid); setVerify({ state: 'idle' }); return }
+        setError(null)
+        setVerify({ state: 'testing' })
+        try {
+          const res = await onTest(hostId || '', payload())
+          const value = unwrap(res, null)
+          setVerify(value && value.ok
+            ? { state: 'ok', latencyMs: value.latencyMs }
+            : { state: 'fail', error: (value && value.error) || resError(res, '连接失败') })
+        } catch (err) {
+          setVerify({ state: 'fail', error: errText(err) })
+        }
+      }
+
+      const submit = () => {
+        const invalid = validate()
+        if (invalid) { setError(invalid); return }
+        if (verify.state !== 'ok') { setError('请先测试连接，通过后再保存'); return }
+        setError(null)
+        onSave(payload())
+      }
+
       // 小眼睛：显示/隐藏密码（纯 SVG，无 emoji）。
       const eyeIcon = h('svg', {
         width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
@@ -413,6 +476,49 @@ window.__ModuleLoader__.load({
           'aria-label': showPw ? '隐藏密码' : '显示密码', title: showPw ? '隐藏密码' : '显示密码',
         }, eyeIcon))
       const field = (label, child) => h('div', { className: 'dri-field' }, h('label', null, label), child)
+
+      // 验证区：状态即文案，不做装饰。
+      const verifying = verify.state === 'testing'
+      const verified = verify.state === 'ok'
+      // 底层报错是给排查者看的英文；这里补一句用户能照做的话。
+      const hintFor = (raw) => {
+        const text = String(raw || '')
+        if (/timed out|timeout|ETIMEDOUT|handshake/i.test(text)) {
+          return text + '（请确认主机已开机、IP/端口正确、防火墙放行）'
+        }
+        if (/all configured authentication methods failed/i.test(text)) {
+          return text + '（请检查用户名与凭据）'
+        }
+        if (/ENOTFOUND|getaddrinfo/i.test(text)) {
+          return text + '（请检查主机名拼写或 DNS）'
+        }
+        if (/ECONNREFUSED/i.test(text)) {
+          return text + '（端口上没有 sshd，请确认端口与服务）'
+        }
+        return text
+      }
+      const verifyText = () => {
+        if (verify.state === 'testing') return '正在连接…'
+        if (verify.state === 'ok') return '连接成功' + (verify.latencyMs !== undefined ? '（' + verify.latencyMs + 'ms）' : '')
+        if (verify.state === 'fail') return hintFor(verify.error) || '连接失败'
+        return '测试连接通过后才能保存'
+      }
+      const verifyBlock = h('div', { className: 'dri-verify' },
+        h('div', { className: 'dri-verifyRow' },
+          h('div', { className: 'dri-verifyText' },
+            h('span', {
+              className: verified ? 'dri-verifyOk' : (verify.state === 'fail' ? 'dri-verifyFail' : null),
+              role: verifying ? 'status' : 'status',
+              'aria-live': 'polite',
+            }, verifyText()),
+            verified ? h('div', { className: 'dri-verifyDetail' },
+              form.user.trim() + '@' + form.host.trim() + ':' + (form.port.trim() || '22')
+              + ' · ' + (form.authType === 'password' ? '密码认证' : '密钥认证')) : null),
+          h('button', {
+            type: 'button', className: 'dri-btn', onClick: () => { void runTest() },
+            disabled: verifying,
+          }, verifying ? '测试中…' : (verified ? '重新测试' : '测试连接'))))
+
       return h('div', { className: 'dri-form', role: 'form' },
         error ? h('p', { className: 'dri-error', role: 'alert' }, error) : null,
         h('div', { className: 'dri-grid2' },
@@ -420,15 +526,20 @@ window.__ModuleLoader__.load({
           field('主机名 / IP *', h('input', { value: form.host, onChange: set('host'), placeholder: '1.2.3.4 或 host.example.com' })),
           field('端口', h('input', { value: form.port, onChange: set('port'), placeholder: '22' })),
           field('登录用户 *', h('input', { value: form.user, onChange: set('user'), placeholder: 'root' }))),
-        field('认证方式', h('select', { value: form.authType, onChange: set('authType') },
+        field('认证方式', h('select', { value: form.authType, onChange: authType },
           h('option', { value: 'key' }, '密钥认证（私钥路径；留空走 ssh-agent）'),
           h('option', { value: 'password' }, '密码认证（账号密码登录）'))),
         form.authType === 'key'
           ? field('私钥路径', h('input', { value: form.privateKeyPath, onChange: set('privateKeyPath'), placeholder: 'C:\\Users\\you\\.ssh\\id_ed25519 或 ~/.ssh/id_ed25519' }))
           : field('密码' + (initial ? '（留空保持已保存）' : ''), passwordInput),
+        verifyBlock,
         h('div', { className: 'dri-formActions' },
-          h('button', { className: 'dri-btn', onClick: onCancel }, '取消'),
-          h('button', { className: 'dri-btn dri-btn-primary', onClick: submit }, '保存')))
+          h('button', { type: 'button', className: 'dri-btn', onClick: onCancel }, '取消'),
+          h('button', {
+            type: 'button', className: 'dri-btn dri-btn-primary', onClick: submit,
+            disabled: verifying || verified !== true,
+            title: verified ? undefined : '先测试连接，通过后可保存',
+          }, '保存并添加')))
     }
 
     /** 设置页区块：主机列表 + 添加/编辑 + 远端目录 → 工作区。 */
@@ -456,14 +567,17 @@ window.__ModuleLoader__.load({
           h('span', null),
           h('button', { className: 'dri-btn dri-btn-primary', onClick: () => setEditing({ mode: 'create' }) }, '+ 添加主机')),
 
-        hosts.length === 0
-          ? h('div', { className: 'dri-empty' }, '还没有配置主机。', h('br', null), '点击「+ 添加主机」开始。')
-          : h('ul', { className: 'dri-cards' }, hosts.map((host) => h(HostRow, {
+        // 表单开着时不再显示空状态——「还没有配置主机」与正在填表自相矛盾。
+        hosts.length > 0
+          ? h('ul', { className: 'dri-cards' }, hosts.map((host) => h(HostRow, {
               key: host.id, host, hasSecret: !!state.secrets[host.id],
               onTest: () => testConnection(host),
               onEdit: () => setEditing({ mode: 'edit', host }),
               onDelete: () => setPendingDelete(host.id),
-            }))),
+            })))
+          : editing
+            ? null
+            : h('div', { className: 'dri-empty' }, '还没有配置主机。', h('br', null), '点击「+ 添加主机」开始。'),
 
         editing ? h(HostForm, {
           initial: editing.mode === 'edit' ? {
@@ -471,6 +585,9 @@ window.__ModuleLoader__.load({
             user: editing.host.user, authType: editing.host.authType || 'key',
             privateKeyPath: editing.host.privateKeyPath || '', password: '',
           } : null,
+          // 编辑态传真实 hostId：测试时口令留空可沿用 0600 store 里的已存口令。
+          hostId: editing.mode === 'edit' ? editing.host.id : '',
+          onTest: (id, cfg) => withTimeout(testConnection(id, cfg), 30_000, '测试连接'),
           onCancel: () => setEditing(null),
           onSave: async (patch) => {
             const id = editing.mode === 'edit' ? editing.host.id : slugId(patch.name || patch.host)
@@ -812,6 +929,8 @@ window.__ModuleLoader__.load({
                 addingHost
                   ? h(HostForm, {
                       initial: null,
+                      hostId: '',
+                      onTest: (id, cfg) => withTimeout(deps.testConnection(id, cfg), 30_000, '测试连接'),
                       onCancel: () => setAddingHost(false),
                       onSave: async (patch) => {
                         const id = slugId(patch.name || patch.host)
@@ -819,6 +938,8 @@ window.__ModuleLoader__.load({
                         if (!res || res.ok !== true) { onError && onError(resError(res, '保存失败')); return }
                         setAddingHost(false)
                         await deps.load()
+                        // 存完直接选中并加载根目录：用户加主机的意图就是用它。
+                        void browseTo(id, '/')
                       },
                     })
                   : hostSelect,
@@ -907,10 +1028,22 @@ window.__ModuleLoader__.load({
       }
       const saveHost = (id, patch) => svc().saveHost(id, patch)
       const deleteHost = (id) => svc().deleteHost(id)
-      const testConnection = (host) => svc().testConnection(host.id, {
-        host: host.host, port: host.port, user: host.user,
-        authType: host.authType || 'key', privateKeyPath: host.privateKeyPath,
-      })
+      /**
+       * 测连。cfg 来自调用方（表单快照）——支持测**未保存**的凭据；后端对
+       * 未保存配置只做建连探测不落盘。编辑态口令留空时后端按 hostId 取已存口令。
+       */
+      const testConnection = (hostOrId, cfg) => {
+        const hostId = typeof hostOrId === 'string' ? hostOrId : hostOrId.id
+        const base = typeof hostOrId === 'string' ? {} : hostOrId
+        return svc().testConnection(hostId, {
+          host: (cfg && cfg.host) || base.host,
+          port: (cfg && cfg.port) || base.port,
+          user: (cfg && cfg.user) || base.user,
+          authType: (cfg && cfg.authType) || base.authType || 'key',
+          privateKeyPath: (cfg && cfg.privateKeyPath) || base.privateKeyPath,
+          password: cfg ? cfg.password : undefined,
+        })
+      }
       const listRemoteDir = (hostId, path) => svc().listRemoteDir(hostId, path)
       const mkdirRemote = (hostId, path) => svc().mkdirRemote(hostId, path)
       const removeRemote = (hostId, path) => svc().removeRemote(hostId, path)
@@ -945,6 +1078,7 @@ window.__ModuleLoader__.load({
       pickerDeps = {
         load,
         saveHost,
+        testConnection,
         listRemoteDir,
         mkdirRemote,
         createPlaceholder,
