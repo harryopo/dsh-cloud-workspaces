@@ -1072,8 +1072,9 @@ window.__ModuleLoader__.load({
       // 工作区选择器：填充官方 ui-workspace 的两个 directory-flow 洞
       // （conversation hero + sidebar 的「添加工作区」入口只在洞被占用时
       // 出现；onPicked(路径) 交给官方 createWorkspace 收养）。
+      // 0.2 起官方服务名由 workspaces 改为 uiWorkspace。
       const workspaces = () => {
-        try { return ctx.get('workspaces') } catch { return undefined }
+        try { return ctx.get('uiWorkspace') } catch { return undefined }
       }
       pickerDeps = {
         load,

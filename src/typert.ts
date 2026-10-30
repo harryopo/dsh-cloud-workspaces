@@ -18,9 +18,8 @@ import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import { bindTypertRemote } from '@deepseek-ai/dsh-typert-protocol'
 import type { TypertCodec } from '@deepseek-ai/dsh-typert-protocol'
-import type { SettingsProvider, SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { SshRuntime } from './ssh-service'
-import { HOSTS_NAMESPACE, hostsOf, redactHosts, toHostPayload, type SshHostConfig } from './host-settings'
+import type { SshHostConfig } from './protocol'
 import { createPlaceholderDir, listPlaceholders } from './workspace'
 import { jsonSafe } from './jsonsafe'
 import { debugLog } from './debug-log'
@@ -148,9 +147,6 @@ export class SshRemoteService extends Service {
   private readonly runtime: SshRuntime
   /** 宿主 ctx（workspaceRegistry 等可选服务经 ctx.get 读取）。 */
   private readonly runtimeCtx: Context
-  private settingsScope: SettingsScope<{ hosts: Record<string, SshHostConfig> }> | undefined
-  /** provider 级句柄（scope 无 mutate；单键 unset 需 ctx.settings.mutate）。 */
-  private readonly settingsProvider: SettingsProvider
   /** 绑定声明——gateway validateBinding 按此反射名检查，不可改名。 */
   readonly typertRemote: unknown
 
@@ -158,87 +154,63 @@ export class SshRemoteService extends Service {
     super(ctx, REMOTE_SERVICE)
     this.runtime = runtime
     this.runtimeCtx = ctx
-    this.settingsProvider = ctx.settings
     this.typertRemote = bindTypertRemote(this, REMOTE_SERVICE)
   }
 
-  /** 注入 settings scope（index.ts 的 inject 段在构造后立即调用）。 */
-  setSettings(scope: SettingsScope<{ hosts: Record<string, SshHostConfig> }>): void {
-    this.settingsScope = scope
-    // 一次性迁移：历史版本把明文口令随 settings 落盘（settings.yaml 的 ACL
-    // 宽于专属 store）——迁入 0600 store 并从 settings 文档剥离。
-    void this.migratePasswordsIntoStore().catch((error) => {
-      debugLog(`migration crashed: ${error instanceof Error ? error.message : String(error)}`)
-    })
+  /** store 里的摘要（0.2 起主机元数据唯一来源 = 0600 store）。 */
+  private summary(id: string) {
+    return this.runtime.engine.list().find((s) => s.alias === id)
   }
 
-  /** 一次性迁移：settings 既有明文口令迁入 0600 store 并从 settings 文档剥离。 */
-  private async migratePasswordsIntoStore(): Promise<void> {
-    const hosts = this.hosts()
-    const withPassword = Object.entries(hosts).filter(([, cfg]) => typeof cfg.password === 'string' && cfg.password !== '')
-    debugLog(`migration: start hosts=${Object.keys(hosts).length} withPassword=${withPassword.length}`)
-    let changed = false
-    for (const [id, cfg] of withPassword) {
-      changed = true
-      try {
-        this.runtime.engine.upsertHost(toHostPayload({ ...cfg }), id)
-        debugLog(`migration: password migrated to store for ${id}`)
-      } catch (error) {
-        debugLog(`migration: store upsert failed for ${id}: ${error instanceof Error ? error.message : String(error)}`)
-      }
-      const stripped: SshHostConfig = { ...cfg }
-      delete stripped.password
-      hosts[id] = stripped
-    }
-    if (changed) {
-      try {
-        await this.settings.update({ hosts })
-        debugLog('migration: settings.update committed (password stripped)')
-      } catch (error) {
-        debugLog(`migration: settings.update failed: ${error instanceof Error ? error.message : String(error)}`)
-      }
+  /** 把 store 摘要投影成 client 表单形状（不携带任何口令）。 */
+  private toConfig(alias: string): SshHostConfig | undefined {
+    const s = this.summary(alias)
+    if (s === undefined) return undefined
+    const stored = this.runtime.getStoredEntry(alias)
+    return {
+      id: s.alias,
+      name: s.description ?? s.alias,
+      host: s.host,
+      port: s.port,
+      user: s.user,
+      authType: s.auth,
+      privateKeyPath: stored?.auth.kind === 'key' ? stored.auth.keyPath : undefined,
+      proxyJump: s.proxyJump,
+      description: s.description,
     }
   }
 
-  private get settings(): SettingsScope<{ hosts: Record<string, SshHostConfig> }> {
-    if (this.settingsScope === undefined) throw new Error('ssh-remote: settings scope not injected yet')
-    return this.settingsScope
-  }
-
-  private hosts(): Record<string, SshHostConfig> {
-    return hostsOf(this.settings.get())
-  }
-
-  /** 桥接当前 settings 主机进 HostStore（ssh_* 工具与占位路由立即可用）。 */
-  private syncStore(): void {
-    for (const cfg of Object.values(this.hosts())) {
-      try {
-        this.runtime.engine.upsertHost(toHostPayload(cfg), cfg.id)
-      } catch {
-        // 主机残缺（表单未提交完整）→ 跳过，不影响其它主机。
+  /** 列出全部主机（脱敏）+ 口令已设标记（直接从 0600 store 读取）。 */
+  listHosts(): { hosts: Record<string, Omit<SshHostConfig, 'password'>>; secrets: Record<string, boolean> } {
+    const hosts: Record<string, Omit<SshHostConfig, 'password'>> = {}
+    const secrets: Record<string, boolean> = {}
+    for (const s of this.runtime.engine.list()) {
+      hosts[s.alias] = {
+        id: s.alias,
+        name: s.description ?? s.alias,
+        host: s.host,
+        port: s.port,
+        user: s.user,
+        authType: s.auth,
+        privateKeyPath: this.runtime.getStoredEntry(s.alias)?.auth.kind === 'key'
+          ? this.runtime.getStoredEntry(s.alias)?.auth.keyPath
+          : undefined,
+        proxyJump: s.proxyJump,
+        description: s.description,
       }
+      secrets[s.alias] = s.auth === 'password'
     }
+    return jsonSafe({ hosts, secrets })
   }
 
   // ------------------------------------------------------------ endpoints
 
-  /** 列出全部主机（脱敏）+ 口令已设标记（从 0600 store 权威读取）。 */
-  listHosts(): { hosts: Record<string, Omit<SshHostConfig, 'password'>>; secrets: Record<string, boolean> } {
-    const secrets: Record<string, boolean> = {}
-    for (const summary of this.runtime.engine.list()) {
-      secrets[summary.alias] = summary.auth === 'password'
-    }
-    return jsonSafe({ hosts: redactHosts(this.hosts()), secrets })
-  }
-
   /**
-   * 创建或更新主机：非敏感配置写 settings；**口令只写 0600 的
-   * dsh-remote-ide.json**——settings.yaml 的 ACL 宽于专属 store（沙箱用户组
-   * 可读），明文口令落那里就是泄露。口令留空 = 沿用 store 既有口令。
+   * 创建或更新主机：唯一写路径 = 0600 的 dsh-remote-ide.json。
+   * 口令留空 = 沿用 store 既有口令。
    */
   async saveHost(id: string, patch: Partial<SshHostConfig>): Promise<{ id: string }> {
-    const current = this.hosts()
-    const prev = current[id]
+    const prev = this.toConfig(id)
     const next: SshHostConfig = {
       id,
       name: patch.name ?? prev?.name,
@@ -258,7 +230,6 @@ export class SshRemoteService extends Service {
     const password = typeof patch.password === 'string' && patch.password !== ''
       ? patch.password
       : (stored?.auth.kind === 'password' ? stored.auth.password : undefined)
-    // 口令先进 0600 store（权威存储）；store 校验失败则 settings 不落半套配置。
     this.runtime.engine.upsertHost({
       alias: id,
       host: next.host,
@@ -268,19 +239,14 @@ export class SshRemoteService extends Service {
         ? { kind: 'password', password: password ?? '' }
         : { kind: 'key', keyPath: next.privateKeyPath ?? '' },
       proxyJump: next.proxyJump ?? [],
-      description: next.description,
+      description: next.description ?? next.name,
     }, id)
-    const hosts = { ...current, [id]: next }
-    await this.settings.update({ hosts })
     return { id }
   }
 
-  /** 删除主机：settings 单键 unset + store 断开删除。 */
+  /** 删除主机（store 唯一写路径）。 */
   async deleteHost(id: string): Promise<{ id: string }> {
-    const current = this.hosts()
-    if (current[id] === undefined) throw new Error(`host not found: ${id}`)
-    // settings.mutate 单键 unset（scope.update 是递归 merge，删不掉键）。
-    await this.settingsProvider.mutate(HOSTS_NAMESPACE, [{ op: 'unset', path: ['hosts', id] }])
+    if (this.summary(id) === undefined) throw new Error(`host not found: ${id}`)
     this.runtime.engine.removeHost(id)
     return { id }
   }
@@ -325,27 +291,23 @@ export class SshRemoteService extends Service {
 
   /** 列远端目录（工作区创建浏览；需主机已在 store，未保存先桥接）。 */
   async listRemoteDir(hostId: string, path: string): Promise<unknown> {
-    this.syncStore()
     return jsonSafe(await this.runtime.engine.ls(hostId, path))
   }
 
   /** 在远端创建目录（递归创建父级）。 */
   async mkdirRemote(hostId: string, path: string): Promise<{ path: string }> {
-    this.syncStore()
     await this.runtime.engine.mkdir(hostId, path)
     return { path }
   }
 
   /** 删除远端文件或空目录（非空目录请先清空内容）。 */
   async removeRemote(hostId: string, path: string): Promise<{ path: string }> {
-    this.syncStore()
     await this.runtime.engine.remove(hostId, path)
     return { path }
   }
 
   /** 创建占位工作区（返回本地占位路径，供用户选为 DSH 工作区）。 */
   async createPlaceholder(hostId: string, remotePath: string): Promise<{ localPath: string; hostId: string; remotePath: string }> {
-    this.syncStore()
     const created = await createPlaceholderDir({ hostId, remotePath })
     void registerPlaceholderWorkspace(this.runtimeCtx, created.localPath, placeholderTitle(hostId, remotePath))
     return created

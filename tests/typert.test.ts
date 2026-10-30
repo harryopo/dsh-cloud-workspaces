@@ -8,7 +8,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { jsonSafe, SshRemoteService } from '../src/typert'
-import type { SshHostConfig } from '../src/host-settings'
 
 /** 轻量镜像网关断言：递归拒绝 undefined / 非有限数 / 非 plain object。 */
 function assertJsonSafe(value: unknown, ancestors: Set<unknown> = new Set()): void {
@@ -56,38 +55,48 @@ describe('jsonSafe', () => {
 })
 
 describe('SshRemoteService 端点结果 JSON-safe', () => {
+  interface Summary {
+    alias: string
+    host: string
+    port: number
+    user: string
+    auth: string
+    keyReady: boolean
+    proxyJump: string[]
+    description?: string
+    tags: string[]
+    createdAt: number
+    updatedAt: number
+  }
   interface EngineStub {
     testConfig?: (config: unknown) => Promise<{ ok: boolean; latencyMs?: number; error?: string }>
     upsertHost?: (payload: unknown, existing?: string) => unknown
     removeHost?: (alias: string) => boolean
-    getStoredEntry?: (alias: string) => { auth: { kind: string; password?: string; keyPath?: string } } | undefined
-    list?: () => Array<{ alias: string; auth: string }>
+    list?: () => Summary[]
   }
 
-  /** 新世界语义：settings 文档不含口令；口令权威存储 = 0600 store（getStoredEntry）。 */
-  function setup(engineStub: EngineStub = {}, settingsHosts?: Record<string, SshHostConfig>) {
+  /** 0.2 语义：主机元数据唯一来源 = 0600 store（engine.list + getStoredEntry）。 */
+  function setup(engineStub: EngineStub = {}) {
     const ctx = new Context()
     const upsertHost = engineStub.upsertHost ?? vi.fn(() => undefined)
     const runtimeStub = {
-      getStoredEntry: engineStub.getStoredEntry
-        ?? ((alias: string) => alias === 'vm' ? { auth: { kind: 'password', password: 'secret' } } : undefined),
+      getStoredEntry: (alias: string) => alias === 'vm'
+        ? { auth: { kind: 'password', password: 'secret' } }
+        : alias === 'keyed'
+          ? { auth: { kind: 'key', keyPath: '~/.ssh/id_ed25519' } }
+          : undefined,
       engine: {
         upsertHost,
         removeHost: engineStub.removeHost ?? (() => true),
         testConfig: engineStub.testConfig ?? (async () => ({ ok: true, latencyMs: 5 })),
-        list: engineStub.list ?? (() => [{ alias: 'vm', auth: 'password' }]),
+        list: engineStub.list ?? (() => [{
+          alias: 'vm', host: '192.0.2.1', port: 22, user: 'root', auth: 'password',
+          keyReady: false, proxyJump: [], tags: [], createdAt: 1, updatedAt: 1,
+        }]),
       },
     }
     const service = new SshRemoteService(ctx, runtimeStub as never)
-    const update = vi.fn((doc: { hosts: Record<string, SshHostConfig> }) => {
-      Object.assign(hosts, doc.hosts)
-      return Promise.resolve()
-    })
-    const hosts: Record<string, SshHostConfig> = settingsHosts ?? {
-      vm: { id: 'vm', host: '192.0.2.1', port: 22, user: 'root', authType: 'password' },
-    }
-    service.setSettings({ get: () => ({ hosts }), update } as never)
-    return { service, upsertHost, update, hosts }
+    return { service, upsertHost }
   }
 
   it('testConnection 成功：结果无 error own-key，整体 JSON-safe', async () => {
@@ -111,20 +120,17 @@ describe('SshRemoteService 端点结果 JSON-safe', () => {
     const { service } = setup()
     const result = service.listHosts()
     expect(result.secrets.vm).toBe(true)
+    expect(result.hosts.vm.authType).toBe('password')
     expect(Object.hasOwn(result.hosts.vm as Record<string, unknown>, 'password')).toBe(false)
     assertJsonSafe(result)
   })
 
-  it('saveHost：口令只进 store，settings 文档不含口令（明文落盘收敛回归）', async () => {
+  it('saveHost：唯一写路径 = store，口令随主机写入', async () => {
     const upsertHost = vi.fn(() => undefined)
-    const { service, update } = setup({ upsertHost })
+    const { service } = setup({ upsertHost })
     await service.saveHost('vm', { host: '192.0.2.1', user: 'root', authType: 'password', password: 'newpw' })
-    // 口令进 store
     const payload = upsertHost.mock.calls[0]?.[0] as { auth: { kind: string; password?: string } }
     expect(payload.auth).toEqual({ kind: 'password', password: 'newpw' })
-    // settings 文档不含 password
-    const written = update.mock.calls[0]?.[0].hosts.vm as Record<string, unknown>
-    expect(Object.hasOwn(written, 'password')).toBe(false)
   })
 
   it('saveHost：口令留空 = 沿用 store 既有口令', async () => {
@@ -135,19 +141,11 @@ describe('SshRemoteService 端点结果 JSON-safe', () => {
     expect(payload.auth.password).toBe('secret')
   })
 
-  it('迁移：settings 既有明文口令迁入 store 并从文档剥离', async () => {
-    const upsertHost = vi.fn(() => undefined)
-    const legacy: Record<string, SshHostConfig> = {
-      old: { id: 'old', host: '192.0.2.9', port: 22, user: 'root', authType: 'password', password: 'legacy-pw' },
-    }
-    const { update, hosts } = setup({ upsertHost }, legacy)
-    // setSettings 已异步触发迁移；等微任务落地
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    const payload = upsertHost.mock.calls.find((call) => (call[0] as { alias?: string }).alias === 'old')?.[0] as {
-      auth: { kind: string; password?: string }
-    }
-    expect(payload?.auth).toEqual({ kind: 'password', password: 'legacy-pw' })
-    expect(Object.hasOwn(hosts.old, 'password')).toBe(false)
-    expect(update).toHaveBeenCalled()
+  it('deleteHost：store 中不存在的主机报错，存在则删除', async () => {
+    const removeHost = vi.fn(() => true)
+    const { service } = setup({ removeHost })
+    await expect(service.deleteHost('ghost')).rejects.toThrow(/host not found/)
+    await service.deleteHost('vm')
+    expect(removeHost).toHaveBeenCalledWith('vm')
   })
 })

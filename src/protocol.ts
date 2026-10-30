@@ -40,8 +40,7 @@ export interface SshHostEntry {
 }
 
 /** Public (secret-free) projection of an entry, safe for the browser/agent. */
-export interface SshHostSummary {
-  alias: string
+export interface SshHostSummary {  alias: string
   host: string
   port: number
   user: string
@@ -54,6 +53,30 @@ export interface SshHostSummary {
   tags: string[]
   createdAt: number
   updatedAt: number
+}
+
+/** 设置卡片/工具面共用的一台 SSH 主机（口令 write-only，永不出 store）。 */
+export interface SshHostConfig {
+  /** 稳定 id（= alias，占位目录路径依赖）。 */
+  id: string
+  /** 显示名。 */
+  name?: string
+  /** 主机名或 IP。 */
+  host: string
+  /** SSH 端口。 */
+  port: number
+  /** 登录用户。 */
+  user: string
+  /** 认证方式。 */
+  authType: 'key' | 'password'
+  /** 私钥路径（key 认证）。 */
+  privateKeyPath?: string
+  /** 口令（password 认证；来自 0600 store，脱敏后不回传）。 */
+  password?: string
+  /** 跳板链（ProxyJump）：本地别名按序穿过。 */
+  proxyJump?: string[]
+  /** 备注。 */
+  description?: string
 }
 
 /** Host edit payload (create/update); 'alias' comes from the URL for updates. */

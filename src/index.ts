@@ -12,30 +12,23 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { JobRegistry } from '@deepseek-ai/dsh-jobs'
 import z from 'schemastery'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import SshRuntime from './ssh-service'
 import { sshExecTool, sshListTool, sshLsTool, sshReadTool, sshWorkspaceTool, sshWriteTool } from './tools'
-import { installHostSettings } from './host-settings'
+import { importLegacyHosts } from './legacy-import'
 import { HOST_TYPERT_CONTRIBUTION, REMOTE_SERVICE, registerPlaceholderWorkspace, SshRemoteService } from './typert'
 import { installSessionRouting, sessionSectionText } from './session-tools'
 import { routeByCwd } from './workspace'
+import { defaultStorePath } from './store'
 
 /** Stable cordis plugin name. */
 export const name = 'remote-ide'
 
 /** Services required before the surfaces can mount. */
 export const inject = ['tools', 'systemPrompt']
-
-/**
- * Settings namespace of the remote-IDE capability — the section the web
- * settings surface edits. Spelled here rather than imported: the browser
- * half spells the same value and must not depend on a Host package.
- */
-export const REMOTE_IDE_SETTINGS_NAMESPACE = settingsNamespace('dsh-remote-ide')
 
 /** Plugin config, validated by the same-named schemastery schema. */
 export interface Config {
@@ -75,14 +68,15 @@ const SECTION_ORDER = 150
  * @param config - resolved plugin config (schema defaults applied by the loader).
  */
 export async function apply(ctx: Context, config?: Config): Promise<void> {
-  // The live source the surfaces read: the settings section once the web
-  // settings surface is served, the composition entry otherwise.
-  let current: () => Config = () => config ?? {}
   const resolve = (): Config => ({
-    enabled: current().enabled ?? DEFAULT_ENABLED,
-    maxReadBytes: current().maxReadBytes,
-    announceToAgent: current().announceToAgent ?? DEFAULT_ANNOUNCE,
+    enabled: config?.enabled ?? DEFAULT_ENABLED,
+    maxReadBytes: config?.maxReadBytes,
+    announceToAgent: config?.announceToAgent ?? DEFAULT_ANNOUNCE,
   })
+
+  // 0.2 起 settings 命名空间不复存在：首次启动把旧 settings.yaml 的主机段
+  // 一次性导入 0600 store（best-effort，失败不阻断启动）。
+  void importLegacyHosts({ storeFile: defaultStorePath() }).catch(() => { /* 旧数据不存在即正常路径 */ })
 
   // Host-plane shared SSH runtime; its own effect owns engine disposal.
   // Fetch via ctx.get (store read without the inject requirement): newer
@@ -151,21 +145,9 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
     }
   }
 
-  installSettingsSection(ctx, REMOTE_IDE_SETTINGS_NAMESPACE, Config, config ?? {}, {
-    setSource: (source) => {
-      current = source
-      sync()
-    },
-    onChange: sync,
-  })
-
-  // Settings-card host config namespace + Typert endpoints. Mounted only when
-  // the official settings/typert services exist (the web profile supplies
-  // both; headless runs simply skip them — tools keep working via the store).
-  ctx.inject(['typert', 'settings'], (scope) => {
-    const settingsScope = installHostSettings(scope)
+  // 设置卡主机管理 + Typert 端点：只依赖 typert 服务（0.2 无 settings 命名空间）。
+  ctx.inject(['typert'], (scope) => {
     const remote = new SshRemoteService(scope, runtime)
-    remote.setSettings(settingsScope)
     // 严格描述符注册（face:'host' + invocations）；gateway 的 claimsEndpoint
     // 按 local 注册表命中端点，SRC 回退无需装饰器。
     scope.typert.register(HOST_TYPERT_CONTRIBUTION)

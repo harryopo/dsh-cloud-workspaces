@@ -7,15 +7,14 @@
  * - done：通道 close 的 (code, signal) 是唯一权威退出事实（零轮询）；
  *   非零码=completed+detail（对齐官方），signal=killed，无码无号=传输断，
  *   探测 kill -0 后如实报告孤儿可能（pid/log 路径），不谎称工作已停。
- * - readOutput：官方同步消费接口 → 异步预取泵（3s 间隔 + 调用驱动）：
- *   dd 按 64KiB 块拉远端日志（块对齐，无 UTF-8 游标劈裂的系统性漂移；
- *   块边界劈多字节字符属官方 lossy 同级，接受）。
+ * - 输出：0.2 采用**推模式**——3s dd 增量泵读到新字节即 job.append()（拉取式
+ *   readOutput 已在 0.2 删除）；块对齐读取无 UTF-8 游标劈裂的系统性漂移。
  * - cancel：同步幂等标记 + fire-and-forget 杀进程组（TERM→5s→KILL）。
- * 流式 job 的 done 不带 output（dsh-jobs d.ts：stream jobs leave it unset）。
+ * 流式 job 的 done 不带 result（dsh-jobs d.ts：stream jobs leave it unset）。
  */
 
 import { randomUUID } from 'node:crypto'
-import type { JobHooks, JobOutcome, JobRegistry, JobStart } from '@deepseek-ai/dsh-jobs'
+import type { JobHandle, JobHooks, JobOutcome, JobRegistry } from '@deepseek-ai/dsh-jobs'
 import type { SshEngine } from './engine'
 import { quoteSh } from './engine'
 import { debugLog } from './debug-log'
@@ -39,14 +38,21 @@ export interface RemoteJobSpec {
   command: string
   /** 远程工作目录（省略=连接默认目录）。 */
   cwd?: string
-  /** 归属 agent（exec.agent 本体）；省略=无主 job。 */
-  agent?: NonNullable<JobStart['owner']>
+  /** 归属 agent（exec.agent 本体）；省略=无主 job。0.2 起 owner 需要 SessionId。 */
+  agent?: unknown
 }
 
 const READ_CHUNK = 65536
 const OUTPUT_LIMIT_BYTES = 8192
 const KILL_ESCALATION_MS = 5_000
 const PUMP_INTERVAL_MS = 3_000
+
+/** Agent → SessionId（0.2 JobSpec.owner 是会话 id；取不到则不设 owner）。 */
+function sessionIdOf(agent: unknown): string | undefined {
+  if (agent === null || typeof agent !== 'object') return undefined
+  const id = (agent as { id?: unknown }).id
+  return typeof id === 'string' ? id : undefined
+}
 
 export function startRemoteJob(deps: JobRunnerDeps, spec: RemoteJobSpec): { kind: 'background'; jobId: string } {
   const { engine, jobs } = deps
@@ -56,24 +62,24 @@ export function startRemoteJob(deps: JobRunnerDeps, spec: RemoteJobSpec): { kind
   const runId = randomUUID()
   const pidPath = `/tmp/dsh-job-${runId}.pid`
   const logPath = `/tmp/dsh-job-${runId}.log`
+  const owner = sessionIdOf(spec.agent)
   const jobId = jobs.start({
     kind: 'ssh',
     label: spec.command,
     outputLimitBytes: OUTPUT_LIMIT_BYTES,
-    ...(spec.agent !== undefined ? { owner: spec.agent } : {}),
-    run: () => buildHooks(engine, spec, pidPath, logPath),
+    ...(owner !== undefined ? { owner: owner as never } : {}),
+    run: (job) => buildHooks(engine, spec, pidPath, logPath, job),
   })
   return { kind: 'background', jobId }
 }
 
-function buildHooks(engine: SshEngine, spec: RemoteJobSpec, pidPath: string, logPath: string): JobHooks {
+function buildHooks(engine: SshEngine, spec: RemoteJobSpec, pidPath: string, logPath: string, job: JobHandle): JobHooks {
   const q = quoteSh
   let settled = false
   let settle!: (o: JobOutcome) => void
   const done = new Promise<JobOutcome>((resolve) => { settle = resolve })
 
-  // readOutput 泵状态
-  let pending = ''
+  // 增量读取泵状态
   let cursor = 0
   let inflight = false
   // cancel 状态
@@ -89,7 +95,7 @@ function buildHooks(engine: SshEngine, spec: RemoteJobSpec, pidPath: string, log
       .then((r) => {
         if (r.success && r.stdout !== '') {
           cursor += 1
-          pending += r.stdout
+          job.append(r.stdout)
         }
       })
       .catch(() => { /* 日志未生成/断连：下轮再拉 */ })
@@ -146,11 +152,5 @@ function buildHooks(engine: SshEngine, spec: RemoteJobSpec, pidPath: string, log
       // 通道未建立：open resolve 后补杀；reject 路径 finish 已兜底（远端未起进程）。
     },
     done,
-    readOutput: (): string => {
-      const out = pending
-      pending = ''
-      pump()
-      return out.length >= READ_CHUNK ? `${out}\n[more output; full log: ${logPath}]` : out
-    },
   }
 }

@@ -8,7 +8,7 @@
 1. 插件在 DSH **0.2.1-rc.5** 上完整可用（当前基线 0.1.1-rc.2，两处硬破坏）。
 2. 工作区选择器从「双 tab + 单列表」重构为**双栏工作台**：左栏来源（本机/最近/主机），右栏目录浏览。
 3. 不改包名；仓库/README 定位文案改为「Remote Linux workspaces over SSH」。
-4. 用户数据零迁移：主机仍在 `~/.dsh/dsh-remote-ide.json`（0600 + ACL）。
+4. 用户数据平滑迁移：主机元数据从 settings 收敛到 `~/.dsh/dsh-remote-ide.json`（0600 + ACL），首次启动自动导入旧段。
 
 非目标：0.1.x 双版本兼容；端口转发；设置页自动表单渲染。
 
@@ -34,11 +34,13 @@
 - 版本 **0.4.0**；CHANGELOG 注明 breaking：需 DSH ≥ 0.2.1-rc.5；0.3.0 保留供 0.1.x 固定安装。
 - README/zh 顶部加一行兼容性说明。
 
-### A2 设置面
-- 删除 `src/host-settings.ts` 及 `src/index.ts` 中 `installSettingsSection`/`REMOTE_IDE_SETTINGS_NAMESPACE`。
-- `enabled/maxReadBytes/announceToAgent` 直接由插件 `Config` 提供（`apply(ctx, config)` 的 config 即已解析值；不做 live 热更新——0.2 表单写入走 loader，插件重启生效）。
-- 现有 settings.yaml 的 `dsh-remote-ide-hosts:` 段不再读取（0.2 不自动导入），保留文件不影响；store 仍为唯一权威。
-- 删除 `typert`/client 对 host-settings 的消费；`listHosts/saveHost/deleteHost` 继续读写 store。
+### A2 设置面（主机元数据迁入 store）
+现状：主机**元数据**存于 settings `dsh-remote-ide-hosts`，**口令**存于 0600 store。0.2 无此命名空间，故：
+- 删除 `src/host-settings.ts` 与 `installSettingsSection`/`REMOTE_IDE_SETTINGS_NAMESPACE`。
+- `SshRemoteService` 改为**只读写 0600 store**：`listHosts()` 用 `engine.list()`（已含 alias/host/port/user/auth/keyReady/proxyJump/description/tags/时间戳）；`saveHost()` → `engine.upsertHost()`；`deleteHost()` → `engine.removeHost()`；不再有 settings 双写与 `syncStore()`。
+- **一次性迁移**：`apply` 时若 store 为空，用 `js-yaml`（新增依赖，纯 JS）读 `$DSH_HOME/settings.yaml` 的 `dsh-remote-ide-hosts:` 段导入主机；若发现明文口令，一并写入 store 并 `logger.warn` 提示该段仍留在 settings.yaml（不自动重写用户文件）。迁移 best-effort，失败只记日志不阻断启动。
+- `enabled/maxReadBytes/announceToAgent` 直接由插件 `Config` 提供（0.2 表单写入走 loader，插件重启生效）。
+- `typert`/client 的 wire 形状不变，前端零改动即可兼容。
 
 ### A3 jobs 生产者（推模式）
 `src/job-runner.ts`：

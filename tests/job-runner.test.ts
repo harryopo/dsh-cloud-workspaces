@@ -1,7 +1,7 @@
 /**
  * job-runner 单测 —— fake engine（可编程通道/exec）+ fake JobRegistry（捕获 spec）。
  * 覆盖：background 返回、spec 形状、wrapper 协议、done 三态（流式 job 无 output，
- * 对齐 dsh-jobs d.ts「stream jobs leave it unset」）、readOutput 异步泵与游标、
+ * 对齐 dsh-jobs d.ts「stream jobs leave it unset」）、0.2 推模式（job.append）与游标、
  * cancel 幂等与 TERM→KILL 升级、jobs 缺失报错。
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
@@ -22,8 +22,10 @@ function makeFakes() {
   const exec = vi.fn(async () => okResult())
   const engine = { openChannel, exec, homeOf: () => '/root' } as never
   let spec: Record<string, unknown> | undefined
+  const appends: string[] = []
+  const job = { id: 'ssh-1', append: (t: string) => { appends.push(t) }, updateProgress: () => {} }
   const jobs = { start: (s: Record<string, unknown>) => { spec = s; return 'ssh-1' } } as never
-  return { channel, openChannel, exec, engine, jobs, spec: () => spec! }
+  return { channel, openChannel, exec, engine, jobs, job, appends, spec: () => spec! }
 }
 
 /** 取第 n 次 exec 调用的命令串列表。 */
@@ -50,6 +52,12 @@ describe('startRemoteJob', () => {
     expect(spec.outputLimitBytes).toBe(8192)
   })
 
+  it('owner：传入 agent 时取 agent.id（0.2 SessionId）', () => {
+    const f = makeFakes()
+    startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x', agent: { id: 'sess-1' } })
+    expect(f.spec().owner).toBe('sess-1')
+  })
+
   it('wrapper 协议：pidfile + exec bash -c + 日志重定向，路径 quoteSh', async () => {
     const f = makeFakes()
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: "echo it's", cwd: '/work' })
@@ -73,7 +81,7 @@ describe('startRemoteJob', () => {
   it('done：exit code 3 → completed + detail（流式 job 无 output 字段）', async () => {
     const f = makeFakes()
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { done: Promise<Record<string, unknown>> })()
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
     await awaitChannel(f)
     f.channel.fire(3, null)
     await expect(hooks.done).resolves.toEqual({ status: 'completed', detail: 'exit code: 3' })
@@ -82,7 +90,7 @@ describe('startRemoteJob', () => {
   it('done：signal → killed', async () => {
     const f = makeFakes()
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { done: Promise<Record<string, unknown>> })()
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
     await awaitChannel(f)
     f.channel.fire(null, 'SIGTERM')
     await expect(hooks.done).resolves.toEqual({ status: 'killed', detail: 'SIGTERM' })
@@ -92,7 +100,7 @@ describe('startRemoteJob', () => {
     const f = makeFakes()
     f.exec.mockImplementation(async (_a: string, cmd: string) => okResult(cmd.startsWith("bash -c 'kill -0") ? 'alive' : ''))
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { done: Promise<Record<string, unknown>> })()
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
     await awaitChannel(f)
     f.channel.fire(null, null)
     const o = await hooks.done
@@ -104,14 +112,14 @@ describe('startRemoteJob', () => {
   it('done 只 settle 一次（close 后重复事件被忽略）', async () => {
     const f = makeFakes()
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { done: Promise<Record<string, unknown>> })()
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
     await awaitChannel(f)
     f.channel.fire(0, null)
     f.channel.fire(1, null)
     await expect(hooks.done).resolves.toEqual({ status: 'completed', detail: 'exit code: 0' })
   })
 
-  it('readOutput：异步泵取回块后消费；游标推进 skip=0→1', async () => {
+  it('推模式：泵取回块后 append 一次；游标推进 skip=0→1', async () => {
     const f = makeFakes()
     let delivered = false
     f.exec.mockImplementation(async (_a: string, cmd: string) => {
@@ -119,30 +127,29 @@ describe('startRemoteJob', () => {
       return okResult()
     })
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { readOutput?(): string })()
-    expect(hooks.readOutput!()).toBe('') // 首调只启动泵，无积压
-    await vi.waitFor(() => {
-      // 泵在推进；持续消费直到取回
-      const t = hooks.readOutput!()
-      expect(t).toContain('tick1')
-    })
+    ;(f.spec().run as (j: unknown) => unknown)(f.job)
+    await vi.advanceTimersByTimeAsync(3_100)
+    expect(f.appends).toEqual(['tick1\n'])
     const ddCalls = execCommands(f.exec).filter(c => c.startsWith('dd '))
     expect(ddCalls[0]).toContain('bs=65536 skip=0 count=1')
-    expect(ddCalls.some(c => c.includes('skip=1'))).toBe(true)
+    await vi.advanceTimersByTimeAsync(3_100)
+    expect(execCommands(f.exec).some(c => c.startsWith('dd ') && c.includes('skip=1'))).toBe(true)
   })
 
-  it('readOutput：exec 失败（断连/日志未生成）→ 空串不抛', async () => {
+  it('推模式：exec 失败（断连/日志未生成）→ 不 append 也不抛', async () => {
     const f = makeFakes()
     f.exec.mockRejectedValue(new Error('disconnected'))
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { readOutput?(): string })()
-    await vi.waitFor(() => expect(hooks.readOutput!()).toBe(''))
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
+    await vi.advanceTimersByTimeAsync(3_100)
+    expect(f.appends).toEqual([])
+    expect(hooks.done).toBeInstanceOf(Promise)
   })
 
   it('cancel：TERM 一次、幂等、5s 后升级 KILL', async () => {
     const f = makeFakes()
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { cancel(): void })()
+    const hooks = (f.spec().run as (j: unknown) => { cancel(): void })(f.job)
     await awaitChannel(f)
     hooks.cancel()
     hooks.cancel()
@@ -161,7 +168,7 @@ describe('startRemoteJob', () => {
     const f = makeFakes()
     f.openChannel.mockRejectedValue(new Error('unknown host: dev'))
     startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
-    const hooks = (f.spec().run as () => { done: Promise<Record<string, unknown>> })()
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
     await expect(hooks.done).resolves.toEqual({ status: 'failed', detail: 'unknown host: dev' })
   })
 })
