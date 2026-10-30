@@ -3,18 +3,16 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-126%20unit%20%2B%2029%20e2e-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-94%20unit%20%2B%2021%20e2e-brightgreen.svg)](#development)
 
-**Cloud workspaces for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
+**Remote Linux workspaces over SSH for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
+
+> Requires DSH **>= 0.2.1-rc.5**. On 0.1.x, install `dsh-cloud-workspaces@0.3.0`.
 
 Pick **Cloud (SSH)** in DSH's workspace picker, and the coding agent works directly on your Linux server: `bash`, `read`, `write`, `edit`, `glob`, `grep` — the entire built-in toolset — transparently execute over SSH. Files, search, editing and terminal all live on the remote box.
 
 **Zero install on the server.** No vscode-server-style remote agent, no daemon, nothing to download — a standard OpenSSH server is all it takes.
 
-<p align="center">
-  <img src="docs/screenshots/workspace-picker.png" width="420" alt="Cloud (SSH) tab in the workspace picker" />
-  <img src="docs/screenshots/add-host-form.png" width="420" alt="Add SSH host form" />
-</p>
 <p align="center">
   <img src="docs/screenshots/remote-exec.png" width="860" alt="bash executing on the remote server in a DSH session" />
 </p>
@@ -33,7 +31,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 
 ### Cloud workspaces (the headline)
 
-- **Dual-tab workspace picker** — "Local" and "Cloud (SSH)" tabs; cloud workspaces are adopted by DSH's official workspace registry and show up in every session picker as `host / path`.
+- **Dual-pane workspace picker** — a source rail (this machine / recent workspaces / SSH hosts) beside a directory pane with breadcrumbs, an editable path, empty/error states and inline folder creation; cloud workspaces are adopted by DSH's official workspace registry and show up in every session picker as `host / path`.
 - **Transparent toolset redirect** — when a session's cwd falls under a cloud placeholder, the plugin registers same-named `bash` / `read` / `write` / `edit` / `glob` / `grep` / `read_image` tools **into that session's own agent scope**, so the agent keeps calling the tools it already knows while every call executes on the server. Local sessions are untouched — the shadowing is per session, and falls back to the official local tools the moment a session isn't a cloud one.
 - **Shadow tools with official UI** — session-scoped remote `bash` / `read` / `write` / `edit` / `glob` / `grep` register in the agent's scope only, and implement the official `presentCall` / `presentResult` presenters, so chat rows render as real terminal / read / search cards — expandable, copyable, native.
 - **Background jobs** — `run_in_background: true` on `bash` / `ssh_exec` starts the command as a first-class DSH job (`job_output` / `job_list` / `job_kill`, completion notices, jobs UI): installs, builds and test suites run on the server without ever hitting an exec timeout.
@@ -120,21 +118,22 @@ speak to the host over the official Typert remote bridge.
 ```
 
 - **Host half** (`src/`, TypeScript): `SshEngine` + `SshRuntime`, shadow-tool registration for cloud sessions, the global `ssh_*` tools, Typert remote endpoints, background-job producer, settings schema.
-- **Client half** (`client/`, plain ESM React via `createElement`): settings section + dual-tab workspace picker injected through official slots (`settings.section`, `workspace.*`). No JSX build step, `--dsw-*` design tokens only.
+- **Client half** (`client/`, plain ESM React via `createElement`): settings section + dual-pane workspace picker injected through official slots (`settings.section`, `workspace.*`). No JSX build step, `--dsw-*` design tokens only.
 
 ## Development
 
 ```sh
 pnpm build        # tsc d.ts + tsdown bundle
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest — 126 unit tests
-node scripts/e2e-real-server.mjs   # 29 E2E checks over a real SSH server (WSL sshd on 127.0.0.1:2223)
+pnpm test         # vitest — 94 unit tests
+node scripts/e2e-real-server.mjs   # 21 E2E checks over a real SSH server
 ```
 
 ## Roadmap
 
 - [x] SSH engine: pooling, keepalive, broken-connection rebuild, ProxyJump
-- [x] Cloud workspaces: dual-tab picker, placeholder dirs, official adoption
+- [x] Cloud workspaces: dual-pane picker, placeholder dirs, official adoption
+- [x] DSH 0.2 SDK migration (settings-namespace removal, push jobs producer)
 - [x] Transparent toolset redirect (shadow tools registered per cloud session)
 - [x] Shadow tools with official terminal/read cards
 - [x] Background remote jobs (`ctx.jobs` producer): `run_in_background` + `job_output` / `job_list` / `job_kill`

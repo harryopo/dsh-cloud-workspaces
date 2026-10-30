@@ -28,7 +28,12 @@ window.__ModuleLoader__.load({
     const REMOTE_NAMESPACE = 'ssh-remote'
 
     function passthroughSchema(typeSymbol) {
-      return { mode: 'strict', typeSymbol, schema: { parse: (value) => value } }
+      return {
+        mode: 'strict',
+        typeSymbol,
+        create: () => ({ parse: (value) => value }),
+        schema: { parse: (value) => value },
+      }
     }
     function desc(method, params, resultType) {
       return {
@@ -274,15 +279,49 @@ window.__ModuleLoader__.load({
 
       .dri-pickerOverlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center;
         justify-content: center; background: var(--dsw-alias-bg-mask-1, rgba(0,0,0,0.4)); }
-      .dri-picker { width: min(520px, calc(100vw - 48px)); max-height: min(560px, calc(100vh - 64px));
-        overflow: auto; border-radius: 16px; padding: 18px 20px 14px; color: var(--dri-fg);
+      .dri-picker { width: min(920px, calc(100vw - 48px)); height: min(72vh, 600px); display: flex;
+        flex-direction: column; border-radius: 16px; overflow: hidden; color: var(--dri-fg);
         background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dri-border-2);
         box-shadow: 0 24px 60px rgba(0,0,0,0.28); }
-      .dri-pickerHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-      .dri-tabs { display: flex; gap: 4px; }
-      .dri-pickerBody { display: flex; flex-direction: column; gap: 4px; }
-      .dri-pickLocal { font-size: 13px; padding: 10px 16px; border-radius: 8px; align-self: flex-start; }
-      .dri-pickerFoot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--dri-border); }
+      .dri-pickerHead { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 14px 18px; border-bottom: 1px solid var(--dri-border); }
+      .dri-pickerTitle { font-size: 14px; font-weight: 600; }
+      .dri-pickerMeta { margin-left: 10px; font-family: var(--dri-mono); font-size: 12px; color: var(--dri-fg-3); }
+      .dri-pickerMain { display: flex; flex: 1; min-height: 0; }
+      .dri-pickerFoot { padding: 10px 18px; border-top: 1px solid var(--dri-border); }
+      .dri-rail { width: 248px; flex: none; overflow: auto; padding: 10px; border-right: 1px solid var(--dri-border); }
+      .dri-railSection { margin-bottom: 14px; }
+      .dri-railTitle { padding: 4px 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dri-fg-3); }
+      .dri-railItem { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 7px 8px;
+        border: none; border-radius: 8px; background: transparent; text-align: left; color: var(--dri-fg);
+        cursor: pointer; font: inherit; transition: background .12s; }
+      .dri-railItem:hover { background: var(--dri-hover); }
+      .dri-railItemActive { background: var(--dsw-alias-interactive-bg-hover, var(--dri-hover)); }
+      .dri-railName { font-size: 13px; }
+      .dri-railMeta { font-family: var(--dri-mono); font-size: 11px; color: var(--dri-fg-3);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .dri-railSearch { width: 100%; margin: 2px 0 6px; padding: 6px 8px; border-radius: 8px;
+        border: 1px solid var(--dri-border); background: var(--dsw-alias-bg-base); color: var(--dri-fg);
+        font-size: 12px; }
+      .dri-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 10px 14px 12px; }
+      .dri-paneBody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .dri-paneBar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+      .dri-crumbs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px;
+        font-family: var(--dri-mono); font-size: 12px; color: var(--dri-fg-2); overflow: hidden; white-space: nowrap; }
+      .dri-crumb { padding: 2px 5px; border: none; border-radius: 6px; background: none;
+        color: inherit; font: inherit; cursor: pointer; }
+      .dri-crumb:hover { background: var(--dri-hover); color: var(--dri-fg); }
+      .dri-crumbSep { color: var(--dri-fg-3); padding: 0 1px; }
+      .dri-pathInput { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 8px;
+        border: 1px solid var(--dri-border); background: var(--dsw-alias-bg-base); color: var(--dri-fg);
+        font-family: var(--dri-mono); font-size: 12px; }
+      .dri-paneList { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--dri-border); border-radius: 10px; }
+      .dri-paneFoot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+      .dri-empty { padding: 26px 16px; text-align: center; color: var(--dri-fg-3); font-size: 13px; }
+      .dri-emptySub { margin-top: 4px; font-size: 12px; }
+      .dri-errorRow { margin-bottom: 8px; padding: 8px 10px; border: 1px solid var(--dsw-alias-state-error-primary, #c0392b);
+        border-radius: 8px; color: var(--dsw-alias-state-error-primary, #c0392b); font-size: 12px; }
+      @media (prefers-reduced-motion: reduce) { .dri-railItem { transition: none; } }
 
       /* 危险操作确认框（替换原生 window.confirm）。路径为远端不可信输入，
          仅作文本节点渲染 + break-all 防超长撑破布局。 */
@@ -791,16 +830,35 @@ window.__ModuleLoader__.load({
      *   云端 tab → SSH 主机 + 远端目录浏览 → 创建占位工作区 → onPicked(占位路径)
      * pickerDeps 由 apply() 注入（closure 捕获 typert 动作与 workspaces 面）。
      */
+    // 选择器会话内记忆（不落盘）：上次主机与目录，减少来回点击。
+    const pickerMemory = { hostId: '', path: '' }
+
+    const parentOfPath = (p) => (p === '/' ? '/' : (p.split('/').slice(0, -1).join('/') || '/'))
+    const joinPath = (base, name) => (base === '/' ? '' : base) + '/' + name
+    const pathSegments = (p) => p.split('/').filter((s) => s !== '')
+
+    /**
+     * 工作区选择器：双栏工作台。
+     * 左栏 = 来源（本机 / 最近工作区 / SSH 主机），右栏 = 目录浏览（面包屑 +
+     * 可编辑路径 + 空/错/载入态 + 底栏动作）。
+     * 官方 directory-flow 洞的 owner props（open/busy/onPicked/onCancel/onError）
+     * 保持不变；路径文件名是不可信输入，只进 children 文本。
+     */
     function WorkspacePicker(props) {
       const { open, busy, onPicked, onCancel, onError } = props
       const state = useStore()
-      const [tab, setTab] = useState('cloud')
-      const [localBusy, setLocalBusy] = useState(false)
-      const [browser, setBrowser] = useState(null)
+      const [hostId, setHostId] = useState('')
+      const [path, setPath] = useState('')
+      const [entries, setEntries] = useState([])
+      const [loading, setLoading] = useState(false)
+      const [error, setError] = useState('')
+      const [editingPath, setEditingPath] = useState(false)
+      const [editValue, setEditValue] = useState('')
       const [newDir, setNewDir] = useState('')
       const [creating, setCreating] = useState(false)
       const [addingHost, setAddingHost] = useState(false)
-      const seq = useRef(0) // 浏览请求序号：乱序返回不覆盖最新目录
+      const [query, setQuery] = useState('')
+      const seq = useRef(0)
 
       useEffect(() => {
         if (open && pickerDeps) void pickerDeps.load()
@@ -816,152 +874,242 @@ window.__ModuleLoader__.load({
       if (!open) return null
       const hostList = Object.values(state.hosts || {})
       const deps = pickerDeps || {}
+      const recent = []
+      const seen = {}
+      for (const w of state.placeholders || []) {
+        if (w && typeof w.localPath === 'string' && seen[w.localPath] !== true) {
+          seen[w.localPath] = true
+          recent.push(w)
+        }
+      }
+
+      const browseTo = async (nextHostId, nextPath) => {
+        const my = ++seq.current
+        setHostId(nextHostId)
+        setPath(nextPath)
+        setError('')
+        setEditingPath(false)
+        setLoading(true)
+        setEntries([])
+        try {
+          const res = await withTimeout(deps.listRemoteDir(nextHostId, nextPath), 20_000, '读取远端目录')
+          if (my !== seq.current) return
+          setEntries(unwrap(res, []) || [])
+          pickerMemory.hostId = nextHostId
+          pickerMemory.path = nextPath
+        } catch (err) {
+          if (my !== seq.current) return
+          setError(errText(err))
+        }
+        if (my === seq.current) setLoading(false)
+      }
 
       const pickLocal = async () => {
         if (!deps.pickDirectory) { onError && onError('本机目录选择服务不可用'); return }
-        setLocalBusy(true)
         try {
-          const path = await deps.pickDirectory()
-          if (path) onPicked(path)
-        } catch (error) {
-          onError && onError(errText(error))
+          const picked = await deps.pickDirectory()
+          if (picked) onPicked(picked)
+        } catch (err) {
+          onError && onError(errText(err))
         }
-        setLocalBusy(false)
       }
 
-      const browseTo = async (hostId, nextPath) => {
-        const my = ++seq.current
-        setBrowser({ hostId, path: nextPath, entries: [], loading: true })
-        try {
-          const res = await withTimeout(deps.listRemoteDir(hostId, nextPath), 20_000, '读取远端目录')
-          if (my !== seq.current) return
-          setBrowser({ hostId, path: nextPath, entries: unwrap(res, []) || [], loading: false })
-        } catch (error) {
-          if (my !== seq.current) return
-          setBrowser({ hostId, path: nextPath, entries: [], loading: false })
-          onError && onError(errText(error))
-        }
+      const openHost = (id) => {
+        const nextPath = pickerMemory.hostId === id ? pickerMemory.path : '/'
+        void browseTo(id, nextPath)
+      }
+
+      const jumpToPath = () => {
+        const value = editValue.trim()
+        if (value === '' || hostId === '') return
+        void browseTo(hostId, value.startsWith('/') ? value : '/' + value)
       }
 
       const createDir = async () => {
         const name = newDir.trim()
-        if (!name || !browser) return
-        const next = (browser.path === '/' ? '' : browser.path) + '/' + name
+        if (name === '' || hostId === '') return
         try {
-          const res = await withTimeout(deps.mkdirRemote(browser.hostId, next), 20_000, '新建文件夹')
-          if (!res || res.ok !== true) onError && onError(resError(res, '新建文件夹失败'))
-          else { setNewDir(''); await browseTo(browser.hostId, browser.path) }
-        } catch (error) {
-          onError && onError(errText(error))
+          const next = joinPath(path, name)
+          const res = await withTimeout(deps.mkdirRemote(hostId, next), 20_000, '新建文件夹')
+          if (!res || res.ok !== true) { setError(resError(res, '新建文件夹失败')); return }
+          setNewDir('')
+          await browseTo(hostId, path)
+        } catch (err) {
+          setError(errText(err))
         }
       }
 
       const useRemoteDir = async () => {
-        if (!browser || creating) return
+        if (hostId === '' || creating || busy) return
         setCreating(true)
         try {
-          const res = await withTimeout(deps.createPlaceholder(browser.hostId, browser.path), 30_000, '创建工作区')
+          const res = await withTimeout(deps.createPlaceholder(hostId, path), 30_000, '创建工作区')
           const value = unwrap(res, null)
           if (value) onPicked(value.localPath)
           else onError && onError(resError(res, '创建云端工作区失败'))
-        } catch (error) {
-          onError && onError(errText(error))
+        } catch (err) {
+          onError && onError(errText(err))
         }
         setCreating(false)
       }
 
+      const activeHost = hostList.find((hst) => hst.id === hostId)
+      const filteredHosts = query.trim() === ''
+        ? hostList
+        : hostList.filter((hst) => ((hst.name || '') + ' ' + hst.host + ' ' + hst.user).toLowerCase().includes(query.trim().toLowerCase()))
+
+      const railItem = (key, title, meta, active, onClick) => h('button', {
+        key,
+        type: 'button',
+        className: 'dri-railItem' + (active ? ' dri-railItemActive' : ''),
+        onClick,
+      }, h('span', { className: 'dri-railName' }, title), meta ? h('span', { className: 'dri-railMeta' }, meta) : null)
+
+      const crumbs = []
+      const segs = pathSegments(path)
+      const showSegs = segs.slice(-4) // 长路径只显示末 4 段
+      if (segs.length > showSegs.length) crumbs.push(h('span', { key: 'ellipsis', className: 'dri-crumbSep' }, '…'))
+      crumbs.push(h('button', { key: 'root', type: 'button', className: 'dri-crumb', onClick: () => { void browseTo(hostId, '/') } }, '/'))
+      let acc = ''
+      showSegs.forEach((seg, i) => {
+        acc = acc + '/' + seg
+        const target = acc
+        crumbs.push(h('span', { key: 'sep' + i, className: 'dri-crumbSep' }, '›'))
+        crumbs.push(h('button', {
+          key: 'seg' + i,
+          type: 'button',
+          className: 'dri-crumb',
+          title: target,
+          onClick: () => { void browseTo(hostId, target) },
+        }, seg))
+      })
+
       const dirRows = []
-      if (browser) {
-        if (browser.path !== '/') {
-          dirRows.push(h('div', { key: '..', className: 'dri-dirRow', onClick: () => {
-            const parent = browser.path.split('/').slice(0, -1).join('/') || '/'
-            void browseTo(browser.hostId, parent)
-          } }, h('span', null, '..')))
+      if (hostId !== '' && !loading && error === '') {
+        if (path !== '/') {
+          dirRows.push(h('div', { key: '..', className: 'dri-dirRow', onClick: () => { void browseTo(hostId, parentOfPath(path)) } },
+            h('span', { className: 'dri-dirName' }, h('span', { className: 'dri-dirIcon' }, '›'), '..')))
         }
-        for (const e of browser.entries || []) {
+        for (const e of entries) {
           if (e.type === 'dir') {
-            dirRows.push(h('div', { key: e.name, className: 'dri-dirRow', onClick: () => {
-              const next = (browser.path === '/' ? '' : browser.path) + '/' + e.name
-              void browseTo(browser.hostId, next)
-            } },
+            dirRows.push(h('div', { key: e.name, className: 'dri-dirRow', onClick: () => { void browseTo(hostId, joinPath(path, e.name)) } },
               h('span', { className: 'dri-dirName' }, h('span', { className: 'dri-dirIcon' }, '›'), e.name)))
           }
         }
-        if (browser.loading) dirRows.push(h('div', { key: 'loading', className: 'dri-dirRow', style: { cursor: 'default' } }, '连接中…'))
       }
 
-      const tabBtn = (id, label) => h('button', {
-        type: 'button',
-        className: 'dri-tab' + (tab === id ? ' dri-tab-active' : ''),
-        role: 'tab',
-        'aria-selected': tab === id ? 'true' : 'false',
-        onClick: () => setTab(id),
-      }, label)
-
-      const hostSelect = h('div', { className: 'dri-field' },
-        h('label', null, 'SSH 主机'),
-        h('select', { value: browser ? browser.hostId : '', onChange: (e) => {
-          const hostId = e.target.value
-          if (hostId) void browseTo(hostId, '/')
-          else setBrowser(null)
-        } },
-          h('option', { value: '' }, '选择主机…'),
-          hostList.map((host) => h('option', { key: host.id, value: host.id }, (host.name || host.id) + '（' + host.user + '@' + host.host + '）'))),
-        hostList.length === 0 ? h('span', { className: 'dri-hint' }, '还没有主机。') : null,
-        h('button', { className: 'dri-btn', style: { alignSelf: 'flex-start', marginTop: 6 }, onClick: () => setAddingHost(!addingHost) },
-          addingHost ? '收起' : '+ 添加主机'),
-      )
-
-      return h('div', { className: 'dri-pickerOverlay', role: 'dialog', 'aria-label': '选择工作区' },
-        h('div', { className: 'dri-picker' },
-          h('div', { className: 'dri-pickerHead' },
-            h('div', { className: 'dri-tabs' }, tabBtn('local', '本机'), tabBtn('cloud', '云端（SSH）')),
-            h('button', { className: 'dri-close', onClick: onCancel, 'aria-label': '取消' }, '×')),
-
-          tab === 'local'
-            ? h('div', { className: 'dri-pickerBody' },
-                h('p', { className: 'dri-intro' }, '选择 DSH 所在电脑上的一个文件夹作为工作区。'),
-                h('button', { className: 'dri-btn dri-btn-primary dri-pickLocal', disabled: localBusy || busy, onClick: pickLocal },
-                  localBusy ? '等待系统对话框…' : '选择文件夹…'),
-                h('p', { className: 'dri-hint', style: { marginTop: 10 } }, '将打开系统文件夹选择对话框。'))
-            : h('div', { className: 'dri-pickerBody' },
-                h('p', { className: 'dri-intro' }, '把服务器上的目录作为工作区，会话即在该服务器执行。'),
-                addingHost
-                  ? h(HostForm, {
-                      initial: null,
-                      hostId: '',
-                      onTest: (id, cfg) => withTimeout(deps.testConnection(id, cfg), 30_000, '测试连接'),
-                      onCancel: () => setAddingHost(false),
-                      onSave: async (patch) => {
-                        const id = slugId(patch.name || patch.host)
-                        const res = await deps.saveHost(id, patch)
-                        if (!res || res.ok !== true) { onError && onError(resError(res, '保存失败')); return }
-                        setAddingHost(false)
-                        await deps.load()
-                        // 存完直接选中并加载根目录：用户加主机的意图就是用它。
-                        void browseTo(id, '/')
+      const paneBody = addingHost
+        ? h(HostForm, {
+            initial: null,
+            hostId: '',
+            onTest: (id, cfg) => withTimeout(deps.testConnection(id, cfg), 30_000, '测试连接'),
+            onCancel: () => setAddingHost(false),
+            onSave: async (patch) => {
+              const id = slugId(patch.name || patch.host)
+              const res = await deps.saveHost(id, patch)
+              if (!res || res.ok !== true) { onError && onError(resError(res, '保存失败')); return }
+              setAddingHost(false)
+              await deps.load()
+              void browseTo(id, '/')
+            },
+          })
+        : hostId === ''
+          ? h('div', { className: 'dri-empty' }, '从左侧选择一台主机开始浏览',
+              h('div', { className: 'dri-emptySub' }, '还没有主机？点左下角「添加主机」。'))
+          : h('div', { className: 'dri-paneBody' },
+              h('div', { className: 'dri-paneBar' },
+                editingPath
+                  ? h('input', {
+                      className: 'dri-pathInput',
+                      autoFocus: true,
+                      value: editValue,
+                      onChange: (e) => setEditValue(e.target.value),
+                      onKeyDown: (e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); jumpToPath() }
+                        if (e.key === 'Escape') { e.stopPropagation(); setEditingPath(false) }
                       },
                     })
-                  : hostSelect,
-                browser ? h('div', null,
-                  h('div', { className: 'dri-dirPath' }, browser.path),
-                  h('div', { className: 'dri-dirList', style: { maxHeight: 200 } }, ...dirRows),
-                  h('div', { className: 'dri-dirActions' },
-                    h('input', {
-                      className: 'dri-newDir', value: newDir, placeholder: '新建文件夹名称…',
-                      onChange: (e) => setNewDir(e.target.value),
-                      onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); void createDir() } },
-                    }),
-                    h('button', { className: 'dri-btn', disabled: !newDir.trim(), onClick: createDir }, '新建文件夹')),
-                  h('div', { className: 'dri-formActions', style: { marginTop: 12 } },
-                    h('button', { className: 'dri-btn dri-btn-primary', disabled: busy || creating, onClick: useRemoteDir },
-                      busy || creating ? '正在创建…' : '使用「' + browser.path + '」作为工作区')))
-                  : null),
+                  : h('div', { className: 'dri-crumbs' }, ...crumbs),
+                h('button', {
+                  type: 'button',
+                  className: 'dri-btn',
+                  title: editingPath ? '回到面包屑' : '编辑路径',
+                  onClick: () => {
+                    if (editingPath) { setEditingPath(false); return }
+                    setEditValue(path)
+                    setEditingPath(true)
+                  },
+                }, editingPath ? '完成' : '✎'),
+                h('button', { type: 'button', className: 'dri-btn', title: '刷新', onClick: () => { void browseTo(hostId, path) } }, '⟳')),
+              error !== ''
+                ? h('div', { className: 'dri-errorRow' }, error)
+                : null,
+              h('div', { className: 'dri-paneList' },
+                loading
+                  ? h('div', { className: 'dri-empty' }, '读取中…')
+                  : dirRows.length === 0 && error === ''
+                    ? h('div', { className: 'dri-empty' }, '这个文件夹是空的',
+                        h('div', { className: 'dri-emptySub' }, '直接使用，或先新建一个文件夹。'))
+                    : null,
+                ...dirRows),
+              h('div', { className: 'dri-paneFoot' },
+                h('input', {
+                  className: 'dri-newDir',
+                  value: newDir,
+                  placeholder: '新建文件夹名称…',
+                  onChange: (e) => setNewDir(e.target.value),
+                  onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); void createDir() } },
+                }),
+                h('button', { type: 'button', className: 'dri-btn', disabled: newDir.trim() === '', onClick: createDir }, '新建文件夹'),
+                h('span', { style: { flex: 1 } }),
+                h('button', {
+                  type: 'button',
+                  className: 'dri-btn dri-btn-primary',
+                  disabled: busy || creating || loading,
+                  onClick: useRemoteDir,
+                }, busy || creating ? '正在创建工作区…' : '使用此目录')))
 
+      return h('div', { className: 'dri-pickerOverlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': '选择工作区' },
+        h('div', { className: 'dri-picker' },
+          h('div', { className: 'dri-pickerHead' },
+            h('div', null,
+              h('span', { className: 'dri-pickerTitle' }, addingHost ? '添加 SSH 主机' : '选择工作区'),
+              h('span', { className: 'dri-pickerMeta' },
+                activeHost ? (activeHost.user + '@' + activeHost.host) : '本机或远程目录')),
+            h('button', { className: 'dri-close', onClick: onCancel, 'aria-label': '取消' }, '×')),
+          h('div', { className: 'dri-pickerMain' },
+            h('div', { className: 'dri-rail' },
+              h('div', { className: 'dri-railSection' },
+                h('div', { className: 'dri-railTitle' }, '本机'),
+                railItem('local', '选择文件夹…', '', false, () => { void pickLocal() })),
+              recent.length > 0
+                ? h('div', { className: 'dri-railSection' },
+                    h('div', { className: 'dri-railTitle' }, '最近'),
+                    recent.map((w) => railItem(
+                      'recent-' + w.localPath,
+                      w.hostId + ' · ' + (w.remotePath.split('/').filter(Boolean).pop() || '/'),
+                      w.remotePath,
+                      false,
+                      () => { if (!busy) onPicked(w.localPath) },
+                    )))
+                : null,
+              h('div', { className: 'dri-railSection' },
+                h('div', { className: 'dri-railTitle' }, '主机'),
+                hostList.length > 6
+                  ? h('input', {
+                      className: 'dri-railSearch',
+                      value: query,
+                      placeholder: '搜索主机…',
+                      onChange: (e) => setQuery(e.target.value),
+                    })
+                  : null,
+                filteredHosts.map((hst) => railItem(hst.id, hst.name || hst.id, hst.user + '@' + hst.host, hst.id === hostId, () => openHost(hst.id))),
+                addingHost
+                  ? null
+                  : railItem('add-host', '+ 添加主机', '', false, () => setAddingHost(true)))),
+            h('div', { className: 'dri-pane' }, paneBody)),
           h('div', { className: 'dri-pickerFoot' },
-            h('span', { className: 'dri-hint' }, '选择后会创建工作区并开始使用。')),
-        ),
-      )
+            h('span', { className: 'dri-hint' }, addingHost ? '保存前先测试连接，成功后即可使用。' : '选择后会创建工作区并开始使用。'))))
     }
 
     /** apply() 注入给 WorkspacePicker 的动作集合（模块级，供闭包读取）。 */
@@ -1005,18 +1153,27 @@ window.__ModuleLoader__.load({
           ])
           const value = unwrap(hostsRes, null)
           if (value) store.set({ status: 'ready', hosts: value.hosts || {}, secrets: value.secrets || {}, error: null })
-          else store.set({ status: 'error', error: resError(hostsRes, '无法读取主机配置') })
+          else {
+            store.set({ status: 'error', error: resError(hostsRes, '无法读取主机配置') })
+            console.warn('[dsh-cloud-workspaces] listHosts rejected: ' + resError(hostsRes, 'unknown'))
+          }
           store.set({ placeholders: unwrap(phRes, []) || [] })
         } catch (error) {
+          console.warn('[dsh-cloud-workspaces] refresh failed: ' + errText(error))
           store.set({ status: 'error', error: errText(error) })
         }
       }
 
       ctx.effect(async () => {
-        const disposer = await ctx.remote.$mount(CLIENT_TYPERT_REMOTE)
-        mounted = true
-        await refresh()
-        return disposer
+        try {
+          const disposer = await ctx.remote.$mount(CLIENT_TYPERT_REMOTE)
+          mounted = true
+          await refresh()
+          return disposer
+        } catch (error) {
+          console.error('[dsh-cloud-workspaces] typert mount failed: ' + errText(error))
+          throw error
+        }
       }, 'dsh-remote-ide: typert mount')
 
       const load = () => refresh()

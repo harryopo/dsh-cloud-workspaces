@@ -2,6 +2,25 @@
 
 All notable changes to `dsh-cloud-workspaces` are documented here.
 
+## [0.4.0] — 2026-10-30
+
+### Breaking
+- **Requires DeepSeek Harness >= 0.2.1-rc.5.** The 0.2 SDK removed the settings-namespace API and replaced the jobs producer contract; 0.1.x is no longer supported (install `dsh-cloud-workspaces@0.3.0` for 0.1.x).
+- **Host metadata now lives only in the 0600 store** (`~/.dsh/dsh-remote-ide.json`). On first start an empty store imports the legacy `dsh-remote-ide-hosts` section from `settings.yaml`; the legacy section is left untouched.
+- Removed the retired seam-reference modules (`fs-ssh`, `subprocess-ssh`) and their package subpath exports.
+
+### Added
+- **Dual-pane workspace picker.** Left rail lists *this machine*, *recent workspaces* (one click back to a bound remote directory) and *SSH hosts* (searchable when there are more than six); the right pane has clickable breadcrumbs, an editable path field, explicit empty/loading/error states, inline folder creation and a single "Use this directory" action. Machine strings (hosts, paths) use a monospace face; selection uses a background fill, never an edge bar.
+
+### Changed
+- Background jobs use the 0.2 push producer API (`JobHandle.append`); cancellation, orphan detection and exit-code semantics are unchanged.
+- Client wiring follows the 0.2 contracts: `uiWorkspace` service and the `dsh-client-connection` / `dsh-client-ui-workspace` load edges.
+- Host list/save/delete endpoints read and write the 0600 store directly.
+- `ssh_workspace create` registers the new workspace (thanks @contributors, closes #2).
+
+### Fixed
+- Client typert codecs now provide the `create()` factory required by 0.2; without it the remote mount failed and the host list rendered empty on a real 0.2 instance.
+
 ## [Unreleased]
 
 ### Fixed

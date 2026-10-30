@@ -1,6 +1,15 @@
 # 项目进展 — dsh-cloud-workspaces
 
-**Date**: 2026-10-01（UI 重构完成）· **Category**: project · **Source**: conversation + git history
+**Date**: 2026-10-30（DSH 0.2 迁移 + 双栏选择器 / v0.4.0）· **Category**: project · **Source**: conversation + git history
+
+## 2026-10-30：DSH 0.2.1-rc.5 迁移 + 工作区选择器双栏重构（v0.4.0）
+
+- **起因**：用户问"命名 + 最新版本适配性 + 选择器 UI"；核对 0.2.1-rc.5 包 d.ts 发现两处硬破坏（settings 命名空间删除、jobs 改推模式），用户拍板：只支持 0.2.x、不改名、选择器大改信息架构。
+- **契约事实**（0.2.1-rc.5）：`settingsNamespace`/`installSettingsSection` 删除（设置由插件 Config 派生）；`JobHooks.readOutput` 删除 → `JobSpec.output`/`JobHandle.append`；`JobSpec.owner` 改 SessionId；client `ctx.workspaces` → `uiWorkspace`；`dsh-client-runtime` 包不存在；directoryFlow 槽位契约未变；`defineTool`/typert `$mount` 未变。
+- **实现**：① 主机元数据从 settings 收敛到 0600 store（`typert.ts` 只读写 store；新增 `src/legacy-import.ts` 用 js-yaml 一次性导入旧 `dsh-remote-ide-hosts` 段）② jobs 推模式（3s dd 泵 → `job.append`）③ client 改名 + inject 边换成 `dsh-client-connection`/`dsh-client-ui-workspace` ④ **typert codec 必须带 `create()`**（真机才发现：缺了它 `$mount` 失败、主机列表全空）⑤ 删除 `fs-ssh.ts`/`subprocess-ssh.ts`/`host-settings.ts` 及导出 ⑥ 选择器重做：左栏本机/最近/主机（>6 台可搜）+ 右栏面包屑/可编辑路径/空错载入态/新建文件夹/「使用此目录」；选择态只用背景填充，等宽字体承载机器字符串。
+- **验证**：94/94 单测；E2E **21/21**（真实 openEuler 192.168.45.200，含推模式 append 增量）；隔离 0.2 实例（`.tmp/dsh02` + `.tmp/dsh02-home`，4600）真机走通：主机列表 → 目录浏览 → 路径跳转 → 创建工作区 → 最近列表；typecheck + build + `verify-client-security.mjs` 全绿。
+- **踩坑**：pnpm 装 0.2 包必须 `--registry=https://registry.npmjs.org/ --network-concurrency=1`（npmmirror 未同步 rc 包、并发请求被断开）；`@deepseek-ai/dsh-invariants` 没有 0.2.1-rc.5（无用 → 删依赖）；4600 旧进程占端口要 taskkill 才能重启；浏览器连接器 in-app surface 隐藏时只能 DOM 级验证（点击/截图需可见视口）。
+- **发布**：版本 0.4.0（breaking，需 DSH ≥ 0.2.1-rc.5）；0.3.0 供 0.1.x；CHANGELOG/README 双语定位改为 "Remote Linux workspaces over SSH"。
 
 ## 2026-10-01（续）：UI 重构落地（保守·贴合宿主 + 安全加固）
 

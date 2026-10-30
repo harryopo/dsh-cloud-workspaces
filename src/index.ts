@@ -23,6 +23,7 @@ import { HOST_TYPERT_CONTRIBUTION, REMOTE_SERVICE, registerPlaceholderWorkspace,
 import { installSessionRouting, sessionSectionText } from './session-tools'
 import { routeByCwd } from './workspace'
 import { defaultStorePath } from './store'
+import { debugLog } from './debug-log'
 
 /** Stable cordis plugin name. */
 export const name = 'remote-ide'
@@ -68,6 +69,7 @@ const SECTION_ORDER = 150
  * @param config - resolved plugin config (schema defaults applied by the loader).
  */
 export async function apply(ctx: Context, config?: Config): Promise<void> {
+  debugLog('apply: dsh-cloud-workspaces host half starting')
   const resolve = (): Config => ({
     enabled: config?.enabled ?? DEFAULT_ENABLED,
     maxReadBytes: config?.maxReadBytes,
@@ -147,11 +149,17 @@ export async function apply(ctx: Context, config?: Config): Promise<void> {
 
   // 设置卡主机管理 + Typert 端点：只依赖 typert 服务（0.2 无 settings 命名空间）。
   ctx.inject(['typert'], (scope) => {
-    const remote = new SshRemoteService(scope, runtime)
-    // 严格描述符注册（face:'host' + invocations）；gateway 的 claimsEndpoint
-    // 按 local 注册表命中端点，SRC 回退无需装饰器。
-    scope.typert.register(HOST_TYPERT_CONTRIBUTION)
-    scope.logger?.info('[dsh-remote-ide] typert remote ' + REMOTE_SERVICE + ' registered')
+    try {
+      debugLog('typert inject fired')
+      const remote = new SshRemoteService(scope, runtime)
+      // 严格描述符注册（face:'host' + invocations）；gateway 的 claimsEndpoint
+      // 按 local 注册表命中端点，SRC 回退无需装饰器。
+      scope.typert.register(HOST_TYPERT_CONTRIBUTION)
+      scope.logger?.info('[dsh-remote-ide] typert remote ' + REMOTE_SERVICE + ' registered')
+      debugLog('typert registered; store hosts=' + String(Object.keys(remote.listHosts().hosts).length))
+    } catch (error) {
+      debugLog('typert inject failed: ' + (error instanceof Error ? error.message : String(error)))
+    }
   })
 
   // 免 preset 的透明会话路由（核心竞争力）：agent/created 看会话 cwd，占位

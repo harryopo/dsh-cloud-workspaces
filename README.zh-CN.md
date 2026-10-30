@@ -3,17 +3,17 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-126%20%E5%8D%95%E6%B5%8B%20%2B%2029%20E2E-brightgreen.svg)](#开发)
+[![Tests](https://img.shields.io/badge/tests-94%20%E5%8D%95%E6%B5%8B%20%2B%2021%20E2E-brightgreen.svg)](#开发)
 
-**[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的云端工作区插件。**
+**[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的远程 Linux 工作区插件：把服务器目录直接变成工作区，全程走标准 SSH。**
+
+> 需要 DSH **>= 0.2.1-rc.5**；0.1.x 请安装 `dsh-cloud-workspaces@0.3.0`。
 
 在工作区选择器里选 **「云端 (SSH)」**，编码 Agent 就直接在你的 Linux 服务器上干活：`bash`、`read`、`write`、`edit`、`glob`、`grep` —— 内置工具全家桶 —— 全部经 SSH 透明执行。文件、搜索、编辑、终端，统统落在远程。
 
 **服务器零安装。** 没有 vscode-server 式的远程组件、没有常驻进程、无需下载任何东西——一个标准 OpenSSH 服务端就是全部要求。
 
 <p align="center">
-  <img src="docs/screenshots/workspace-picker.png" width="420" alt="工作区选择器的云端 (SSH) tab" />
-  <img src="docs/screenshots/add-host-form.png" width="420" alt="添加 SSH 主机表单" />
 </p>
 <p align="center">
   <img src="docs/screenshots/remote-exec.png" width="860" alt="会话中 bash 在远程服务器执行" />
@@ -31,7 +31,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 
 ### 云端工作区（主打）
 
-- **双 tab 工作区选择器** —— 「本机」/「云端 (SSH)」两个 tab；云端工作区经 DSH 官方工作区注册表收养，在选择器里显示为 `主机 / 路径`。
+- **双栏工作台选择器** —— 左栏来源（本机 / 最近工作区 / SSH 主机），右栏目录浏览（可点面包屑、可编辑路径、空/错/加载三态、内联新建文件夹）；云端工作区经 DSH 官方工作区注册表收养，在选择器里显示为 `主机 / 路径`。
 - **工具集透明重定向** —— 会话 cwd 落在云端占位目录下时，插件把同名的 `bash` / `read` / `write` / `edit` / `glob` / `grep` / `read_image` 注册进**该会话自己的 agent scope**——agent 照旧调用它早已熟悉的工具名，每次调用却落在远程执行。本地会话完全不受影响：遮蔽只作用于云端会话，会话一旦不是云端的，立刻回落到官方本地工具。
 - **官方 UI 的遮蔽工具** —— 会话级远程 `bash` / `read` / `write` / `edit` / `glob` / `grep` 只注册进该会话的 agent scope，并实现官方 `presentCall` / `presentResult` 渲染器——聊天里的工具行渲染成真正的终端卡 / 阅读卡，可展开、可复制、原生观感。
 - **后台任务** —— `bash` / `ssh_exec` 传 `run_in_background: true` 即把命令起成 DSH 一等公民 job（官方 `job_output` / `job_list` / `job_kill`、完成通知、任务 UI 全部现成）：安装、构建、测试套件在服务器上跑，永不撞执行超时。
@@ -118,21 +118,22 @@ DSH host 进程 (Node)
 ```
 
 - **Host 半**（`src/`，TypeScript）：`SshEngine` + `SshRuntime`、云端会话的遮蔽工具注册、全局 `ssh_*` 工具、Typert remote 端点、后台任务生产者、设置 schema。
-- **Client 半**（`client/`，纯 ESM React `createElement`）：经官方插槽（`settings.section`、`workspace.*`）注入设置卡与双 tab 选择器。无 JSX 构建步骤，只用 `--dsw-*` 设计 token。
+- **Client 半**（`client/`，纯 ESM React `createElement`）：经官方插槽（`settings.section`、`workspace.*`）注入设置卡与双栏选择器。无 JSX 构建步骤，只用 `--dsw-*` 设计 token。
 
 ## 开发
 
 ```sh
 pnpm build        # tsc d.ts + tsdown 产物
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest —— 126 个单测
+pnpm test         # vitest —— 94 个单测
 node scripts/e2e-real-server.mjs   # 29 个 E2E（真 SSH，WSL sshd 127.0.0.1:2223）
 ```
 
 ## 路线图
 
 - [x] SSH 引擎：连接池、keepalive、断线重建、ProxyJump
-- [x] 云端工作区：双 tab 选择器、占位目录、官方收养
+- [x] 云端工作区：双栏选择器、占位目录、官方收养
+- [x] DSH 0.2 SDK 迁移（settings 命名空间移除、推模式后台任务）
 - [x] 工具集透明重定向（遮蔽工具按云端会话注册）
 - [x] 官方终端卡/阅读卡的遮蔽工具
 - [x] 远程后台任务（`ctx.jobs` 生产者）：`run_in_background` + `job_output` / `job_list` / `job_kill`

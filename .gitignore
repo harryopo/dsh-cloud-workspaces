@@ -11,3 +11,4 @@ dist/
 .playwright-mcp/
 .mimosa/
 .qoder/
+.tmp/

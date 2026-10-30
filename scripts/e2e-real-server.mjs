@@ -7,9 +7,8 @@
  *   3. engine.exec（基础命令 / cwd 前缀 / 非零退出码）
  *   4. SFTP 全套（mkdir→write→read→ls→rename→remove→rmdir，UTF-8 中文内容）
  *   5. PTY（openShell 回显算术展开 + exit 收尾）
- *   6. 真实 ctx.fs 适配器（resolve/writeText/readText/stat/listDir）
- *   7. 占位工作区路由（createPlaceholderDir → routeByCwd → fs.resolve 重锚定）
- *   8. 真实 ctx.subprocess 适配器（spawn，cwd=占位目录 → pwd 落远程目录）
+ *   6. 占位工作区路由（createPlaceholderDir → routeByCwd → resolveRemotePath）
+ *   7. 后台任务（job-runner：wrapper / dd 增量 append / 杀进程组）
  *
  * 用法：node scripts/e2e-real-server.mjs [alias]
  * 目标默认取 ~/.dsh/dsh-remote-ide.json 的第一台主机（不会打印任何密钥）。
@@ -20,8 +19,6 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import SshRuntime from 'dsh-cloud-workspaces/ssh-service'
-import SshFileSystem from 'dsh-cloud-workspaces/fs-ssh'
-import { SshSubprocessRuntime } from 'dsh-cloud-workspaces/subprocess-ssh'
 import {
   createPlaceholderDir,
   routeByCwd,
@@ -137,26 +134,8 @@ try {
   shell.send('exit\n')
   await withTimeout(ptyClosed, 10_000, 'PTY close')
 
-  // --------------------------------------------- 6. 真实 ctx.fs 适配器
-  section('6. ctx.fs（SshFileSystem，官方 FileSystem 接口）')
-  await ctx.plugin(SshFileSystem)
-  const fs = ctx.fs
-  const homeTarget = await fs.resolve('m4-e2e.txt')
-  check('resolve 相对→home', String(homeTarget.targetKey) === `${status.home}/m4-e2e.txt`,
-    String(homeTarget.targetKey))
-  await fs.writeText(homeTarget, `fs-adapter roundtrip ${stamp}\n`)
-  const fsRead = await fs.readText(homeTarget)
-  check('writeText→readText 往返', fsRead === `fs-adapter roundtrip ${stamp}\n`)
-  const info = await fs.stat(homeTarget)
-  check('stat', info !== undefined && info.size > 0, info ? `${info.size} bytes` : 'undefined')
-  const dirTarget = await fs.resolve('.')
-  const entries = await fs.listDir(dirTarget)
-  check('listDir 非空', entries.length > 0, `${entries.length} entries`)
-  await fs.writeText(await fs.resolve('m4-e2e-remove.txt'), 'temp')
-  await engine.remove(targetAlias, `${status.home}/m4-e2e-remove.txt`)
-
-  // --------------------------------------------- 7. 占位工作区路由
-  section('7. 占位工作区（placeholder workspace 路由）')
+  // --------------------------------------------- 6. 占位工作区路由
+  section('6. 占位工作区（placeholder workspace 路由）')
   await engine.mkdir(targetAlias, remoteWs)
   const ph = await createPlaceholderDir({ hostId: targetAlias, remotePath: remoteWs })
   localPlaceholder = ph.localPath
@@ -164,9 +143,6 @@ try {
   const routed = routeByCwd(ph.localPath)
   check('routeByCwd → remote', routed.kind === 'remote' && routed.hostId === targetAlias
     && routed.remoteCwd === remoteWs, JSON.stringify(routed))
-  const reAnchored = await fs.resolve('inner.txt', { cwd: ph.localPath })
-  check('fs.resolve cwd=占位 → 重锚远程', String(reAnchored.targetKey) === `${remoteWs}/inner.txt`,
-    String(reAnchored.targetKey))
   // 占位会话锚定后 runtime 激活连接应同步切换：ssh_* 工具的无别名回退
   // 读 activeAlias，不激活会让同会话 ssh_exec 报 "no alias given"。
   check('锚定同步激活连接（ssh_* 无别名可用）', runtime.engine.status().alias === targetAlias,
@@ -175,39 +151,30 @@ try {
   const allPh = await listPlaceholders()
   check('listPlaceholders 可见', allPh.some(w => w.localPath === ph.localPath && w.remotePath === remoteWs))
 
-  // --------------------------------------------- 8. 真实 ctx.subprocess
-  section('8. ctx.subprocess（SshSubprocessRuntime，cwd=占位目录）')
-  await ctx.plugin(SshSubprocessRuntime, { pollMs: 5 })
-  const sp = ctx.subprocess
-  const handle = sp.spawn({
-    argv: ['bash', '-c', 'echo REMOTE_PROC_OK && pwd'],
-    cwd: ph.localPath,
-    graceMs: 5000,
-    stdio: { stdin: 'ignore', stdout: { maxBytes: 65536 }, stderr: { maxBytes: 65536 } },
-  })
-  const outcome = await withTimeout(handle.done, 60_000, 'subprocess spawn')
-  const outText = handle.collected.stdout?.readFrom(0)?.text ?? ''
-  check('spawn 退出码 0', outcome.exitCode === 0, JSON.stringify(outcome))
-  check('子进程输出 REMOTE_PROC_OK', outText.includes('REMOTE_PROC_OK'), JSON.stringify(outText.trim()))
-  check('pwd 落远程目录（占位→远程重锚定）', outText.includes(remoteWs), JSON.stringify(outText.trim()))
-
-  // --------------------------------------------- 9. 后台任务（job-runner）
-  section('9. 后台任务（job-runner：wrapper / dd 增量 / 杀进程组）')
+  // --------------------------------------------- 7. 后台任务（job-runner）
+  section('7. 后台任务（job-runner：wrapper / dd 增量 append / 杀进程组）')
   {
     const { startRemoteJob } = await import('dsh-cloud-workspaces/job-runner')
     // 裸 Context 无 dsh-jobs——假 registry 捕获 spec，验证的是远端机制本身。
+    // 0.2 推模式：run(job) 调用 job.append()。
+    const appends = []
     let hooks = null
-    const fakeJobs = { start: (s) => { queueMicrotask(() => { hooks = s.run() }); return 'ssh-e2e-1' } }
+    const fakeJobs = {
+      start: (s) => {
+        const job = { id: 'ssh-e2e-1', append: (t) => { appends.push(t) }, updateProgress: () => {} }
+        queueMicrotask(() => { hooks = s.run(job) })
+        return 'ssh-e2e-1'
+      },
+    }
     const sleepCmd = 'for i in 1 2 3 4 5; do echo tick$i; sleep 1; done'
     const started = startRemoteJob({ engine, jobs: fakeJobs }, { hostId: targetAlias, command: sleepCmd, cwd: remoteWs })
     check('startRemoteJob 返回 background+jobId', started.kind === 'background' && started.jobId === 'ssh-e2e-1')
-    await new Promise(r => setTimeout(r, 2500))
     let mid = ''
-    for (let i = 0; i < 6 && !mid.includes('tick1'); i++) {
-      mid += hooks === null ? '' : hooks.readOutput()
+    for (let i = 0; i < 8 && !mid.includes('tick1'); i++) {
       await new Promise(r => setTimeout(r, 1500))
+      mid = appends.join('')
     }
-    check('readOutput 中途见增量输出', mid.includes('tick1'), JSON.stringify(mid.slice(0, 40)))
+    check('job.append 中途见增量输出', mid.includes('tick1'), JSON.stringify(mid.slice(0, 40)))
     const doneOutcome = await withTimeout(hooks.done, 20_000, 'job done')
     check('done=completed + exit code 0', doneOutcome.status === 'completed' && doneOutcome.detail === 'exit code: 0', JSON.stringify(doneOutcome))
     startRemoteJob({ engine, jobs: fakeJobs }, { hostId: targetAlias, command: 'sleep 120', cwd: remoteWs })
