@@ -1,26 +1,26 @@
 # Repo Wiki — dsh-cloud-workspaces
 
-> 生成：2026-09-18（同日更新：后台任务落地）· 基线 commit `51a7e10` + v0.3.0 后台任务 · 126/126 测试 + E2E 29/29 全绿实测
-> 来源：全仓库文件逐个读取核验（src 16 文件 / client / tests 11 / scripts 3 / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
+> 生成：2026-09-18 · **更新：2026-10-30（v0.4.0：DSH 0.2 迁移 + 双栏选择器）** · 基线 commit `ffc747b` · 94/94 单测 + E2E 21/21 全绿实测（真实 openEuler）
+> 来源：全仓库文件逐个读取核验（src / client / tests / scripts / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
 
 ## 1. 项目概述
 
 - **定位**：DeepSeek Harness（DSH）的「云端工作区」双面插件。用户在「添加工作区」选「云端（SSH）」→ 绑定远程目录为工作区 → 该会话的官方工具（bash/read/write/edit/glob/grep + read_image）**透明落远程 Linux 服务器**，与本地体验一致。
 - **业务目标**：免 preset、免远程安装（标准 sshd 即可，无 vscode-server 式远端组件）的 agent 远程开发；差异化 = 全生态唯一的「官方工具透明重定向」（竞品靠镜像同步或私有工具名）。
-- **技术栈**：TypeScript 5.7.2 · Node ≥22（es2024）· ssh2 1.17.0 · Cordis 4.0.1（DI/Scope/事件总线）· @deepseek-ai/* 0.1.1-rc.2（peer，运行时从 profile 解析）· tsdown 0.22.2（打包）· vitest 3.2.7 · schemastery 3.x。
-- **运行/部署**：`dsh plugin --profile web add dsh-cloud-workspaces`（npm）或 `link:` 源码；`dsh web --port 4500` 承载；host 半改动需重启 web 进程。发布：npm `dsh-cloud-workspaces`（线上 0.2.1，本地 0.3.0 待发，0.2.2 跳过直接发 0.3.0）+ GitHub `harryopo/dsh-cloud-workspaces`（Apache-2.0）。
-- **命名注意**：包名/仓库已改 `dsh-cloud-workspaces`，**内部标识全部保留旧名 `dsh-remote-ide`**（settings namespace、存储文件、typert 前缀、cordis 插件名）以保数据兼容——新代码勿改。
+- **技术栈**：TypeScript 5.7.2 · Node ≥22（es2024）· ssh2 1.17.0 · Cordis 4.0.5（DI/Scope/事件总线）· @deepseek-ai/* **0.2.1-rc.5**（peer，运行时从 profile 解析）· js-yaml 4（旧 settings 一次性导入）· tsdown 0.22.2（打包）· vitest 3.2.7 · schemastery 3.x。
+- **运行/部署**：`dsh plugin --profile web add dsh-cloud-workspaces`（npm）或 `link:` 源码；`dsh web --port 4500` 承载；host 半改动需重启 web 进程。发布：npm `dsh-cloud-workspaces`（线上 0.2.1；本地 **0.4.0** 待发，需 DSH ≥ 0.2.1-rc.5；0.3.0 供 0.1.x）+ GitHub `harryopo/dsh-cloud-workspaces`（Apache-2.0）。
+- **命名注意**：包名/仓库已改 `dsh-cloud-workspaces`，**内部标识保留旧名 `dsh-remote-ide`**（存储文件、typert 前缀、cordis 插件名 `remote-ide`）以保数据兼容——新代码勿改。0.2 起 settings 命名空间已随 SDK 删除。
 
 ## 2. 仓库目录结构
 
 ```
 ├── AGENTS.md              ★ 交接总纲（架构/命令/坑/状态）——任何 AI 先读
 ├── CLAUDE.md              AGENTS.md 摘要指针
-├── README.md / README.zh-CN.md   对外产品文档（双语 + 3 截图）
-├── CONTRIBUTING.md        ⚠️ 过时（描述已删除的浏览器面板架构）
+├── README.md / README.zh-CN.md   对外产品文档（双语 + 会话截图）
+├── CONTRIBUTING.md        贡献指南（2026-09 重写，与当前架构一致）
 ├── package.json           双面插件声明：exports + dsh.bundle.patch + dsh.client
 ├── cordis.patch.yml       profile bundle 插入行（挂载点）
-├── tsdown.config.ts       host 半 6 入口 ESM 打包（external 全部 @deepseek-ai/*）
+├── tsdown.config.ts       host 半 5 入口 ESM 打包（external 全部 @deepseek-ai/*）
 ├── tsconfig[.build].json  strict + lib/types 声明输出
 ├── vitest.config.ts       tests/**/*.test.ts，node 环境
 ├── pnpm-workspace.yaml    allowBuilds（ssh2/node-pty 原生编译白名单）
@@ -32,20 +32,18 @@
 │   ├── tools.ts           6 个全局 ssh_* 工具
 │   ├── job-runner.ts      ★ 后台任务生产者：run_in_background → 官方 ctx.jobs（kind ssh）
 │   │                        常驻通道 wrapper + dd 增量日志 + 杀进程组；job_output/job_list/job_kill 白拿
-│   ├── typert.ts          9 个跨半 RPC 端点 + 口令迁移
-│   ├── host-settings.ts   settings namespace/schema/脱敏/桥接 payload
+│   ├── typert.ts          9 个跨半 RPC 端点（主机 CRUD 只读写 0600 store）
+│   ├── legacy-import.ts   0.2 一次性迁移：旧 settings.yaml 主机段 → 0600 store
 │   ├── store.ts           主机配置 0600 存储（ACL/导入/防污染）
 │   ├── workspace.ts       占位工作区路由（纯函数 + 可注入 IO）
 │   ├── jsonsafe.ts        边界净化（lossless JSON）
 │   ├── debug-log.ts       文件诊断日志（512KiB 轮转）
 │   ├── protocol.ts        共享类型（+ ⚠️ 死常量 REMOTE_API）
 │   ├── invariant.ts       空不变量伴侣插件（官方惯例占位）
-│   ├── fs-ssh.ts          [legacy] ctx.fs seam 替换（参考，不部署）
-│   └── subprocess-ssh.ts  [legacy] ctx.subprocess seam 替换（参考，不部署）
-├── client/index.js        client 半：设置卡 + 双 tab 选择器（createElement，无 JSX）
+├── client/index.js        client 半：设置卡 + 双栏工作台选择器（createElement，无 JSX）
 ├── agent-presets/remote-legacy/  [已下线] 旧 preset 模板
-├── scripts/               e2e-real-server.mjs（29 项真机验收）/ debug-spawn.mjs / start-dsh-web.ps1
-├── tests/                 vitest 126 用例（fake ssh2 harness）
+├── scripts/               e2e-real-server.mjs（21 项真机验收）/ debug-spawn.mjs / start-dsh-web.ps1
+├── tests/                 vitest 94 用例（fake ssh2 harness）
 ├── docs/                  03 方案书（纲领）/ 06 开发方法论 / screenshots/ / REPO-WIKI.md（本文件）
 └── memory/                项目记忆（编年进展/踩坑/用户画像/UI 决策/生态参考）
 ```
@@ -54,18 +52,17 @@
 
 | 模块 | 职责 | 依赖 |
 |---|---|---|
-| `index.ts` | 装配：起 SshRuntime → 注册 ssh_* 工具（sync 受 enabled/announceToAgent 开关）→ 两段 systemPrompt（全局宣告 + 会话动态段）→ inject(typert,settings) 挂载设置面 → installSessionRouting | 全部 |
+| `index.ts` | 装配：起 SshRuntime → 注册 ssh_* 工具（sync 受 enabled/announceToAgent 开关）→ 两段 systemPrompt（全局宣告 + 会话动态段）→ 启动 legacy-import → inject(typert) 挂载设置面 → installSessionRouting | 全部 |
 | `session-tools.ts` | `ctx.on('agent/created')` → `routeByCwd(cwd)` 命中占位 → **仅在 `payload.agent.ctx`（agent scope）**注册 7 遮蔽工具 + `runtime.connect(hostId)` 预热切 activeAlias；isEnabled 事件时求值 | engine/workspace/jsonsafe/debug-log |
 | `ssh-service.ts` | Service `ctx.ssh`：connect/disconnect/getConnection（broken 或陈旧 rejection 自动重建）/getConnectionFor（多主机不切激活）/wrap 句柄/disposal 守卫 | engine/store |
 | `engine.ts` | 连接池（Map<alias,PoolRecord> + connecting 在途去重）/keepalive/sweep 空闲回收（inFlight 守卫）/exec（超时+输出 cap）/openChannel 流式/openShell PTY/SFTP CRUD（readFile 流式 cap、writeFile 自动建父目录、posix-rename）/ProxyJump 链/keyboard-interactive | ssh2/store |
 | `store.ts` | `~/.dsh/dsh-remote-ide.json`（0600 + Windows icacls 断继承）；upsert 校验（isSafeHostId 防原型污染）；`~/.ssh/config` 导入 | protocol |
 | `workspace.ts` | 占位路径 `<DSH_HOME|~/.dsh>/remote/<hostId>/<base64url(远程绝对路径)>`：编解码可逆、routeByCwd、resolveRemotePath（占位绝对路径重锚回远程）、manifest、listPlaceholders | 纯函数+注入 fs |
-| `typert.ts` | 9 端点（listHosts/saveHost/deleteHost/testConnection/listRemoteDir/mkdirRemote/removeRemote/createPlaceholder/listPlaceholders）；口令唯一权威=store，启动一次性迁移 settings 明文→store；createPlaceholder 后台注册 workspaceRegistry（5s 超时不阻塞） | engine/host-settings/workspace/jsonsafe |
-| `host-settings.ts` | settings namespace `dsh-remote-ide-hosts`（hosts dict；口令永不落 settings）；redactHosts/hostsOf(过滤污染键)/toHostPayload(auth 缺省=保 store 既有) | dsh-settings/schemastery |
+| `typert.ts` | 9 端点（listHosts/saveHost/deleteHost/testConnection/listRemoteDir/mkdirRemote/removeRemote/createPlaceholder/listPlaceholders）；主机元数据与口令唯一权威=0600 store；createPlaceholder 后台注册 workspaceRegistry（5s 超时不阻塞） | engine/legacy-import/workspace/jsonsafe |
+| `legacy-import.ts` | 首次启动 store 为空时，用 js-yaml 读 `settings.yaml` 的 `dsh-remote-ide-hosts:` 段导入主机（best-effort，不改写用户文件） | js-yaml/store |
 | `tools.ts` | 全局 `ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write/ssh_workspace`（resolveAlias：显式 alias 优先，回退 activeAlias） | ssh-service/workspace/jsonsafe |
-| `client/index.js` | 设置卡 SshHostsSection + WorkspacePicker（本机/云端双 tab，onPicked 官方收养）；typert 描述符镜像；withTimeout/safeCall/slugId/seq 守卫 | 官方 slots/remote |
+| `client/index.js` | 设置卡 SshHostsSection + WorkspacePicker（双栏工作台：左栏本机/最近/主机，右栏面包屑/可编辑路径/空错态/新建/使用此目录，onPicked 官方收养）；typert 描述符镜像（codec 必须带 `create()`）；withTimeout/safeCall/slugId/seq 守卫 | 官方 slots/remote/uiWorkspace |
 | `jsonsafe.ts` / `debug-log.ts` | 边界净化 / 文件诊断（跨边界输出必过 jsonSafe；scope.logger 不落盘） | — |
-| `fs-ssh.ts` / `subprocess-ssh.ts` | legacy 真 seam 路线参考（13 方法 FileSystem / wrapper 协议 SubprocessRuntime），仅 remote-legacy preset 挂载 | ssh-service |
 
 ```mermaid
 flowchart LR
@@ -80,7 +77,6 @@ flowchart LR
     IDX --> TY[typert 9 端点]
     IDX --> TOOLS[ssh_* 全局工具]
     TY --> STORE[HostStore 0600+ACL]
-    TY --> HS[settings namespace 无口令]
     ST -->|agent/created + routeByCwd| SCOPE[agent scope 7 遮蔽工具]
     SCOPE --> ENG
     TOOLS --> ENG
@@ -114,15 +110,15 @@ flowchart LR
 
 **占位工作区（workspace.ts）**：`remoteRoot()`（env 可覆盖）、`isValidHostId`、`encode/decodeRemotePath`（base64url 可逆+规范编码校验）、`mapRemoteToLocal/mapLocalToRemote`、`routeByCwd`、`resolveRemotePath`、`createPlaceholderDir`（幂等+manifest）、`listPlaceholders`、`readManifest`。
 
-**存储与安全（store.ts/host-settings.ts/typert.ts）**：0600+icacls ACL 收紧、`isSafeHostId` 原型污染防护（store 键 + settings 读取双侧过滤）、口令 write-only 边界（wire 脱敏 + settings 不落口令 + 启动迁移）、`~/.ssh/config` 导入、`getStoredEntry`（host 平面内部补回口令专用，绝不进 wire）。
+**存储与安全（store.ts/legacy-import.ts/typert.ts）**：0600+icacls ACL 收紧、`isSafeHostId` 原型污染防护（store 键双侧过滤）、口令 write-only 边界（wire 脱敏 + 唯一落 store）、`~/.ssh/config` 导入、0.2 旧 settings 段一次性导入、`getStoredEntry`（host 平面内部补回口令专用，绝不进 wire）。
 
 **边界工具**：`jsonSafe`（所有 typert 端点 return + 工具 execute return 必包）；`debugLog`（512KiB 轮转，`~/.dsh/dsh-remote-ide-debug.log`）。
 
-**client 半交互件（可复用模式）**：`withTimeout(p,ms,label)`、`safeCall` 语义的 `svc()` 守卫、`slugId` 唯一 id、`useRef` seq 竞态守卫、`useStore` 订阅、目录浏览器（浏览/新建/删除/绑定）、双 tab 选择器（pickDirectory 官方原生框 + 云端级联浏览 + 内联 HostForm）、Escape 关闭。
+**client 半交互件（可复用模式）**：`withTimeout(p,ms,label)`、`safeCall` 语义的 `svc()` 守卫、`slugId` 唯一 id、`useRef` seq 竞态守卫、`useStore` 订阅、双栏工作台（左栏本机/最近/主机 + 右栏面包屑/可编辑路径/空错载入态，pickDirectory 官方原生框 + 内联 HostForm）、Escape 关闭。
 
 **测试基建**：`vi.mock('ssh2')` + MiniEmitter/FakeClient/FakeStream 可编程假传输（connect 行为可控 ready/error、instances 计数）——新引擎测试直接复用此模式。
 
-**脚本**：`e2e-real-server.mjs`（29 项真机全链路验收，驱动 lib/ 产物 + 真实 cordis Context）；`debug-spawn.mjs`（wrapper 发布诊断）；`start-dsh-web.ps1`（4500 一键起）。
+**脚本**：`e2e-real-server.mjs`（21 项真机全链路验收，驱动 lib/ 产物 + 真实 cordis Context）；`debug-spawn.mjs`（wrapper 发布诊断）；`start-dsh-web.ps1`（4500 一键起）。
 
 **接口（typert 9 端点 + 6 全局工具 + 7 遮蔽工具）**：见 §5/§3；host 贡献与 client 描述符一一对应（已核验 9=9）。
 
@@ -148,11 +144,11 @@ flowchart LR
 
 ## 6. 配置项 & 环境变量
 
-**插件 Config（settings namespace `dsh-remote-ide`）**：`enabled`(true) 总开关（工具注册+钩子事件时求值）；`maxReadBytes`(2MiB, 64KiB–64MiB)；`announceToAgent`(true) 全局宣告段。
+**插件 Config（0.2 由插件 Config 自动派生设置表单，命名空间=profile 条目 id `remote-ide`）**：`enabled`(true) 总开关（工具注册+钩子事件时求值）；`maxReadBytes`(2MiB, 64KiB–64MiB)；`announceToAgent`(true) 全局宣告段。
 **SshRuntime Config**：`idleTimeoutMs`(30min)、`connectTimeoutMs`(15s→ssh2 readyTimeout)、`keepaliveIntervalMs`(15s)、`maxOutputBytes`(2MiB)、`defaultExecTimeoutMs`(60s)、`maxReadBytes`(2MiB)、`storeFile`(空串=默认)。
 **环境变量**：`DSH_REMOTE_ROOT`（占位根覆盖，最高优先级）> `DSH_HOME/remote` > `~/.dsh/remote`；`USERNAME`（icacls 授权当前用户）；`USER`（ssh-config 导入兜底用户）。
-**文件**：`~/.dsh/dsh-remote-ide.json`（0600+ACL，口令唯一权威）；`~/.dsh/dsh-remote-ide-debug.log`；`~/.dsh/settings.yaml` 的 `dsh-remote-ide-hosts`（无口令）；`~/.dsh/remote/<hostId>/<b64>/`（占位+.dsh-remote-workspace.json manifest）。
-**构建**：tsdown 6 入口 external 全部 @deepseek-ai/*；build 脚本先删 lib 再 tsc（防 d.ts 被 clean，坑 6）。
+**文件**：`~/.dsh/dsh-remote-ide.json`（0600+ACL，主机与口令唯一权威）；`~/.dsh/dsh-remote-ide-debug.log`；`~/.dsh/settings.yaml` 的旧 `dsh-remote-ide-hosts` 段（仅 0.2 首次启动导入，之后不再读取）；`~/.dsh/remote/<hostId>/<b64>/`（占位+.dsh-remote-workspace.json manifest）。
+**构建**：tsdown 5 入口 external 全部 @deepseek-ai/*；build 脚本先删 lib 再 tsc（防 d.ts 被 clean，坑 6）。
 
 ## 7. 依赖库与相关官方资料摘要
 
@@ -169,9 +165,9 @@ flowchart LR
 
 **发布/决策（待用户）**：① npm 未发布（本地 0.3.0 vs 线上 0.2.1，0.2.2/0.3.0 积压；令牌过期）② `~/.dsh` 目录 ACL 断继承待决策（影响沙箱工具读取）。
 **架构限制**：单 `activeAlias` 全局语义——遮蔽工具按会话闭包 hostId 免疫，但**全局 `ssh_*` 无别名回退会跟随最后激活的会话**（`session-tools.ts` 每个 agent/created 都会改写它），多主机并发时无别名的 `ssh_exec` 可能落到错误主机；M0 遗留：broken 重建成功后 engine state 语义未统一。
-**功能缺口**：`glob`/`grep` 硬编码 30s 超时且**不检查 `timedOut`**——大仓超时会被报成「0 匹配」，与真实空结果无法区分；`connectHops` 无 try/finally，多跳链中途失败泄漏已建立的 client（`openPoolRecord` 有同款修复，此处漏）；`connectClient` reject 时不 `end()` 掉那个 client（疑似 fd 泄漏，ssh2 自身回收行为未验证）；远端 `/tmp` 无 TTL 清扫（issue #4），且 `/tmp` 不可写时 pid 写入失败会被报成「completed, exit code: 1」，与命令自身失败无法区分；远端删除用原生 `window.confirm`；选择器关闭后状态保留；`fs-ssh` 的 createIfAbsent 依赖 GNU `ln -T`。
+**功能缺口**：`glob`/`grep` 硬编码 30s 超时且**不检查 `timedOut`**——大仓超时会被报成「0 匹配」，与真实空结果无法区分；`connectHops` 无 try/finally，多跳链中途失败泄漏已建立的 client（`openPoolRecord` 有同款修复，此处漏）；`connectClient` reject 时不 `end()` 掉那个 client（疑似 fd 泄漏，ssh2 自身回收行为未验证）；远端 `/tmp` 无 TTL 清扫（issue #4），且 `/tmp` 不可写时 pid 写入失败会被报成「completed, exit code: 1」，与命令自身失败无法区分。
 **文档漂移（09-30 已修）**：~~README 描述已下线的接缝替换架构~~、~~`preset scoping` 措辞与代码相反~~、~~Security 节口令位置~~、~~测试/版本数字（105/100/25/52、0.2.2）~~、~~`agents.md` 指向不存在的 `docs/user/develop/`~~、~~`memory/MEMORY.md` 置顶的废弃三层架构图~~ 均已对齐；`CONTRIBUTING.md` 与 `protocol.ts` 的 `REMOTE_API*` 死常量仍待清理。
-**测试缺口**：subprocess 锚定回归被 Mimosa 钩子拦截未补（E2E 覆盖）；readFile/writeFile 新分支无单测（E2E 覆盖）。
+**测试缺口**：client 路径纯函数不做假单测，由真机 UI 验收覆盖；readFile/writeFile 新分支无单测（E2E 覆盖）。
 **Roadmap（README 未勾）**：服务器 ripgrep 探测调优（issue #3）、SSH 隧道（本地端口转发）。
 **已知坑 12 条**：全列于 AGENTS.md（WinNAT 端口/junction 空格/tsdown clean/Mimosa 误报/同文件串行/vitest fake 泄漏/搜内层/lefthook 死钩子…）。
 
@@ -195,8 +191,8 @@ flowchart LR
 | 后台任务/run_in_background/job_output | §4 后台任务 → `src/job-runner.ts`（spec `docs/07`） |
 | 遮蔽工具/agent/created/钩子不生效 | §3 session-tools → `src/session-tools.ts`；诊断 `~/.dsh/dsh-remote-ide-debug.log` |
 | 占位路径/base64/重锚定/manifest | §5 → `src/workspace.ts` |
-| 口令/ACL/原型污染/迁移 | §4 存储与安全 → `src/store.ts` `src/typert.ts` `src/host-settings.ts` |
-| 设置卡/选择器/双 tab/typert 端点 | §3 client/typert → `client/index.js` `src/typert.ts` |
+| 口令/ACL/原型污染/迁移 | §4 存储与安全 → `src/store.ts` `src/typert.ts` `src/legacy-import.ts` |
+| 设置卡/选择器/双栏/typert 端点 | §3 client/typert → `client/index.js` `src/typert.ts` |
 | 工具行不能展开/presenters | §7 dsh-tools 条 → `session-tools.ts` presenters |
 | jsonSafe/lossless JSON/网关拒绝 | §7 网关条 → `src/jsonsafe.ts` |
 | 构建/打包/external/d.ts 被清 | §6 → `tsdown.config.ts` + AGENTS 坑 6 |

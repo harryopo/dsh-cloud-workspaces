@@ -1,6 +1,6 @@
 # npm 发布手册（dsh-cloud-workspaces）
 
-> 2026-09-18 状态：`0.2.1` 已在 npm；**`0.2.2` 与 `0.3.0` 待发布**（本地 `npm pack --dry-run` 已验证：78 文件 / 290 kB / 构建绿）。
+> 2026-10-30 状态：`0.2.1` 已在 npm；**`0.4.0` 待发布**（`npm pack --dry-run` 已验证：65 文件 / 210.7 kB / 构建绿）。0.4.0 是 breaking：需 DSH ≥ 0.2.1-rc.5；0.1.x 用户固定安装 `@0.3.0`。
 > 阻塞点只有一个：npm 令牌过期（`npm whoami` → ENEEDAUTH）。以下三步跑完即发布成功。
 
 ## 1. 生成令牌（网页操作，约 1 分钟）
@@ -22,11 +22,11 @@ pnpm publish --access public --no-git-checks
 rm .npmrc           # 发布后立即删除本地凭据
 ```
 
-验证：`npm view dsh-cloud-workspaces version` 应输出 `0.3.0`。
+验证：`npm view dsh-cloud-workspaces version` 应输出 `0.4.0`。
 
 ## 3. 发布后
 
-- 官方 Discussions #5229 追一行「npm 0.3.0 已发布」；
+- 官方 Discussions #5229 追一行「npm 0.4.0 已发布」；
 - README 顶部的 npm 徽章会自动指向新版本（shields 有缓存，稍等即可）。
 
 ## 常见坑

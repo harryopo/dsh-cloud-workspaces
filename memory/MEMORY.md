@@ -1,6 +1,6 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-10-01（真机 E2E 29/29 复验通过 + UI 诊断完成待重构；CDP 排查工具链沉淀）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-10-30（v0.4.0：DSH 0.2.1-rc.5 迁移 + 双栏工作台选择器；94 单测 + E2E 21/21）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
