@@ -130,6 +130,14 @@ pnpm test         # vitest — 105 unit tests
 node scripts/e2e-real-server.mjs   # 25 E2E checks over a real SSH server
 ```
 
+### Runtime artifacts & dependencies
+
+- `lib/` (host runtime + type declarations) is **committed on purpose**: the DSH STORE fixed-commit contract checks the repository as-is and does not run `prepare`/build. Run `pnpm build` and commit the refreshed `lib/` whenever source changes.
+- Runtime dependencies are only **ssh2** (SSH transport) and **js-yaml** (one-time import of legacy settings). Everything `@deepseek-ai/*` is a peer resolved from the host profile, never bundled.
+- Network activity is outbound SSH to hosts the user configures. No telemetry, no third-party services. `ssh_tunnel` listeners bind `127.0.0.1` only.
+- Secrets live in `~/.dsh/dsh-remote-ide.json` (0600 + Windows ACL); they are never written to settings, logs, tool output, or the browser.
+- Failure boundaries: SSH/exec errors propagate as tool errors; background jobs report exit codes, cancellation, and a possible remote orphan when the transport drops; `glob`/`grep` fail loudly on timeout instead of returning an empty result.
+
 ## Roadmap
 
 - [x] SSH engine: pooling, keepalive, broken-connection rebuild, ProxyJump

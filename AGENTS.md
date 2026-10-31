@@ -56,6 +56,8 @@ pnpm test             # vitest
 pnpm watch            # tsdown watch
 ```
 
+> `lib/` **随仓库提交**（DSH STORE 固定 Commit 契约不跑构建）。改 `src/` 后必须 `pnpm build` 并提交 `lib/` 的 js + d.ts；`sourcemap`/`declarationMap` 已关闭以免噪声。
+
 ### 运行与验证
 
 ```powershell

@@ -22,7 +22,7 @@ export default defineConfig({
   platform: 'node',
   target: 'es2024',
   dts: false,
-  sourcemap: true,
+  sourcemap: false,
   // tsc emits lib/types (declarations) first; tsdown must not wipe them
   // (the build script owns a full lib/ cleanup before tsc runs).
   clean: false,

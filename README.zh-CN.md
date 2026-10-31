@@ -126,9 +126,17 @@ DSH host 进程 (Node)
 ```sh
 pnpm build        # tsc d.ts + tsdown 产物
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest —— 100 个单测
-node scripts/e2e-real-server.mjs   # 29 个 E2E（真 SSH，WSL sshd 127.0.0.1:2223）
+pnpm test         # vitest —— 105 个单测
+node scripts/e2e-real-server.mjs   # 25 个 E2E（真 SSH 服务器）
 ```
+
+### 运行产物与依赖边界
+
+- `lib/`（host 运行产物 + 类型声明）**随仓库提交**：DSH STORE 的固定 Commit 契约按仓库现状检查、不执行 `prepare`/构建。改源码后请 `pnpm build` 并一起提交 `lib/`。
+- 运行时依赖只有 **ssh2**（SSH 传输）与 **js-yaml**（旧 settings 一次性导入）；`@deepseek-ai/*` 全部是宿主 profile 提供的 peer，不打进包。
+- 网络行为只有「连用户自己配置的 SSH 主机」；无遥测、无第三方服务。`ssh_tunnel` 只监听 `127.0.0.1`。
+- 口令只存 `~/.dsh/dsh-remote-ide.json`（0600 + Windows ACL），不写 settings / 日志 / 工具输出 / 浏览器。
+- 失败边界：SSH/命令错误如实抛给工具；后台任务报告退出码、取消结果与断连时可能的远端孤儿；`glob`/`grep` 超时直接报错而不是返回空结果。
 
 ## 路线图
 

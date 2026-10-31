@@ -1,6 +1,6 @@
 node_modules/
-lib/
 dist/
+lib/**/*.map
 *.tgz
 .research/
 .pnpm-store-local/
