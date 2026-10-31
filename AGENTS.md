@@ -41,7 +41,7 @@ scripts/
   start-dsh-web.ps1       # 一键启动 dsh web（4500；⚠️ npx 下载慢，见下）
   e2e-real-server.mjs     # 真机验收：node scripts/e2e-real-server.mjs [alias]（25 项检查）
   verify-client-security.mjs  # client 半安全断言：node scripts/verify-client-security.mjs（29 项）
-tests/          # vitest 102 用例（含 session-tools/engine-connection 并发与自愈回归、tools 输出边界、legacy-import、tunnel）
+tests/          # vitest 104 用例（含 session-tools/engine-connection 并发与自愈回归、tools 输出边界、legacy-import、tunnel）
 memory/         # 项目记忆（进度/反馈/踩坑/参考）——最新进展在 project 文件顶部节
 docs/           # 03 方案书（纲领）+ 06 开发方法论（依据），索引见 docs/README.md
 ```
@@ -98,7 +98,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 
 ## 当前状态与下一步（2026-10-30 · DSH 0.2 迁移 + 双栏选择器）
 
-- ✅ **0.4.0（2026-10-30）**：迁移到 DSH **0.2.1-rc.5**（settings 命名空间删除 → 主机元数据收敛到 0600 store + `legacy-import.ts` 一次性导入；jobs 改推模式 `job.append`；client 用 `uiWorkspace` 与新 inject 边；typert codec 必须有 `create()`）。工作区选择器重做为双栏工作台（本机/最近/主机 + 面包屑/可编辑路径/空错加载态）。**102/102 单测 + E2E 25/25（真实 openEuler）+ typecheck + build + 客户端安全断言全绿**；spec `docs/superpowers/specs/2026-10-30-dsh-02-migration-and-picker-design.md`，计划 `docs/superpowers/plans/2026-10-30-dsh-02-migration-and-picker.md`。隔离验收：`.tmp/dsh02` + `.tmp/dsh02-home`，端口 4600。
+- ✅ **0.4.0（2026-10-30）**：迁移到 DSH **0.2.1-rc.5**（settings 命名空间删除 → 主机元数据收敛到 0600 store + `legacy-import.ts` 一次性导入；jobs 改推模式 `job.append`；client 用 `uiWorkspace` 与新 inject 边；typert codec 必须有 `create()`）。工作区选择器重做为双栏工作台（本机/最近/主机 + 面包屑/可编辑路径/空错加载态）。**104/104 单测 + E2E 25/25（真实 openEuler）+ typecheck + build + 客户端安全断言全绿**；spec `docs/superpowers/specs/2026-10-30-dsh-02-migration-and-picker-design.md`，计划 `docs/superpowers/plans/2026-10-30-dsh-02-migration-and-picker.md`。隔离验收：`.tmp/dsh02` + `.tmp/dsh02-home`，端口 4600。
 
 - ✅ **远程后台任务**（v0.3.0）：遮蔽 `bash` 与 `ssh_exec` 获得 `run_in_background` → 官方 `ctx.jobs` 生产者（kind=`ssh`，`src/job-runner.ts`：常驻通道 wrapper + dd 增量读远端日志 + 杀进程组 TERM→KILL）。`job_output/job_list/job_kill`、完成通知、jobs UI 全部白拿官方实现。**当时 126/126 单测 + E2E 29/29 全绿**。设计 `docs/07-design-remote-jobs.md`，计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md`
 - ✅ **发布闭环**（08-31）：GitHub + npm **0.2.1** + Discussions #5229；**09-05 安全加固**（口令存储收敛/ACL/read_image/钩子修复，v0.2.2）；**09-18 文档对齐 + Repo Wiki**（`docs/REPO-WIKI.md`）

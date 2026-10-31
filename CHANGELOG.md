@@ -20,6 +20,7 @@ All notable changes to `dsh-cloud-workspaces` are documented here.
 - `ssh_workspace create` registers the new workspace (thanks @contributors, closes #2).
 
 ### Fixed
+- **Background jobs distinguish an unwritable `/tmp` from a command's own exit 127.** The wrapper now verifies the pid file after a 127 exit and reports "cannot write pid file" instead of blaming the command.
 - **Shadow `glob` / `grep` no longer report a timeout as "0 matches".** Both tools capped remote exec at 30 s but ignored `timedOut`; a large tree could return an empty result that looked like a clean miss. They now fail loudly with the path/pattern and a narrowing hint.
 - **Jump-host chains release established hops when a later hop fails.** A mid-chain connect error previously leaked every client opened before it.
 - Client typert codecs now provide the `create()` factory required by 0.2; without it the remote mount failed and the host list rendered empty on a real 0.2 instance.

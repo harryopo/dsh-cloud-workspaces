@@ -126,12 +126,25 @@ function buildHooks(engine: SshEngine, spec: RemoteJobSpec, pidPath: string, log
 
   engine.openChannel(
     spec.hostId,
-    `printf %s $$ > ${q(pidPath)} && exec bash -c ${q(spec.command)} > ${q(logPath)} 2>&1`,
+    `if ! printf %s $$ > ${q(pidPath)} 2>/dev/null; then echo 'dsh-job: pid file unwritable' >&2; exit 127; fi; exec bash -c ${q(spec.command)} > ${q(logPath)} 2>&1`,
     spec.cwd !== undefined ? { cwd: spec.cwd } : {},
   ).then((channel) => {
     channelReady = true
     channel.onClose((code, signal) => {
-      if (code !== null) { finish({ status: 'completed', detail: `exit code: ${String(code)}` }); return }
+      if (code !== null) {
+        // 127 可能是「用户命令不存在」，也可能是 wrapper 的 pid 文件写失败；
+        // 用一次 test -s 区分，避免把后者误报成命令自身的退出码。
+        if (code === 127) {
+          engine.exec(spec.hostId, `bash -c ${q(`test -s ${pidPath}`)}`)
+            .then((probe) => finish(probe.success
+              ? { status: 'completed', detail: 'exit code: 127' }
+              : { status: 'failed', detail: `cannot write pid file ${pidPath} — is /tmp writable on the server?` }))
+            .catch(() => finish({ status: 'completed', detail: 'exit code: 127' }))
+          return
+        }
+        finish({ status: 'completed', detail: `exit code: ${String(code)}` })
+        return
+      }
       if (signal !== null) { finish({ status: 'killed', detail: signal }); return }
       // 无码无号=传输断。探测一次：进程还活着就如实报告孤儿，绝不谎称已停。
       engine.exec(spec.hostId, `bash -c ${q(`kill -0 $(cat ${pidPath})`)}`)

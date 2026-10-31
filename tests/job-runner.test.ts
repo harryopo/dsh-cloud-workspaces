@@ -66,10 +66,36 @@ describe('startRemoteJob', () => {
     const [alias, wrapper, opts] = f.openChannel.mock.calls[0] as [string, string, { cwd?: string }]
     expect(alias).toBe('dev')
     expect(opts.cwd).toBe('/work')
-    expect(wrapper.startsWith("printf %s $$ > '/tmp/dsh-job-")).toBe(true)
-    expect(wrapper).toContain(".pid' && exec bash -c ")
-    expect(wrapper).toContain("'echo it'\\''s'")
+    expect(wrapper.startsWith("if ! printf %s $$ > '/tmp/dsh-job-")).toBe(true)
+    expect(wrapper).toContain(".pid' 2>/dev/null; then")
+    expect(wrapper).toContain("exec bash -c 'echo it'\\''s'")
     expect(wrapper).toMatch(/> '\/tmp\/dsh-job-[0-9a-f-]+\.log' 2>&1$/)
+  })
+
+  it('exit 127 且 pidfile 缺失 → failed 明确诊断（不冒充命令退出码）', async () => {
+    const f = makeFakes()
+    f.exec.mockImplementation(async (_a: string, cmd: string) => cmd.includes('test -s')
+      ? { success: false, exitCode: 1, timedOut: false, stdout: '', stderr: '', durationMs: 1 }
+      : okResult())
+    startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
+    await awaitChannel(f)
+    f.channel.fire(127, null)
+    const outcome = await hooks.done
+    expect(outcome.status).toBe('failed')
+    expect(String(outcome.detail)).toMatch(/cannot write pid file/)
+  })
+
+  it('exit 127 且 pidfile 存在 → 仍是命令自身的 127', async () => {
+    const f = makeFakes()
+    f.exec.mockImplementation(async (_a: string, cmd: string) => cmd.includes('test -s')
+      ? okResult()
+      : okResult())
+    startRemoteJob({ engine: f.engine, jobs: f.jobs }, { hostId: 'dev', command: 'x' })
+    const hooks = (f.spec().run as (j: unknown) => { done: Promise<Record<string, unknown>> })(f.job)
+    await awaitChannel(f)
+    f.channel.fire(127, null)
+    await expect(hooks.done).resolves.toEqual({ status: 'completed', detail: 'exit code: 127' })
   })
 
   it('jobs 缺失 → throw 官方同款文案', () => {
