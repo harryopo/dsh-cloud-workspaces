@@ -351,6 +351,8 @@ export function buildSessionTools(runtime: SshRuntime, route: SessionRoute, jobs
     async execute(args: { pattern: string; path?: string }) {
       const base = resolveInSession(route, args.path ?? '.')
       const result = await engine.exec(route.hostId, `find ${quoteSh(base)} -type f -print 2>/dev/null | head -n 20000`, { timeoutMs: 30_000 })
+      // 超时会被 engine 归一成空 stdout；不拦的话会谎报「0 匹配」。
+      if (result.timedOut) throw new Error(`glob timed out after 30s under ${base} — narrow the path or pattern`)
       const regexp = globToRegExp(args.pattern)
       const prefix = base === '/' ? '' : base + '/'
       const matches: string[] = []
@@ -393,6 +395,7 @@ export function buildSessionTools(runtime: SshRuntime, route: SessionRoute, jobs
       const includeArg = args.include !== undefined && args.include !== '' ? ` --include=${quoteSh(args.include)}` : ''
       const command = `grep -rInE ${includeArg} -e ${quoteSh(args.pattern)} ${quoteSh(base)} 2>/dev/null | head -n 500`
       const result = await engine.exec(route.hostId, command, { timeoutMs: 30_000 })
+      if (result.timedOut) throw new Error(`grep timed out after 30s under ${base} — narrow the path, include filter or pattern`)
       const lines = result.stdout.split('\n').filter((line) => line !== '')
       const truncated = lines.length >= 500
       return jsonSafe({ pattern: args.pattern, path: base, matches: lines, truncated })

@@ -404,16 +404,24 @@ export class SshEngine {
   /** Open the jump chain for an entry (returns hop sockets in order). */
   private async connectHops(entry: SshHostEntry): Promise<Array<{ client: Client; sock: import('node:net').Socket }>> {
     const hops: Array<{ client: Client; sock: import('node:net').Socket }> = []
-    for (const hopAlias of entry.proxyJump) {
-      const hop = this.store.get(hopAlias)
-      if (hop === undefined) throw new Error(`jump host not found: ${hopAlias}`)
-      const config = buildConnectConfig(hop, undefined, this.opts.connectTimeoutMs)
-      if (hops.length > 0) config.sock = hops[hops.length - 1]!.sock
-      const client = await connectClient(config, hop.auth.kind === 'password' ? hop.auth.password : undefined)
-      const sock = (client as unknown as { sock: import('node:net').Socket }).sock
-      hops.push({ client, sock })
+    try {
+      for (const hopAlias of entry.proxyJump) {
+        const hop = this.store.get(hopAlias)
+        if (hop === undefined) throw new Error(`jump host not found: ${hopAlias}`)
+        const config = buildConnectConfig(hop, undefined, this.opts.connectTimeoutMs)
+        if (hops.length > 0) config.sock = hops[hops.length - 1]!.sock
+        const client = await connectClient(config, hop.auth.kind === 'password' ? hop.auth.password : undefined)
+        const sock = (client as unknown as { sock: import('node:net').Socket }).sock
+        hops.push({ client, sock })
+      }
+      return hops
+    } catch (error) {
+      // 链中途失败：已建立的跳板必须释放，否则 socket 与 client 双双泄漏。
+      for (const hop of hops) {
+        try { hop.client.end() } catch { /* already closed */ }
+      }
+      throw error
     }
-    return hops
   }
 
   /** Whether the pooled connection for a host is marked broken (rebuild decision). */

@@ -118,6 +118,13 @@ describe('buildSessionTools', () => {
     expect(command).toContain("-e 'it'\\''s'")
   })
 
+  it('glob/grep：远端超时抛错，绝不谎报 0 匹配', async () => {
+    const exec = vi.fn(async () => ({ success: false, exitCode: null, timedOut: true, stdout: '', stderr: '', durationMs: 30_000 }))
+    const tools = buildSessionTools(stubRuntime({ exec }), route())
+    await expect(tools.find((t) => t.name === 'glob')!.execute({ pattern: '*.ts' })).rejects.toThrow(/glob timed out/)
+    await expect(tools.find((t) => t.name === 'grep')!.execute({ pattern: 'needle' })).rejects.toThrow(/grep timed out/)
+  })
+
   it('read_image：PNG 魔数识别 + base64 输出；非图片拒绝', async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
     const sftp = { readFile: (p: string, cb: (e: Error | null, d?: Buffer) => void) => cb(null, png) }

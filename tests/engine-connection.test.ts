@@ -60,6 +60,8 @@ const fake = vi.hoisted(() => {
     static instances: FakeClient[] = []
     /** 下一次 connect 的行为：ready（默认）或 error。 */
     static nextConnectBehavior: 'ready' | 'error' = 'ready'
+    /** 逐次消费的行为队列（优先于 nextConnectBehavior）。 */
+    static behaviorQueue: Array<'ready' | 'error'> = []
 
     exec = vi.fn()
     shell = vi.fn()
@@ -81,7 +83,7 @@ const fake = vi.hoisted(() => {
     }
 
     connect() {
-      const behavior = FakeClient.nextConnectBehavior
+      const behavior = FakeClient.behaviorQueue.shift() ?? FakeClient.nextConnectBehavior
       setImmediate(() => {
         if (behavior === 'ready') this.emit('ready')
         else this.emit('error', new Error('boom'))
@@ -113,6 +115,7 @@ describe('SshEngine 连接池并发语义', () => {
   beforeEach(() => {
     fake.FakeClient.instances.length = 0
     fake.FakeClient.nextConnectBehavior = 'ready'
+    fake.FakeClient.behaviorQueue = []
   })
 
   it('并发 ensureConnection 去重：单一底层连接，且 client 均已就绪', async () => {
@@ -152,12 +155,29 @@ describe('SshEngine 连接池并发语义', () => {
     expect(retry.client).toBeDefined()
     expect(fake.FakeClient.instances.length).toBe(2)
   })
+
+  it('跳板链中途失败：已建立的跳板被释放（不泄漏 client）', async () => {
+    const storeFile = join(tmpdir(), `dsh-remote-ide-engine-hop-${process.pid}-${Date.now()}.json`)
+    const store = new HostStore(storeFile)
+    store.upsert({ alias: 'hop1', host: '10.0.0.2', user: 'root', auth: { kind: 'password', password: 'x' } })
+    store.upsert({ alias: 'hop2', host: '10.0.0.3', user: 'root', auth: { kind: 'password', password: 'x' } })
+    store.upsert({
+      alias: 'dev', host: '10.0.0.1', user: 'root',
+      auth: { kind: 'password', password: 'secret' }, proxyJump: ['hop1', 'hop2'],
+    })
+    const engine = new SshEngine(store)
+    fake.FakeClient.behaviorQueue = ['ready', 'error']
+    await expect(engine.ensureConnection('dev')).rejects.toThrow('boom')
+    const hop = fake.FakeClient.instances[0]!
+    expect(hop.end).toHaveBeenCalled()
+  })
 })
 
 describe('SshEngine openShell 的 inFlight 释放语义', () => {
   beforeEach(() => {
     fake.FakeClient.instances.length = 0
     fake.FakeClient.nextConnectBehavior = 'ready'
+    fake.FakeClient.behaviorQueue = []
   })
 
   it('error 与 close 双发只释放一次（不降到负数让 sweep 误断忙碌连接）', async () => {

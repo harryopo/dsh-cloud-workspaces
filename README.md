@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-100%20unit%20%2B%2025%20e2e-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-102%20unit%20%2B%2025%20e2e-brightgreen.svg)](#development)
 
 **Remote Linux workspaces over SSH for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
 
@@ -126,7 +126,7 @@ speak to the host over the official Typert remote bridge.
 ```sh
 pnpm build        # tsc d.ts + tsdown bundle
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest — 100 unit tests
+pnpm test         # vitest — 102 unit tests
 node scripts/e2e-real-server.mjs   # 25 E2E checks over a real SSH server
 ```
 
