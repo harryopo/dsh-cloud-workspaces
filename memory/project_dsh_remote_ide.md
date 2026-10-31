@@ -9,7 +9,7 @@
 - **实现**：① 主机元数据从 settings 收敛到 0600 store（`typert.ts` 只读写 store；新增 `src/legacy-import.ts` 用 js-yaml 一次性导入旧 `dsh-remote-ide-hosts` 段）② jobs 推模式（3s dd 泵 → `job.append`）③ client 改名 + inject 边换成 `dsh-client-connection`/`dsh-client-ui-workspace` ④ **typert codec 必须带 `create()`**（真机才发现：缺了它 `$mount` 失败、主机列表全空）⑤ 删除 `fs-ssh.ts`/`subprocess-ssh.ts`/`host-settings.ts` 及导出 ⑥ 选择器重做：左栏本机/最近/主机（>6 台可搜）+ 右栏面包屑/可编辑路径/空错载入态/新建文件夹/「使用此目录」；选择态只用背景填充，等宽字体承载机器字符串。
 - **验证**：94/94 单测；E2E **21/21**（真实 openEuler 192.168.45.200，含推模式 append 增量）；隔离 0.2 实例（`.tmp/dsh02` + `.tmp/dsh02-home`，4600）真机走通：主机列表 → 目录浏览 → 路径跳转 → 创建工作区 → 最近列表；typecheck + build + `verify-client-security.mjs` 全绿。
 - **踩坑**：pnpm 装 0.2 包必须 `--registry=https://registry.npmjs.org/ --network-concurrency=1`（npmmirror 未同步 rc 包、并发请求被断开）；`@deepseek-ai/dsh-invariants` 没有 0.2.1-rc.5（无用 → 删依赖）；4600 旧进程占端口要 taskkill 才能重启；浏览器连接器 in-app surface 隐藏时只能 DOM 级验证（点击/截图需可见视口）。
-- **追加（同日）**：**`ssh_tunnel` 本地端口转发**——引擎 `openTunnel/listTunnels/closeTunnel`（只绑 127.0.0.1，`forwardOut` 双向管道，连接断开/ dispose 自动关闭；隧道占一个 inFlight 防 sweep 断连）+ 全局工具 start/stop/list；`AllowTcpForwarding no` 的服务端会以「本地连接被关闭」如实暴露（e2e 先探测策略再分支断言）。真机 E2E 从 21 项增至 **25/25**，单测 **104/104**。另：发布包（tarball）已装入隔离 0.2 profile 实测通过（host 半加载 + 双栏选择器 + 最近工作区）。
+- **追加（同日）**：**`ssh_tunnel` 本地端口转发**——引擎 `openTunnel/listTunnels/closeTunnel`（只绑 127.0.0.1，`forwardOut` 双向管道，连接断开/ dispose 自动关闭；隧道占一个 inFlight 防 sweep 断连）+ 全局工具 start/stop/list；`AllowTcpForwarding no` 的服务端会以「本地连接被关闭」如实暴露（e2e 先探测策略再分支断言）。真机 E2E 从 21 项增至 **25/25**，单测 **105/105**。另：发布包（tarball）已装入隔离 0.2 profile 实测通过（host 半加载 + 双栏选择器 + 最近工作区）。
 - **发布**：版本 0.4.0（breaking，需 DSH ≥ 0.2.1-rc.5）；0.3.0 供 0.1.x；CHANGELOG/README 双语定位改为 "Remote Linux workspaces over SSH"。
 
 ## 2026-10-01（续）：UI 重构落地（保守·贴合宿主 + 安全加固）

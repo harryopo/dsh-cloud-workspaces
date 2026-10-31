@@ -156,6 +156,13 @@ describe('SshEngine 连接池并发语义', () => {
     expect(fake.FakeClient.instances.length).toBe(2)
   })
 
+  it('握手失败时释放半开 client（重试不累积泄漏）', async () => {
+    const { engine } = newEngine()
+    fake.FakeClient.nextConnectBehavior = 'error'
+    await expect(engine.ensureConnection('dev')).rejects.toThrow('boom')
+    expect(fake.FakeClient.instances[0]!.end).toHaveBeenCalled()
+  })
+
   it('跳板链中途失败：已建立的跳板被释放（不泄漏 client）', async () => {
     const storeFile = join(tmpdir(), `dsh-remote-ide-engine-hop-${process.pid}-${Date.now()}.json`)
     const store = new HostStore(storeFile)

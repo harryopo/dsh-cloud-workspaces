@@ -20,6 +20,7 @@ All notable changes to `dsh-cloud-workspaces` are documented here.
 - `ssh_workspace create` registers the new workspace (thanks @contributors, closes #2).
 
 ### Fixed
+- **Failed SSH handshakes release the half-open client.** `connectClient` now ends the client on both handshake-error and synchronous-connect-throw paths, so repeated failed connections no longer accumulate partially open clients.
 - **Background jobs distinguish an unwritable `/tmp` from a command's own exit 127.** The wrapper now verifies the pid file after a 127 exit and reports "cannot write pid file" instead of blaming the command.
 - **Shadow `glob` / `grep` no longer report a timeout as "0 matches".** Both tools capped remote exec at 30 s but ignored `timedOut`; a large tree could return an empty result that looked like a clean miss. They now fail loudly with the path/pattern and a narrowing hint.
 - **Jump-host chains release established hops when a later hop fails.** A mid-chain connect error previously leaked every client opened before it.

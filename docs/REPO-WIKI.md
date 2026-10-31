@@ -1,6 +1,6 @@
 # Repo Wiki — dsh-cloud-workspaces
 
-> 生成：2026-09-18 · **更新：2026-10-30（v0.4.0：DSH 0.2 迁移 + 双栏选择器）** · 基线 commit `ffc747b` · 104/104 单测 + E2E 25/25 全绿实测（真实 openEuler）
+> 生成：2026-09-18 · **更新：2026-10-30（v0.4.0：DSH 0.2 迁移 + 双栏选择器）** · 基线 commit `ffc747b` · 105/105 单测 + E2E 25/25 全绿实测（真实 openEuler）
 > 来源：全仓库文件逐个读取核验（src / client / tests / scripts / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
 
 ## 1. 项目概述

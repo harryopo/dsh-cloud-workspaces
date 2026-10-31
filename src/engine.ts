@@ -157,6 +157,8 @@ function connectClient(config: ConnectConfig, password?: string): Promise<Client
     client.once('error', (error) => {
       if (settled) return
       settled = true
+      // 握手失败也要释放半开的 client（socket/定时器），否则每次失败重试泄漏一份。
+      try { client.end() } catch { /* already closed */ }
       reject(error instanceof Error ? error : new Error(String(error)))
     })
     // keyboard-interactive 认证（Ubuntu/PAM 服务器常见：sshd 可能只提供
@@ -171,6 +173,7 @@ function connectClient(config: ConnectConfig, password?: string): Promise<Client
     } catch (error) {
       if (!settled) {
         settled = true
+        try { client.end() } catch { /* already closed */ }
         reject(error instanceof Error ? error : new Error(String(error)))
       }
     }
