@@ -325,6 +325,9 @@ window.__ModuleLoader__.load({
 
       /* 危险操作确认框（替换原生 window.confirm）。路径为远端不可信输入，
          仅作文本节点渲染 + break-all 防超长撑破布局。 */
+      .dri-pickerFallback { width: min(420px, calc(100vw - 48px)); padding: 14px 18px;
+        border-radius: 16px; color: var(--dri-fg); background: var(--dsw-alias-bg-layer-1);
+        border: 1px solid var(--dri-border-2); box-shadow: 0 24px 60px rgba(0,0,0,0.28); }
       .dri-confirm { width: min(420px, calc(100vw - 48px)); }
       .dri-confirmTitle { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
       .dri-confirmBody { font-size: 13px; color: var(--dri-fg-2); line-height: 1.7; margin: 0 0 4px; }
@@ -1112,6 +1115,52 @@ window.__ModuleLoader__.load({
             h('span', { className: 'dri-hint' }, addingHost ? '保存前先测试连接，成功后即可使用。' : '选择后会创建工作区并开始使用。'))))
     }
 
+    /**
+     * 选择器渲染边界：云端选择器一旦抛错，本机创建仍必须可用（issue #1：
+     * 装了插件后本机无法创建工作区）。兜底只做一件事——调官方 pickDirectory。
+     */
+    class PickerBoundary extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = { failed: false }
+      }
+
+      static getDerivedStateFromError() {
+        return { failed: true }
+      }
+
+      componentDidCatch(error) {
+        console.error('[dsh-cloud-workspaces] picker crashed: ' + errText(error))
+      }
+
+      render() {
+        if (!this.state.failed) return this.props.children
+        const { busy, onPicked, onCancel, onError } = this.props
+        const pickLocal = async () => {
+          try {
+            const picked = pickerDeps && pickerDeps.pickDirectory ? await pickerDeps.pickDirectory() : null
+            if (picked) onPicked(picked)
+          } catch (error) {
+            onError && onError(errText(error))
+          }
+        }
+        return h('div', { className: 'dri-pickerOverlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': '选择工作区' },
+          h('div', { className: 'dri-pickerFallback' },
+            h('div', { className: 'dri-pickerHead' },
+              h('div', { className: 'dri-pickerTitle' }, '云端选择器加载失败'),
+              h('button', { className: 'dri-close', onClick: onCancel, 'aria-label': '取消' }, '×')),
+            h('p', { className: 'dri-confirmBody' }, '仍可选择本机文件夹创建工作区；远端工作区请刷新页面后重试。'),
+            h('div', { className: 'dri-formActions' },
+              h('button', { className: 'dri-btn dri-btn-primary', disabled: busy, onClick: pickLocal }, '选择本机文件夹…'))))
+      }
+    }
+
+    /** 槽位占用者：边界包住真正的选择器。 */
+    function WorkspacePickerBoundary(props) {
+      return h(PickerBoundary, props, h(WorkspacePicker, props))
+    }
+
+
     /** apply() 注入给 WorkspacePicker 的动作集合（模块级，供闭包读取）。 */
     let pickerDeps = null
 
@@ -1248,8 +1297,8 @@ window.__ModuleLoader__.load({
       }
       ctx.slots.inject('conversation.hero.workspace.directoryFlow', () =>
         ctx.slots.inject('sidebar.workspaces.directoryFlow', function* () {
-          yield ctx.slots.register({ name: 'conversation.hero.workspace.directoryFlow', id: 'dsh-remote-ide', priority: -100 }, WorkspacePicker)
-          yield ctx.slots.register({ name: 'sidebar.workspaces.directoryFlow', id: 'dsh-remote-ide', priority: -100 }, WorkspacePicker)
+          yield ctx.slots.register({ name: 'conversation.hero.workspace.directoryFlow', id: 'dsh-remote-ide', priority: -100 }, WorkspacePickerBoundary)
+          yield ctx.slots.register({ name: 'sidebar.workspaces.directoryFlow', id: 'dsh-remote-ide', priority: -100 }, WorkspacePickerBoundary)
         }),
       )
 
