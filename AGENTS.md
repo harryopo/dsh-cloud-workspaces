@@ -8,7 +8,7 @@
 
 **DeepSeek Harness (DSH) 的「云端工作区」**：让 DSH 的编码 agent 以**远程 Linux 服务器**为开发环境，**免 preset、与本地体验一致**。
 
-- 用户在「添加工作区」的双栏选择器里选本机或「主机 → 远端目录」→ 官方收养为工作区；之后该会话的官方工具（bash/read/write/edit/glob/grep，另有 `read_image` 识图遮蔽）**透明落远程**（agent/created 钩子在 agent scope 注册同名遮蔽工具），另有全局 `ssh_*` 工具（`ssh_list`/`ssh_exec`/`ssh_ls`/`ssh_read`/`ssh_write`/`ssh_workspace`）。
+- 用户在「添加工作区」的双栏选择器里选本机或「主机 → 远端目录」→ 官方收养为工作区；之后该会话的官方工具（bash/read/write/edit/glob/grep，另有 `read_image` 识图遮蔽）**透明落远程**（agent/created 钩子在 agent scope 注册同名遮蔽工具），另有全局 `ssh_*` 工具（`ssh_list`/`ssh_exec`/`ssh_ls`/`ssh_read`/`ssh_write`/`ssh_workspace`/`ssh_tunnel`）。
 - 本插件（`dsh-remote-ide`）双面：host 半（SSH 引擎 + 工具 + 端点）+ client 半（设置卡「SSH 连接」+ 双栏工作台选择器）。
 - 旧「服务器开发」preset 已下线（2026-08-30），`agent-presets/remote-legacy/` 仅存参考；`src/fs-ssh.ts`/`subprocess-ssh.ts` 已随 0.4.0 整删（0.2 SDK 下不再编译）。
 
@@ -16,15 +16,15 @@
 
 ```
 src/
-  index.ts          # 插件入口：SshRuntime + 6 个 ssh_* 工具 + 设置 + typert 通道 + 会话路由安装
+  index.ts          # 插件入口：SshRuntime + 7 个 ssh_* 工具 + 设置 + typert 通道 + 会话路由安装
   session-tools.ts  # ★核心：agent/created 钩子 → 占位会话在 agent scope 注册
                     #   bash/read/write/edit/glob/grep/read_image 遮蔽工具（含官方富 UI presenters）
                     #   + 动态 system prompt 段
-  tools.ts          # defineTool：ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write/ssh_workspace
+  tools.ts          # defineTool：ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write/ssh_workspace/ssh_tunnel
   job-runner.ts     # 后台任务生产者：bash/ssh_exec run_in_background → 官方 ctx.jobs（kind ssh）
                     #   常驻通道 wrapper + dd 增量读日志 + 杀进程组；job_output/job_list/job_kill 白拿
   ssh-service.ts    # SshRuntime extends Service（ctx.ssh，唯一连接所有者）
-  engine.ts         # ssh2 引擎：连接池/ProxyJump/exec/SFTP CRUD/PTY/keyboard-interactive
+  engine.ts         # ssh2 引擎：连接池/ProxyJump/exec/SFTP CRUD/PTY/keyboard-interactive/本地端口转发
   jsonsafe.ts       # 输出边界净化（跨边界输出一律过它，见「核心纪律」）
   debug-log.ts      # 文件诊断日志共享模块（512KiB 轮转）
   workspace.ts      # 占位工作区路由（remote/<hostId>/<base64url>，纯函数+可注入 IO）
@@ -39,9 +39,9 @@ agent-presets/
   remote-legacy/    # [已下线] 旧「服务器开发」preset 模板，仅参考
 scripts/
   start-dsh-web.ps1       # 一键启动 dsh web（4500；⚠️ npx 下载慢，见下）
-  e2e-real-server.mjs     # 真机验收：node scripts/e2e-real-server.mjs [alias]（21 项检查）
+  e2e-real-server.mjs     # 真机验收：node scripts/e2e-real-server.mjs [alias]（25 项检查）
   verify-client-security.mjs  # client 半安全断言：node scripts/verify-client-security.mjs（29 项）
-tests/          # vitest 94 用例（含 session-tools/engine-connection 并发与自愈回归、tools 输出边界、legacy-import）
+tests/          # vitest 100 用例（含 session-tools/engine-connection 并发与自愈回归、tools 输出边界、legacy-import、tunnel）
 memory/         # 项目记忆（进度/反馈/踩坑/参考）——最新进展在 project 文件顶部节
 docs/           # 03 方案书（纲领）+ 06 开发方法论（依据），索引见 docs/README.md
 ```
@@ -98,7 +98,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 
 ## 当前状态与下一步（2026-10-30 · DSH 0.2 迁移 + 双栏选择器）
 
-- ✅ **0.4.0（2026-10-30）**：迁移到 DSH **0.2.1-rc.5**（settings 命名空间删除 → 主机元数据收敛到 0600 store + `legacy-import.ts` 一次性导入；jobs 改推模式 `job.append`；client 用 `uiWorkspace` 与新 inject 边；typert codec 必须有 `create()`）。工作区选择器重做为双栏工作台（本机/最近/主机 + 面包屑/可编辑路径/空错加载态）。**94/94 单测 + E2E 21/21（真实 openEuler）+ typecheck + build + 客户端安全断言全绿**；spec `docs/superpowers/specs/2026-10-30-dsh-02-migration-and-picker-design.md`，计划 `docs/superpowers/plans/2026-10-30-dsh-02-migration-and-picker.md`。隔离验收：`.tmp/dsh02` + `.tmp/dsh02-home`，端口 4600。
+- ✅ **0.4.0（2026-10-30）**：迁移到 DSH **0.2.1-rc.5**（settings 命名空间删除 → 主机元数据收敛到 0600 store + `legacy-import.ts` 一次性导入；jobs 改推模式 `job.append`；client 用 `uiWorkspace` 与新 inject 边；typert codec 必须有 `create()`）。工作区选择器重做为双栏工作台（本机/最近/主机 + 面包屑/可编辑路径/空错加载态）。**100/100 单测 + E2E 25/25（真实 openEuler）+ typecheck + build + 客户端安全断言全绿**；spec `docs/superpowers/specs/2026-10-30-dsh-02-migration-and-picker-design.md`，计划 `docs/superpowers/plans/2026-10-30-dsh-02-migration-and-picker.md`。隔离验收：`.tmp/dsh02` + `.tmp/dsh02-home`，端口 4600。
 
 - ✅ **远程后台任务**（v0.3.0）：遮蔽 `bash` 与 `ssh_exec` 获得 `run_in_background` → 官方 `ctx.jobs` 生产者（kind=`ssh`，`src/job-runner.ts`：常驻通道 wrapper + dd 增量读远端日志 + 杀进程组 TERM→KILL）。`job_output/job_list/job_kill`、完成通知、jobs UI 全部白拿官方实现。**当时 126/126 单测 + E2E 29/29 全绿**。设计 `docs/07-design-remote-jobs.md`，计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md`
 - ✅ **发布闭环**（08-31）：GitHub + npm **0.2.1** + Discussions #5229；**09-05 安全加固**（口令存储收敛/ACL/read_image/钩子修复，v0.2.2）；**09-18 文档对齐 + Repo Wiki**（`docs/REPO-WIKI.md`）

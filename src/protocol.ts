@@ -109,6 +109,17 @@ export interface TestResult {
   error?: string
 }
 
+/** One live local port forward (`127.0.0.1:localPort → remoteHost:remotePort`). */
+export interface RemoteTunnel {
+  id: string
+  hostId: string
+  localHost: '127.0.0.1'
+  localPort: number
+  remoteHost: string
+  remotePort: number
+  createdAt: number
+}
+
 /** One directory listing entry (remote file browser). */
 export interface RemoteDirEntry {
   name: string

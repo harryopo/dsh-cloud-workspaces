@@ -1,6 +1,6 @@
 # Repo Wiki — dsh-cloud-workspaces
 
-> 生成：2026-09-18 · **更新：2026-10-30（v0.4.0：DSH 0.2 迁移 + 双栏选择器）** · 基线 commit `ffc747b` · 94/94 单测 + E2E 21/21 全绿实测（真实 openEuler）
+> 生成：2026-09-18 · **更新：2026-10-30（v0.4.0：DSH 0.2 迁移 + 双栏选择器）** · 基线 commit `ffc747b` · 100/100 单测 + E2E 25/25 全绿实测（真实 openEuler）
 > 来源：全仓库文件逐个读取核验（src / client / tests / scripts / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
 
 ## 1. 项目概述
@@ -29,7 +29,7 @@
 │   ├── session-tools.ts   ★ 免 preset 核心竞争力（agent/created 钩子 + 7 遮蔽工具）
 │   ├── engine.ts          ★ ssh2 引擎（连接池/执行/SFTP/PTY/跳板）
 │   ├── ssh-service.ts     SshRuntime（ctx.ssh 唯一连接所有者）
-│   ├── tools.ts           6 个全局 ssh_* 工具
+│   ├── tools.ts           7 个全局 ssh_* 工具（含 ssh_tunnel）
 │   ├── job-runner.ts      ★ 后台任务生产者：run_in_background → 官方 ctx.jobs（kind ssh）
 │   │                        常驻通道 wrapper + dd 增量日志 + 杀进程组；job_output/job_list/job_kill 白拿
 │   ├── typert.ts          9 个跨半 RPC 端点（主机 CRUD 只读写 0600 store）
@@ -42,7 +42,7 @@
 │   ├── invariant.ts       空不变量伴侣插件（官方惯例占位）
 ├── client/index.js        client 半：设置卡 + 双栏工作台选择器（createElement，无 JSX）
 ├── agent-presets/remote-legacy/  [已下线] 旧 preset 模板
-├── scripts/               e2e-real-server.mjs（21 项真机验收）/ debug-spawn.mjs / start-dsh-web.ps1
+├── scripts/               e2e-real-server.mjs（25 项真机验收）/ debug-spawn.mjs / start-dsh-web.ps1
 ├── tests/                 vitest 94 用例（fake ssh2 harness）
 ├── docs/                  03 方案书（纲领）/ 06 开发方法论 / screenshots/ / REPO-WIKI.md（本文件）
 └── memory/                项目记忆（编年进展/踩坑/用户画像/UI 决策/生态参考）
@@ -55,12 +55,12 @@
 | `index.ts` | 装配：起 SshRuntime → 注册 ssh_* 工具（sync 受 enabled/announceToAgent 开关）→ 两段 systemPrompt（全局宣告 + 会话动态段）→ 启动 legacy-import → inject(typert) 挂载设置面 → installSessionRouting | 全部 |
 | `session-tools.ts` | `ctx.on('agent/created')` → `routeByCwd(cwd)` 命中占位 → **仅在 `payload.agent.ctx`（agent scope）**注册 7 遮蔽工具 + `runtime.connect(hostId)` 预热切 activeAlias；isEnabled 事件时求值 | engine/workspace/jsonsafe/debug-log |
 | `ssh-service.ts` | Service `ctx.ssh`：connect/disconnect/getConnection（broken 或陈旧 rejection 自动重建）/getConnectionFor（多主机不切激活）/wrap 句柄/disposal 守卫 | engine/store |
-| `engine.ts` | 连接池（Map<alias,PoolRecord> + connecting 在途去重）/keepalive/sweep 空闲回收（inFlight 守卫）/exec（超时+输出 cap）/openChannel 流式/openShell PTY/SFTP CRUD（readFile 流式 cap、writeFile 自动建父目录、posix-rename）/ProxyJump 链/keyboard-interactive | ssh2/store |
+| `engine.ts` | 连接池（Map<alias,PoolRecord> + connecting 在途去重）/keepalive/sweep 空闲回收（inFlight 守卫）/exec（超时+输出 cap）/openChannel 流式/openShell PTY/SFTP CRUD（readFile 流式 cap、writeFile 自动建父目录、posix-rename）/ProxyJump 链/keyboard-interactive/本地端口转发（`openTunnel`/`listTunnels`/`closeTunnel`，回环绑定、连接断开一并关闭） | ssh2/store |
 | `store.ts` | `~/.dsh/dsh-remote-ide.json`（0600 + Windows icacls 断继承）；upsert 校验（isSafeHostId 防原型污染）；`~/.ssh/config` 导入 | protocol |
 | `workspace.ts` | 占位路径 `<DSH_HOME|~/.dsh>/remote/<hostId>/<base64url(远程绝对路径)>`：编解码可逆、routeByCwd、resolveRemotePath（占位绝对路径重锚回远程）、manifest、listPlaceholders | 纯函数+注入 fs |
 | `typert.ts` | 9 端点（listHosts/saveHost/deleteHost/testConnection/listRemoteDir/mkdirRemote/removeRemote/createPlaceholder/listPlaceholders）；主机元数据与口令唯一权威=0600 store；createPlaceholder 后台注册 workspaceRegistry（5s 超时不阻塞） | engine/legacy-import/workspace/jsonsafe |
 | `legacy-import.ts` | 首次启动 store 为空时，用 js-yaml 读 `settings.yaml` 的 `dsh-remote-ide-hosts:` 段导入主机（best-effort，不改写用户文件） | js-yaml/store |
-| `tools.ts` | 全局 `ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write/ssh_workspace`（resolveAlias：显式 alias 优先，回退 activeAlias） | ssh-service/workspace/jsonsafe |
+| `tools.ts` | 全局 `ssh_list/ssh_exec/ssh_ls/ssh_read/ssh_write/ssh_workspace/ssh_tunnel`（resolveAlias：显式 alias 优先，回退 activeAlias）；`ssh_tunnel` 提供本地端口转发的 start/stop/list | ssh-service/workspace/jsonsafe |
 | `client/index.js` | 设置卡 SshHostsSection + WorkspacePicker（双栏工作台：左栏本机/最近/主机，右栏面包屑/可编辑路径/空错态/新建/使用此目录，onPicked 官方收养）；typert 描述符镜像（codec 必须带 `create()`）；withTimeout/safeCall/slugId/seq 守卫 | 官方 slots/remote/uiWorkspace |
 | `jsonsafe.ts` / `debug-log.ts` | 边界净化 / 文件诊断（跨边界输出必过 jsonSafe；scope.logger 不落盘） | — |
 
@@ -118,9 +118,9 @@ flowchart LR
 
 **测试基建**：`vi.mock('ssh2')` + MiniEmitter/FakeClient/FakeStream 可编程假传输（connect 行为可控 ready/error、instances 计数）——新引擎测试直接复用此模式。
 
-**脚本**：`e2e-real-server.mjs`（21 项真机全链路验收，驱动 lib/ 产物 + 真实 cordis Context）；`debug-spawn.mjs`（wrapper 发布诊断）；`start-dsh-web.ps1`（4500 一键起）。
+**脚本**：`e2e-real-server.mjs`（25 项真机全链路验收，驱动 lib/ 产物 + 真实 cordis Context）；`debug-spawn.mjs`（wrapper 发布诊断）；`start-dsh-web.ps1`（4500 一键起）。
 
-**接口（typert 9 端点 + 6 全局工具 + 7 遮蔽工具）**：见 §5/§3；host 贡献与 client 描述符一一对应（已核验 9=9）。
+**接口（typert 9 端点 + 7 全局工具 + 7 遮蔽工具）**：见 §5/§3；host 贡献与 client 描述符一一对应（已核验 9=9）。
 
 ## 5. 核心 API & 公共函数文档
 

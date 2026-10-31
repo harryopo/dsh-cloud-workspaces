@@ -206,6 +206,82 @@ export function sshExecTool(runtime: SshRuntime, jobs: JobRegistry | undefined) 
   })
 }
 
+/** Open, list or close a local port forward through the SSH connection. */
+export function sshTunnelTool(runtime: SshRuntime) {
+  return defineTool({
+    name: 'ssh_tunnel',
+    description: 'Forward a port from this machine (127.0.0.1) to a port on the remote network through the SSH connection. ' +
+      'Use it to preview a remote web service locally, reach a database bound to the server\'s loopback, or hit an internal host only the server can see. ' +
+      'start returns the listening port; stop closes one tunnel; list shows live tunnels. Tunnels close automatically when the connection drops. ' +
+      'Triggers: port forward, tunnel, preview remote server locally, access remote database, ssh -L.',
+    parameters: {
+      action: { type: 'string', enum: ['start', 'stop', 'list'], required: true, description: 'start a forward, stop one by id, or list live forwards.' },
+      alias: { type: 'string', description: 'Host alias from ssh_list. Defaults to the active connection.' },
+      remoteHost: { type: 'string', description: 'Target host as seen FROM the server (127.0.0.1 for the server itself). Required for start.' },
+      remotePort: { type: 'integer', description: 'Target port on remoteHost (1-65535). Required for start.' },
+      localPort: { type: 'integer', description: 'Local loopback port to listen on (0 or omitted = pick a free port).' },
+      id: { type: 'string', description: 'Tunnel id returned by start. Required for stop.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          action: { type: 'string', enum: ['start', 'stop', 'list'], required: true },
+          id: { type: 'string' },
+          hostId: { type: 'string' },
+          localHost: { type: 'string' },
+          localPort: { type: 'integer' },
+          remoteHost: { type: 'string' },
+          remotePort: { type: 'integer' },
+          createdAt: { type: 'integer' },
+          tunnels: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                id: { type: 'string', required: true },
+                hostId: { type: 'string', required: true },
+                localHost: { type: 'string', required: true },
+                localPort: { type: 'integer', required: true },
+                remoteHost: { type: 'string', required: true },
+                remotePort: { type: 'integer', required: true },
+                createdAt: { type: 'integer', required: true },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => {
+        const v = value as { action: string; id?: string; localHost?: string; localPort?: number; remoteHost?: string; remotePort?: number; hostId?: string; tunnels?: Array<{ id: string; hostId: string; localHost: string; localPort: number; remoteHost: string; remotePort: number }> }
+        if (v.action === 'start') return text(`forwarding ${v.localHost}:${String(v.localPort)} → ${v.hostId}:${v.remoteHost}:${String(v.remotePort)} (tunnel ${String(v.id)})`)
+        if (v.action === 'stop') return text(`closed tunnel ${String(v.id)}`)
+        const rows = (v.tunnels ?? []).map(t => `${t.id} | ${t.hostId} | ${t.localHost}:${t.localPort} → ${t.remoteHost}:${t.remotePort}`)
+        return text(rows.length === 0 ? 'no live tunnels' : ['id | host | forward', '--- | --- | ---', ...rows].join('\n'))
+      },
+    },
+    async execute(args: { action: 'start' | 'stop' | 'list'; alias?: string; remoteHost?: string; remotePort?: number; localPort?: number; id?: string }) {
+      if (args.action === 'list') return jsonSafe({ action: 'list' as const, tunnels: runtime.engine.listTunnels() })
+      if (args.action === 'stop') {
+        const id = args.id?.trim()
+        if (id === undefined || id === '') throw new Error('id is required for stop')
+        if (!runtime.engine.closeTunnel(id)) throw new Error(`unknown tunnel: ${id}`)
+        return jsonSafe({ action: 'stop' as const, id })
+      }
+      const alias = resolveAlias(runtime, args.alias)
+      if (args.remoteHost === undefined || args.remoteHost.trim() === '') throw new Error('remoteHost is required for start')
+      if (args.remotePort === undefined) throw new Error('remotePort is required for start')
+      const tunnel = await runtime.engine.openTunnel(alias, {
+        remoteHost: args.remoteHost,
+        remotePort: args.remotePort,
+        ...(args.localPort !== undefined ? { localPort: args.localPort } : {}),
+      })
+      return jsonSafe({ action: 'start' as const, ...tunnel })
+    },
+  })
+}
+
 /** List a remote directory. */
 export function sshLsTool(runtime: SshRuntime) {
   return defineTool({

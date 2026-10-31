@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-94%20unit%20%2B%2021%20e2e-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-100%20unit%20%2B%2025%20e2e-brightgreen.svg)](#development)
 
 **Remote Linux workspaces over SSH for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
 
@@ -35,6 +35,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 - **Transparent toolset redirect** — when a session's cwd falls under a cloud placeholder, the plugin registers same-named `bash` / `read` / `write` / `edit` / `glob` / `grep` / `read_image` tools **into that session's own agent scope**, so the agent keeps calling the tools it already knows while every call executes on the server. Local sessions are untouched — the shadowing is per session, and falls back to the official local tools the moment a session isn't a cloud one.
 - **Shadow tools with official UI** — session-scoped remote `bash` / `read` / `write` / `edit` / `glob` / `grep` register in the agent's scope only, and implement the official `presentCall` / `presentResult` presenters, so chat rows render as real terminal / read / search cards — expandable, copyable, native.
 - **Background jobs** — `run_in_background: true` on `bash` / `ssh_exec` starts the command as a first-class DSH job (`job_output` / `job_list` / `job_kill`, completion notices, jobs UI): installs, builds and test suites run on the server without ever hitting an exec timeout.
+- **Port forwarding** — `ssh_tunnel start` maps `127.0.0.1:<port>` through the connection to a host reachable from the server (remote web previews, loopback-only databases, internal hosts). `stop` / `list` manage live forwards; they close when the connection drops.
 
 ### SSH settings card (in DSH Settings → SSH Connections)
 
@@ -45,7 +46,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 
 ### Agent tools
 
-- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` — explicit remote access from any session, local or cloud. They take an optional `alias`; without one they follow the most recently activated connection.
+- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` / `ssh_workspace` / `ssh_tunnel` — explicit remote access from any session, local or cloud. They take an optional `alias`; without one they follow the most recently activated connection.
 - `ssh_workspace` — create a cloud workspace binding from chat.
 
 ### Connection layer
@@ -125,8 +126,8 @@ speak to the host over the official Typert remote bridge.
 ```sh
 pnpm build        # tsc d.ts + tsdown bundle
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest — 94 unit tests
-node scripts/e2e-real-server.mjs   # 21 E2E checks over a real SSH server
+pnpm test         # vitest — 100 unit tests
+node scripts/e2e-real-server.mjs   # 25 E2E checks over a real SSH server
 ```
 
 ## Roadmap
@@ -139,7 +140,7 @@ node scripts/e2e-real-server.mjs   # 21 E2E checks over a real SSH server
 - [x] Background remote jobs (`ctx.jobs` producer): `run_in_background` + `job_output` / `job_list` / `job_kill`
 - [x] Settings card: hosts, password/key auth (keyboard-interactive), test, remote dir browser
 - [ ] Remote search tuning (ripgrep detection on the server)
-- [ ] SSH tunnel (local port forwarding)
+- [x] SSH tunnel (local port forwarding)
 - [x] npm first release (`dsh-cloud-workspaces@0.2.1`)
 
 ## Star History

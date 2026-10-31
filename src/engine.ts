@@ -6,6 +6,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs'
+import { createServer, type Server } from 'node:net'
+import { randomUUID } from 'node:crypto'
 import { posix } from 'node:path'
 import { Client, type ConnectConfig } from 'ssh2'
 import type {
@@ -13,6 +15,7 @@ import type {
   ExecResult,
   RemoteDirEntry,
   RemoteFileContent,
+  RemoteTunnel,
   SshAuthKind,
   SshHostEntry,
   SshHostSummary,
@@ -20,6 +23,7 @@ import type {
   WorkspaceStatus,
 } from './protocol'
 import { expandHome, type HostStore } from './store'
+import { debugLog } from './debug-log'
 
 /** Engine knobs. */
 export interface EngineOptions {
@@ -194,6 +198,8 @@ export class SshEngine {
   private readonly pool = new Map<string, PoolRecord>()
   /** In-flight connect attempts (concurrent callers await instead of racing). */
   private readonly connecting = new Map<string, Promise<PoolRecord>>()
+  /** Live local port forwards (`127.0.0.1 → remote`), owned per alias. */
+  private readonly tunnels = new Map<string, { info: RemoteTunnel; server: Server; alias: string }>()
   private sweepTimer: NodeJS.Timeout | undefined
   /** Alias of the connection the IDE workspace is bound to ('' = none). */
   private activeAlias = ''
@@ -483,6 +489,91 @@ export class SshEngine {
     this.state = 'disconnected'
     this.connectedAt = undefined
     return this.status()
+  }
+
+  // --------------------------------------------------------------- tunnels
+
+  /**
+   * Open a local port forward through the pooled connection.
+   * Binds 127.0.0.1 only; each accepted socket is tunnelled with
+   * `client.forwardOut`. The tunnel holds one `inFlight` slot so the idle
+   * sweep never closes the connection under a live forward.
+   */
+  async openTunnel(alias: string, options: { remoteHost: string; remotePort: number; localPort?: number }): Promise<RemoteTunnel> {
+    const remoteHost = options.remoteHost.trim()
+    if (remoteHost === '') throw new Error('remoteHost is required')
+    const { remotePort } = options
+    if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) throw new Error('remotePort must be 1-65535')
+    const localPort = options.localPort ?? 0
+    if (!Number.isInteger(localPort) || localPort < 0 || localPort > 65535) throw new Error('localPort must be 0-65535')
+    const record = await this.ensureConnection(alias)
+    const tunnel: RemoteTunnel = {
+      id: randomUUID(),
+      hostId: alias,
+      localHost: '127.0.0.1',
+      localPort,
+      remoteHost,
+      remotePort,
+      createdAt: Date.now(),
+    }
+    const server = createServer((socket) => {
+      record.client.forwardOut('127.0.0.1', socket.remotePort ?? 0, remoteHost, remotePort, (error, stream) => {
+        if (error) {
+          debugLog(`tunnel forwardOut ${remoteHost}:${String(remotePort)} failed: ${error.message}`)
+          socket.destroy()
+          return
+        }
+        socket.pipe(stream).pipe(socket)
+        const teardown = (): void => { try { stream.close() } catch { /* already closed */ } socket.destroy() }
+        socket.on('error', teardown)
+        stream.on('error', teardown)
+        stream.on('close', () => socket.destroy())
+      })
+    })
+    record.inFlight += 1
+    record.idleAt = Date.now()
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error): void => { server.removeListener('error', onError); reject(error) }
+        server.once('error', onError)
+        server.listen(localPort, '127.0.0.1', () => { server.removeListener('error', onError); resolve() })
+      })
+    } catch (error) {
+      record.inFlight = Math.max(0, record.inFlight - 1)
+      throw error
+    }
+    const address = server.address()
+    if (typeof address === 'object' && address !== null) tunnel.localPort = address.port
+    this.tunnels.set(tunnel.id, { info: tunnel, server, alias })
+    server.on('close', () => {
+      this.tunnels.delete(tunnel.id)
+      record.inFlight = Math.max(0, record.inFlight - 1)
+      record.idleAt = Date.now()
+    })
+    return tunnel
+  }
+
+  /** All live local forwards. */
+  listTunnels(): RemoteTunnel[] {
+    return [...this.tunnels.values()].map(entry => entry.info)
+  }
+
+  /** Close one forward; false when the id is unknown (already closed). */
+  closeTunnel(id: string): boolean {
+    const entry = this.tunnels.get(id)
+    if (entry === undefined) return false
+    try { entry.server.close() } catch { /* already closed */ }
+    this.tunnels.delete(id)
+    return true
+  }
+
+  /** Drop every forward bound to an alias (connection teardown path). */
+  private closeTunnelsFor(alias: string): void {
+    for (const [id, entry] of [...this.tunnels]) {
+      if (entry.alias !== alias) continue
+      try { entry.server.close() } catch { /* already closed */ }
+      this.tunnels.delete(id)
+    }
   }
 
   // ---------------------------------------------------------------- exec
@@ -885,6 +976,7 @@ export class SshEngine {
 
   /** Tear down one pooled connection. */
   private dropConnection(alias: string): void {
+    this.closeTunnelsFor(alias)
     const record = this.pool.get(alias)
     if (record === undefined) return
     this.pool.delete(alias)

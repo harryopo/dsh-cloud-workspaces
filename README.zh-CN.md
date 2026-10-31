@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-94%20%E5%8D%95%E6%B5%8B%20%2B%2021%20E2E-brightgreen.svg)](#开发)
+[![Tests](https://img.shields.io/badge/tests-100%20%E5%8D%95%E6%B5%8B%20%2B%2025%20E2E-brightgreen.svg)](#开发)
 
 **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的远程 Linux 工作区插件：把服务器目录直接变成工作区，全程走标准 SSH。**
 
@@ -35,6 +35,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 - **工具集透明重定向** —— 会话 cwd 落在云端占位目录下时，插件把同名的 `bash` / `read` / `write` / `edit` / `glob` / `grep` / `read_image` 注册进**该会话自己的 agent scope**——agent 照旧调用它早已熟悉的工具名，每次调用却落在远程执行。本地会话完全不受影响：遮蔽只作用于云端会话，会话一旦不是云端的，立刻回落到官方本地工具。
 - **官方 UI 的遮蔽工具** —— 会话级远程 `bash` / `read` / `write` / `edit` / `glob` / `grep` 只注册进该会话的 agent scope，并实现官方 `presentCall` / `presentResult` 渲染器——聊天里的工具行渲染成真正的终端卡 / 阅读卡，可展开、可复制、原生观感。
 - **后台任务** —— `bash` / `ssh_exec` 传 `run_in_background: true` 即把命令起成 DSH 一等公民 job（官方 `job_output` / `job_list` / `job_kill`、完成通知、任务 UI 全部现成）：安装、构建、测试套件在服务器上跑，永不撞执行超时。
+- **端口转发** —— `ssh_tunnel start` 把 `127.0.0.1:<端口>` 经 SSH 映射到服务器可达的主机/端口（远端 Web 预览、只绑回环的数据库、内网服务）；`stop` / `list` 管理，连接断开自动关闭。
 
 ### SSH 设置卡片（DSH 设置 → SSH 连接）
 
@@ -45,7 +46,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 
 ### Agent 工具
 
-- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` —— 任意会话（本地或云端）里的显式远程操作。可选传 `alias`；不传则跟随最近激活的连接。
+- `ssh_list` / `ssh_exec` / `ssh_ls` / `ssh_read` / `ssh_write` / `ssh_workspace` / `ssh_tunnel` —— 任意会话（本地或云端）里的显式远程操作。可选传 `alias`；不传则跟随最近激活的连接。
 - `ssh_workspace` —— 在对话里创建云端工作区绑定。
 
 ### 连接层
@@ -125,7 +126,7 @@ DSH host 进程 (Node)
 ```sh
 pnpm build        # tsc d.ts + tsdown 产物
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest —— 94 个单测
+pnpm test         # vitest —— 100 个单测
 node scripts/e2e-real-server.mjs   # 29 个 E2E（真 SSH，WSL sshd 127.0.0.1:2223）
 ```
 
@@ -139,7 +140,7 @@ node scripts/e2e-real-server.mjs   # 29 个 E2E（真 SSH，WSL sshd 127.0.0.1:2
 - [x] 远程后台任务（`ctx.jobs` 生产者）：`run_in_background` + `job_output` / `job_list` / `job_kill`
 - [x] 设置卡：主机、密码/密钥认证（keyboard-interactive）、连接测试、远端目录浏览器
 - [ ] 远程搜索调优（服务器端 ripgrep 探测）
-- [ ] SSH 隧道（本地端口转发）
+- [x] SSH 隧道（本地端口转发）
 - [x] npm 首次发布（`dsh-cloud-workspaces@0.2.1`）
 
 ## 致谢

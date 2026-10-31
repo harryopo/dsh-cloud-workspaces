@@ -10,6 +10,7 @@ All notable changes to `dsh-cloud-workspaces` are documented here.
 - Removed the retired seam-reference modules (`fs-ssh`, `subprocess-ssh`) and their package subpath exports.
 
 ### Added
+- **`ssh_tunnel` — local port forwarding.** `start` listens on `127.0.0.1` and forwards through the SSH connection to a host/port reachable from the server (remote web previews, loopback-only databases, internal hosts). `stop` / `list` manage live forwards; tunnels close automatically when the pooled connection drops. Servers with `AllowTcpForwarding no` surface the denial as a closed local connection (logged).
 - **Dual-pane workspace picker.** Left rail lists *this machine*, *recent workspaces* (one click back to a bound remote directory) and *SSH hosts* (searchable when there are more than six); the right pane has clickable breadcrumbs, an editable path field, explicit empty/loading/error states, inline folder creation and a single "Use this directory" action. Machine strings (hosts, paths) use a monospace face; selection uses a background fill, never an edge bar.
 
 ### Changed

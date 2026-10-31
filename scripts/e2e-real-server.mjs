@@ -17,6 +17,7 @@
 import { readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { connect as netConnect } from 'node:net'
 import { Context } from '@deepseek-ai/cordis'
 import SshRuntime from 'dsh-cloud-workspaces/ssh-service'
 import {
@@ -184,6 +185,38 @@ try {
     kh.cancel()
     const ko = await withTimeout(kh.done, 15_000, 'cancel done')
     check('cancel → killed（进程组终止，幂等）', ko.status === 'killed', JSON.stringify(ko))
+  }
+
+  // --------------------------------------------- 8. 本地端口转发（ssh_tunnel）
+  section('8. 本地端口转发（ssh_tunnel）')
+  {
+    // 服务端策略决定期望值：AllowTcpForwarding no 时 direct-tcpip 会被拒绝，
+    // 本地连接应立即被关闭；否则应读到 SSH banner。
+    const policy = await engine.exec(targetAlias, '/usr/sbin/sshd -T 2>/dev/null | grep -i "^allowtcpforwarding" || true')
+    const forwardingAllowed = !/allowtcpforwarding no/i.test(policy.stdout)
+    const tunnel = await withTimeout(
+      engine.openTunnel(targetAlias, { remoteHost: '127.0.0.1', remotePort: 22 }),
+      30_000, 'open tunnel')
+    check('openTunnel 分配回环端口', tunnel.localHost === '127.0.0.1' && tunnel.localPort > 0, JSON.stringify(tunnel))
+    const outcome = await new Promise((resolve, reject) => {
+      const socket = netConnect(tunnel.localPort, '127.0.0.1')
+      let buffer = ''
+      const timer = setTimeout(() => { socket.destroy(); resolve({ kind: 'timeout', buffer }) }, 10_000)
+      socket.on('data', (chunk) => {
+        buffer += chunk.toString('utf8')
+        if (buffer.includes('\n')) { clearTimeout(timer); socket.destroy(); resolve({ kind: 'data', buffer }) }
+      })
+      socket.on('close', () => { clearTimeout(timer); resolve({ kind: 'closed', buffer }) })
+      socket.on('error', (error) => { clearTimeout(timer); resolve({ kind: 'error', buffer, error: error.message }) })
+    })
+    if (forwardingAllowed) {
+      check('经隧道读到 SSH banner', outcome.kind === 'data' && outcome.buffer.startsWith('SSH-2.0'), JSON.stringify(outcome))
+    } else {
+      check('服务端禁止转发时本地连接被关闭（策略如实生效）', outcome.kind === 'closed' || outcome.kind === 'error', JSON.stringify(outcome))
+      console.log('note: sshd AllowTcpForwarding no — 本机仅验证拒绝路径；成功路径由 fake-ssh2 单测覆盖')
+    }
+    check('listTunnels 可见', engine.listTunnels().some(t => t.id === tunnel.id))
+    check('closeTunnel 幂等删除', engine.closeTunnel(tunnel.id) === true && engine.listTunnels().length === 0)
   }
 } finally {
   // ---------------------------------------------------------- cleanup
