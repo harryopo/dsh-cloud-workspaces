@@ -134,6 +134,7 @@ node scripts/e2e-real-server.mjs   # 25 个 E2E（真 SSH 服务器）
 
 - `lib/`（host 运行产物 + 类型声明）**随仓库提交**：DSH STORE 的固定 Commit 契约按仓库现状检查、不执行 `prepare`/构建。改源码后请 `pnpm build` 并一起提交 `lib/`。
 - 运行时依赖只有 **ssh2**（SSH 传输）与 **js-yaml**（旧 settings 一次性导入）；`@deepseek-ai/*` 全部是宿主 profile 提供的 peer，不打进包。
+- pnpm 10+/11 的全新 DSH profile 可能把 `ssh2` 的安装脚本列为未批准（`ERR_PNPM_IGNORED_BUILDS`）：在 DSH 插件管理器的构建审批里允许即可（或 `pnpm approve-builds`）。该脚本只构建可选的本地加密加速，不批准时 ssh2 会退回纯 JS 实现。
 - 网络行为只有「连用户自己配置的 SSH 主机」；无遥测、无第三方服务。`ssh_tunnel` 只监听 `127.0.0.1`。
 - 口令只存 `~/.dsh/dsh-remote-ide.json`（0600 + Windows ACL），不写 settings / 日志 / 工具输出 / 浏览器。
 - 失败边界：SSH/命令错误如实抛给工具；后台任务报告退出码、取消结果与断连时可能的远端孤儿；`glob`/`grep` 超时直接报错而不是返回空结果。

@@ -45,10 +45,6 @@
       ]
     }
   },
-  "dependencies": {
-    "ssh2": "^1.16.0",
-    "js-yaml": "^4.1.0"
-  },
   "peerDependencies": {
     "@deepseek-ai/dsh-jobs": "^0.2.1-rc.5",
     "@deepseek-ai/dsh-system-prompt": "^0.2.1-rc.5",
@@ -111,5 +107,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "ssh2": "^1.16.0",
+    "js-yaml": "^4.1.0"
   }
 }
