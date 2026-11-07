@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-105%20unit%20%2B%2025%20e2e-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-110%20unit%20%2B%2025%20e2e-brightgreen.svg)](#development)
 
 **Remote Linux workspaces over SSH for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
 
@@ -66,6 +66,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 
 - Host configuration lives in a private per-user file under `~/.dsh/` with owner-only permissions (0600, plus a restrictive ACL on Windows). **Passwords are never written to DSH's settings store** — they go only to that file. A legacy `dsh-remote-ide-hosts` section left in `settings.yaml` by earlier versions is **read once and left untouched**: plugin 0.4.x does not rewrite or delete it, so remove that section manually after confirming the hosts appear in the settings card (see `docs/upgrade-to-0.2.md`). The settings card sees a redacted view and can never read a stored credential back.
 - Remote sessions are scoped: shadow tools exist only inside sessions bound to a cloud workspace. Local workspaces are never affected.
+- **Server host keys use trust-on-first-use (TOFU).** The first successful handshake records the server's `SHA256:` fingerprint in the private host file; later connections to that host must present the same key. A changed key **fails the handshake by default** with an error that warns about a possible man-in-the-middle attack and names the recorded and presented fingerprints; after confirming the server really was re-keyed, delete and re-add the host or remove its `hostKey` field from `~/.dsh/dsh-remote-ide.json` to trust the new key. Changing a host's hostname or port drops the old fingerprint (a different endpoint). Pooled connections are verified once per connection, as OpenSSH does. The record is local to this plugin and is **not** shared with `~/.ssh/known_hosts`.
 - Remote file reads are capped at 2 MiB: a larger file is read as a stream of its first 2 MiB and returned with `truncated: true`, never buffered whole in the host process. Binary files (NUL byte in the head) are rejected instead of rendered as text.
 
 ## Install
@@ -134,7 +135,7 @@ speak to the host over the official Typert remote bridge.
 ```sh
 pnpm build        # tsc d.ts + tsdown bundle
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest — 105 unit tests
+pnpm test         # vitest — 110 unit tests
 node scripts/e2e-real-server.mjs   # 25 E2E checks over a real SSH server
 ```
 

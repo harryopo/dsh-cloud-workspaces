@@ -1,6 +1,6 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-11-07（v0.4.0：DSH 0.2.1-rc.5 迁移 + 双栏工作台选择器 + ssh_tunnel 端口转发；单测 105/105 复验；E2E 25 项为 10-30 真机基线）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-11-07（v0.4.0 已 tag/Release；本轮补 SSH 主机密钥 TOFU 校验 + 打包清单修正，进下一版；单测 110/110 复验；E2E 25 项为 10-30 真机基线）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
@@ -15,11 +15,12 @@
 ## 最新状态（2026-11-07 · 0.4.0 发布收口）
 
 - **版本矩阵**：仓库 0.4.0，DSH peer 与 dev 均 `^0.2.1-rc.5`（仅 0.2.x）；DSH 0.1.x 用户用 `dsh-cloud-workspaces@0.3.0`
-- **本次实跑验证**：`pnpm typecheck` 通过；`pnpm test` 105/105 通过；`node scripts/verify-client-security.mjs` 28/28 PASS
+- **本次实跑验证**：`pnpm typecheck` 通过；`pnpm test` 110/110 通过（新增 5 个 TOFU 用例）；`node scripts/verify-client-security.mjs` 28/28 PASS
 - **E2E**：单次执行 25 项（脚本 27 处 `check`，含 2 处互斥分支）= 2026-10-30 真机 openEuler 基线，**2026-11-07 未复验**（无可用服务器）
 - **发布（2026-11-07）**：GitHub lightweight tag `v0.4.0` → commit `392664d` 已推送，Release 已建；**npm 发布阻塞于未登录**（`npm whoami` ENEEDAUTH，`npm view ... versions` 仅 `0.2.1`），补令牌后按 `docs/npm-publish.md` 发布
 - **文档对齐**：README(en+zh)/CHANGELOG/AGENTS/docs 已按代码事实修正——旧 settings 段**只读导入、原样保留、需手动清理**；无 ssh-agent 兜底；读文件上限 2 MiB 且超限流式读头部
-- **已知缺口（未修）**：① SSH 主机密钥未校验（`engine.ts` 无 hostVerifier/known_hosts，P1）② `bash`/`read`/`write`/`edit`/`read_image` 遮蔽工具未实现 presenter（P2）③ `package.json` 的 `files[]` 仍含 `agent-presets`（P2 打包遗留）
+- **本轮已修（2026-11-07，进下一版）**：① SSH 主机密钥已接入 `hostVerifier`（TOFU：首连记 `SHA256:` 指纹到 store 的 `hostKey`，变更 fail-closed 拒绝并给 MITM 告警 + 清除路径）③ `files[]` 已剔除 `agent-presets`、显式纳入 `CHANGELOG.md`
+- **已知缺口（未修）**：② `bash`/`read`/`write`/`edit`/`read_image` 遮蔽工具未实现 presenter（功能型 P2，不影响安全）
 
 ## 历史状态（2026-10-01）
 
@@ -60,7 +61,7 @@ dsh-cloud-workspaces — DSH「云端工作区」（免 preset 透明模式）
 
 **技术栈**：TypeScript 5.7 · Node ≥22 · ssh2 1.17 · Cordis 4.0 · tsdown 0.22 · vitest 3.2
 **依赖关系**：ssh2（运行时，会 bundle）；@deepseek-ai/dsh-*（peer，运行时从 profile 解析，**不 bundle**）
-**构建**：`pnpm build`（tsc 声明 + tsdown 产物）；测试：105/105 全过（2026-11-07 复验）
+**构建**：`pnpm build`（tsc 声明 + tsdown 产物）；测试：110/110 全过（2026-11-07 复验）
 
 ## 历史：三层架构（2026-08-28 · ❌ 已废弃，勿据此理解现状）
 

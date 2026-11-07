@@ -79,6 +79,8 @@ export interface ShellSession {
     /** Close the session and its channel. */
     close(): void;
 }
+/** OpenSSH-style SHA256 fingerprint of a raw host key blob (as ssh-keygen prints it). */
+export declare function hostKeyFingerprint(key: Buffer): string;
 /** The engine. Owns the pool, the active IDE connection and all operations. */
 export declare class SshEngine {
     private readonly store;
@@ -123,6 +125,12 @@ export declare class SshEngine {
         };
         proxyJump?: string[];
     }): Promise<TestResult>;
+    /**
+     * Fingerprint recorded for this endpoint by any stored host — an ad-hoc probe
+     * has no alias of its own. Ambiguous records yield undefined (never guess a
+     * trust decision from several different fingerprints).
+     */
+    private endpointFingerprint;
     /** Shared probe: connect (optionally through the jump chain) and exec echo. */
     private testEntry;
     /**

@@ -44,6 +44,11 @@ export declare class HostStore {
     /** Secret-free projection. */
     summarize(entry: SshHostEntry): SshHostSummary;
     get(alias: string): SshHostEntry | undefined;
+    /**
+     * 记录首次信任的服务器主机密钥指纹（TOFU）。
+     * 未知别名（如测试连接的 ad-hoc 探测）不落盘；指纹未变时不重写文件。
+     */
+    trustHostKey(alias: string, fingerprint: string): void;
     /** Create or update an entry (by the payload alias or entry.alias). */
     upsert(payload: HostPayload, existingAlias?: string): SshHostEntry;
     remove(alias: string): boolean;

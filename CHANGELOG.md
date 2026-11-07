@@ -2,6 +2,14 @@
 
 All notable changes to `dsh-cloud-workspaces` are documented here.
 
+## [Unreleased]
+
+### Security
+- **Server host keys are now verified (trust on first use).** The first successful handshake records the server's `SHA256:` fingerprint in the 0600 host store; later connections must present the same key. A changed key fails the handshake with a man-in-the-middle warning that names the recorded and presented fingerprints and explains how to clear the record (delete and re-add the host, or remove its `hostKey` field from `~/.dsh/dsh-remote-ide.json`). Changing a host's hostname or port drops the old fingerprint. Ad-hoc "test connection" probes of unsaved hosts are accepted but not persisted. Trust records are local to this plugin and are not shared with `~/.ssh/known_hosts`.
+
+### Changed
+- Package manifest: `agent-presets/` (retired reference presets, no runtime dependency) is no longer shipped; `CHANGELOG.md` is now included in the tarball.
+
 ## [0.4.0] — 2026-10-30
 
 ### Breaking

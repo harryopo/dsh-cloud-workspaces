@@ -202,6 +202,18 @@ export class HostStore {
     return this.entries.get(alias)
   }
 
+  /**
+   * 记录首次信任的服务器主机密钥指纹（TOFU）。
+   * 未知别名（如测试连接的 ad-hoc 探测）不落盘；指纹未变时不重写文件。
+   */
+  trustHostKey(alias: string, fingerprint: string): void {
+    const entry = this.entries.get(alias)
+    if (entry === undefined) return
+    if (entry.hostKey?.fingerprint === fingerprint) return
+    entry.hostKey = { fingerprint, recordedAt: Date.now() }
+    this.save()
+  }
+
   /** Create or update an entry (by the payload alias or entry.alias). */
   upsert(payload: HostPayload, existingAlias?: string): SshHostEntry {
     const now = Date.now()
@@ -222,6 +234,11 @@ export class HostStore {
       tags: payload.tags ?? prev?.tags ?? [],
       createdAt: prev?.createdAt ?? now,
       updatedAt: now,
+    }
+    // 端点变更即失去 TOFU 记录的归属（换主机/端口等于换了一台服务器）；
+    // 端点不变则沿用旧指纹，避免日常编辑把信任记录清掉。
+    if (prev !== undefined && prev.host === entry.host && prev.port === entry.port && prev.hostKey !== undefined) {
+      entry.hostKey = prev.hostKey
     }
     if (entry.host === '') throw new Error('host is required')
     if (entry.user === '') throw new Error('user is required')

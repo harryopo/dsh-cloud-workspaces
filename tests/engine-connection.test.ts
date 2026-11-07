@@ -6,9 +6,10 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { SshEngine } from '../src/engine'
+import { hostKeyFingerprint, SshEngine } from '../src/engine'
 import { HostStore } from '../src/store'
 
 /** 可编程 ssh2 假实现：connect 时机可控（默认 setImmediate ready）。 */
@@ -51,6 +52,7 @@ const fake = vi.hoisted(() => {
 
   class FakeStream extends MiniEmitter {
     stderr = new MiniEmitter()
+    resume() {}
     close() {
       this.emit('close', 0)
     }
@@ -62,6 +64,8 @@ const fake = vi.hoisted(() => {
     static nextConnectBehavior: 'ready' | 'error' = 'ready'
     /** 逐次消费的行为队列（优先于 nextConnectBehavior）。 */
     static behaviorQueue: Array<'ready' | 'error'> = []
+    /** 服务器出示的主机密钥；测试改它来模拟换钥/中间人。 */
+    static hostKey: Buffer = Buffer.from('host-key-A')
 
     exec = vi.fn()
     shell = vi.fn()
@@ -82,11 +86,20 @@ const fake = vi.hoisted(() => {
       })
     }
 
-    connect() {
+    connect(config?: { hostVerifier?: (key: Buffer) => boolean }) {
       const behavior = FakeClient.behaviorQueue.shift() ?? FakeClient.nextConnectBehavior
       setImmediate(() => {
-        if (behavior === 'ready') this.emit('ready')
-        else this.emit('error', new Error('boom'))
+        if (behavior !== 'ready') {
+          this.emit('error', new Error('boom'))
+          return
+        }
+        // 真实 ssh2 在认证前同步调用 hostVerifier；返回 false 即握手失败。
+        const verifier = config?.hostVerifier
+        if (typeof verifier === 'function' && verifier(FakeClient.hostKey) === false) {
+          this.emit('error', new Error('Host denied (verification failed)'))
+          return
+        }
+        this.emit('ready')
       })
       return this
     }
@@ -116,6 +129,8 @@ describe('SshEngine 连接池并发语义', () => {
     fake.FakeClient.instances.length = 0
     fake.FakeClient.nextConnectBehavior = 'ready'
     fake.FakeClient.behaviorQueue = []
+    // 主机密钥状态也是跨用例泄漏源（AGENTS 坑 10 的变体）：必须逐用例复位。
+    fake.FakeClient.hostKey = Buffer.from('host-key-A')
   })
 
   it('并发 ensureConnection 去重：单一底层连接，且 client 均已就绪', async () => {
@@ -185,6 +200,8 @@ describe('SshEngine openShell 的 inFlight 释放语义', () => {
     fake.FakeClient.instances.length = 0
     fake.FakeClient.nextConnectBehavior = 'ready'
     fake.FakeClient.behaviorQueue = []
+    // 主机密钥状态也是跨用例泄漏源（AGENTS 坑 10 的变体）：必须逐用例复位。
+    fake.FakeClient.hostKey = Buffer.from('host-key-A')
   })
 
   it('error 与 close 双发只释放一次（不降到负数让 sweep 误断忙碌连接）', async () => {
@@ -205,5 +222,101 @@ describe('SshEngine openShell 的 inFlight 释放语义', () => {
     channel!.emit('close')
     const record = (engine as unknown as { pool: Map<string, { inFlight: number }> }).pool.get('dev')
     expect(record?.inFlight).toBe(0)
+  })
+})
+
+/** 读取 store 文件里的主机条目（断言指纹是否落盘 / 是否被改写）。 */
+function readHosts(storeFile: string): Array<{ alias: string; hostKey?: { fingerprint: string; recordedAt: number } }> {
+  const parsed = JSON.parse(readFileSync(storeFile, 'utf8')) as {
+    hosts: Array<{ alias: string; hostKey?: { fingerprint: string; recordedAt: number } }>
+  }
+  return parsed.hosts
+}
+
+describe('SshEngine 主机密钥校验（TOFU）', () => {
+  beforeEach(() => {
+    fake.FakeClient.instances.length = 0
+    fake.FakeClient.nextConnectBehavior = 'ready'
+    fake.FakeClient.behaviorQueue = []
+    fake.FakeClient.hostKey = Buffer.from('host-key-A')
+  })
+
+  it('首次连接记录服务器指纹并落盘', async () => {
+    const { engine, storeFile } = newEngine()
+    await engine.ensureConnection('dev')
+    const hosts = readHosts(storeFile)
+    expect(hosts).toHaveLength(1)
+    expect(hosts[0]!.hostKey?.fingerprint).toBe(hostKeyFingerprint(fake.FakeClient.hostKey))
+    expect(typeof hosts[0]!.hostKey?.recordedAt).toBe('number')
+  })
+
+  it('已记录指纹匹配时重连放行（从 store 复读，且不重写记录）', async () => {
+    const { engine, storeFile } = newEngine()
+    await engine.ensureConnection('dev')
+    const recordedAt = readHosts(storeFile)[0]!.hostKey!.recordedAt
+    // 新引擎从同一 store 复读，等价于一次重启后重连。
+    const reloaded = new SshEngine(new HostStore(storeFile))
+    const record = await reloaded.ensureConnection('dev')
+    expect(record.client).toBeDefined()
+    expect(readHosts(storeFile)[0]!.hostKey!.recordedAt).toBe(recordedAt)
+  })
+
+  it('指纹不匹配时拒绝连接，给出中间人告警并保留旧记录', async () => {
+    const { engine, storeFile } = newEngine()
+    await engine.ensureConnection('dev')
+    const trusted = hostKeyFingerprint(Buffer.from('host-key-A'))
+    fake.FakeClient.instances.length = 0
+    // 同一端点换了主机密钥：模拟中间人或服务器重装。
+    fake.FakeClient.hostKey = Buffer.from('host-key-B')
+    const presented = hostKeyFingerprint(fake.FakeClient.hostKey)
+    const reloaded = new SshEngine(new HostStore(storeFile))
+
+    let message = ''
+    try {
+      await reloaded.ensureConnection('dev')
+      throw new Error('expected rejection')
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain('主机密钥已变更，可能存在中间人风险')
+    expect(message).toContain(trusted)
+    expect(message).toContain(presented)
+    // 拒绝文案必须给出清除旧指纹的路径。
+    expect(message).toContain('hostKey')
+    // 旧指纹不被覆盖；半开 client 被释放（不累积泄漏）。
+    expect(readHosts(storeFile)[0]!.hostKey!.fingerprint).toBe(trusted)
+    expect(fake.FakeClient.instances[0]!.end).toHaveBeenCalled()
+  })
+
+  it('测试连接复用同端点指纹：匹配放行、不匹配拒绝', async () => {
+    const { engine, storeFile } = newEngine()
+    await engine.ensureConnection('dev')
+    const reloaded = new SshEngine(new HostStore(storeFile))
+    const config = {
+      host: '10.0.0.1',
+      port: 22,
+      user: 'root',
+      auth: { kind: 'password' as const, password: 'secret' },
+    }
+    expect((await reloaded.testConfig(config)).ok).toBe(true)
+
+    fake.FakeClient.hostKey = Buffer.from('host-key-B')
+    const denied = await reloaded.testConfig(config)
+    expect(denied.ok).toBe(false)
+    expect(denied.error).toMatch(/主机密钥已变更，可能存在中间人风险/)
+  })
+
+  it('未保存主机的 ad-hoc 探测：首次信任放行但不落盘', async () => {
+    const storeFile = join(tmpdir(), `dsh-remote-ide-engine-probe-${process.pid}-${Date.now()}.json`)
+    const engine = new SshEngine(new HostStore(storeFile))
+    const result = await engine.testConfig({
+      host: '10.0.0.9',
+      port: 22,
+      user: 'root',
+      auth: { kind: 'password', password: 'secret' },
+    })
+    expect(result.ok).toBe(true)
+    // 探测不带别名：信任不落盘（store 文件从未被创建）。
+    expect(existsSync(storeFile)).toBe(false)
   })
 })

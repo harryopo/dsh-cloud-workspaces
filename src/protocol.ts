@@ -7,6 +7,14 @@
 /** Authentication flavors a host entry may carry. */
 export type SshAuthKind = 'key' | 'password'
 
+/** Trusted server host key (trust-on-first-use, recorded on the first connect). */
+export interface SshHostKeyTrust {
+  /** OpenSSH-style SHA256 fingerprint, e.g. `SHA256:AbCd...` (base64, no padding). */
+  fingerprint: string
+  /** When the fingerprint was first recorded (ms since epoch). */
+  recordedAt: number
+}
+
 /** One stored host entry (the ~/.dsh/dsh-remote-ide.json store shape). */
 export interface SshHostEntry {
   /** Stable, user-chosen identifier used by every operation. */
@@ -35,6 +43,8 @@ export interface SshHostEntry {
   environment?: string
   /** Free-form tags. */
   tags: string[]
+  /** Trusted server host key (TOFU). Absent until the first connect. */
+  hostKey?: SshHostKeyTrust
   createdAt: number
   updatedAt: number
 }

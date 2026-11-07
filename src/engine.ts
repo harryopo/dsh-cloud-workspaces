@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { posix } from 'node:path'
 import { Client, type ConnectConfig } from 'ssh2'
 import type {
@@ -110,8 +110,94 @@ export interface ShellSession {
   close(): void
 }
 
+/** Outcome of one host-key check (kept so callers can explain a rejection). */
+interface HostKeyDecision {
+  ok: boolean
+  /** Fingerprint presented by the server ('' when it could not be computed). */
+  fingerprint: string
+  /** True when this connect established the trust record. */
+  firstUse: boolean
+  /** Fingerprint that was on record (failures only). */
+  recorded?: string
+  /** Explicit rejection text (mismatch / verifier failure only). */
+  error?: string
+}
+
+/** Mutable slot carrying the last host-key decision of one connect attempt. */
+interface HostKeySlot {
+  decision?: HostKeyDecision
+}
+
+/** Host-key trust context for one connect attempt. */
+interface HostKeyTrust {
+  store: HostStore
+  slot: HostKeySlot
+  /**
+   * Fingerprint recorded for this endpoint by some stored host — ad-hoc
+   * "test connection" probes carry no alias of their own.
+   */
+  endpointFingerprint?: string
+}
+
+/** OpenSSH-style SHA256 fingerprint of a raw host key blob (as ssh-keygen prints it). */
+export function hostKeyFingerprint(key: Buffer): string {
+  return `SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`
+}
+
+function hostKeyMismatchMessage(entry: SshHostEntry, recorded: string, presented: string): string {
+  const target = entry.alias === '(probe)' ? `${entry.host}:${entry.port}` : `${entry.alias} (${entry.host}:${entry.port})`
+  return `主机密钥已变更，可能存在中间人风险：${target} 记录的指纹是 ${recorded}，服务器提供的是 ${presented}；连接已拒绝。`
+    + '确认这确实是服务器更换了密钥后，删除该主机并重新添加，或删除 ~/.dsh/dsh-remote-ide.json 中该主机的 hostKey 字段以重新信任。'
+}
+
+/**
+ * Build the trust-on-first-use host-key verifier for one entry:
+ * no record → accept and persist; matching record → accept; different record
+ * → refuse (ssh2 aborts the handshake). The refusal reason is stored in
+ * `trust.slot` because ssh2's own error text ("Host denied (verification failed)")
+ * does not tell the user it might be a MITM.
+ */
+function makeHostVerifier(entry: SshHostEntry, trust: HostKeyTrust): (key: Buffer) => boolean {
+  return (key: Buffer) => {
+    let fingerprint = ''
+    try {
+      fingerprint = hostKeyFingerprint(key)
+      const recorded = trust.store.get(entry.alias)?.hostKey?.fingerprint ?? trust.endpointFingerprint
+      if (recorded === undefined) {
+        // 首次信任：记录后放行；ad-hoc 探测不带别名，trustHostKey 内部直接忽略。
+        trust.store.trustHostKey(entry.alias, fingerprint)
+        trust.slot.decision = { ok: true, fingerprint, firstUse: true }
+        return true
+      }
+      if (recorded === fingerprint) {
+        trust.slot.decision = { ok: true, fingerprint, firstUse: false }
+        return true
+      }
+      trust.slot.decision = {
+        ok: false,
+        fingerprint,
+        firstUse: false,
+        recorded,
+        error: hostKeyMismatchMessage(entry, recorded, fingerprint),
+      }
+      return false
+    } catch (error) {
+      // hostVerifier 必须在 ssh2 的解析回调里同步返回；抛异常会冒泡成未捕获异常，
+      // 因此这里一律失败即拒（fail closed）。
+      const detail = error instanceof Error ? error.message : String(error)
+      trust.slot.decision = { ok: false, fingerprint, firstUse: false, error: `主机密钥校验失败，连接已拒绝：${detail}` }
+      return false
+    }
+  }
+}
+
 /** Build the ssh2 connect config for one entry (key read from disk). */
-function buildConnectConfig(entry: SshHostEntry, sock?: ConnectConfig['sock'], readyTimeoutMs?: number): ConnectConfig {
+function buildConnectConfig(
+  entry: SshHostEntry,
+  sock?: ConnectConfig['sock'],
+  readyTimeoutMs?: number,
+  trust?: HostKeyTrust,
+): ConnectConfig {
   const config: ConnectConfig = {
     host: entry.host,
     port: entry.port,
@@ -136,11 +222,26 @@ function buildConnectConfig(entry: SshHostEntry, sock?: ConnectConfig['sock'], r
       config.passphrase = entry.auth.passphrase
     }
   }
+  if (trust !== undefined) {
+    config.hostVerifier = makeHostVerifier(entry, trust)
+  }
   return config
 }
 
+/**
+ * Prefer our explicit host-key rejection over ssh2's generic
+ * "Host denied (verification failed)" text (which hides the MITM warning).
+ */
+function hostKeyError(error: unknown, slot?: HostKeySlot): Error {
+  const decision = slot?.decision
+  if (decision !== undefined && !decision.ok && decision.error !== undefined) {
+    return new Error(decision.error, { cause: error })
+  }
+  return error instanceof Error ? error : new Error(String(error))
+}
+
 /** Connect one ssh2 client (resolve on ready, reject on error/close). */
-function connectClient(config: ConnectConfig, password?: string): Promise<Client> {
+function connectClient(config: ConnectConfig, password?: string, hostKey?: HostKeySlot): Promise<Client> {
   return new Promise((resolve, reject) => {
     const client = new Client()
     // Permanent guard: an ssh2 Client whose 'error' event has no listener
@@ -159,7 +260,7 @@ function connectClient(config: ConnectConfig, password?: string): Promise<Client
       settled = true
       // 握手失败也要释放半开的 client（socket/定时器），否则每次失败重试泄漏一份。
       try { client.end() } catch { /* already closed */ }
-      reject(error instanceof Error ? error : new Error(String(error)))
+      reject(hostKeyError(error, hostKey))
     })
     // keyboard-interactive 认证（Ubuntu/PAM 服务器常见：sshd 可能只提供
     // keyboard-interactive 而非 password 方法）：用同一密码回应所有提示。
@@ -292,6 +393,22 @@ export class SshEngine {
     return this.testEntry(entry)
   }
 
+  /**
+   * Fingerprint recorded for this endpoint by any stored host — an ad-hoc probe
+   * has no alias of its own. Ambiguous records yield undefined (never guess a
+   * trust decision from several different fingerprints).
+   */
+  private endpointFingerprint(entry: SshHostEntry): string | undefined {
+    const seen = new Set<string>()
+    for (const stored of this.store.list()) {
+      const fingerprint = stored.hostKey?.fingerprint
+      if (fingerprint !== undefined && stored.host === entry.host && stored.port === entry.port) {
+        seen.add(fingerprint)
+      }
+    }
+    return seen.size === 1 ? [...seen][0] : undefined
+  }
+
   /** Shared probe: connect (optionally through the jump chain) and exec echo. */
   private async testEntry(entry: SshHostEntry): Promise<TestResult> {
     const started = Date.now()
@@ -301,14 +418,19 @@ export class SshEngine {
     // earlier drops the connection before the ping runs).
     const hops: Client[] = []
     try {
-      const config = buildConnectConfig(entry, undefined, this.opts.connectTimeoutMs)
+      const hostKey: HostKeySlot = {}
+      const config = buildConnectConfig(entry, undefined, this.opts.connectTimeoutMs, {
+        store: this.store,
+        slot: hostKey,
+        endpointFingerprint: this.endpointFingerprint(entry),
+      })
       const password = entry.auth.kind === 'password' ? entry.auth.password : undefined
       if (entry.proxyJump.length > 0) {
         const opened = await this.connectHops(entry)
         for (const hop of opened) hops.push(hop.client)
         config.sock = opened[opened.length - 1]!.sock
       }
-      client = await connectClient(config, password)
+      client = await connectClient(config, password, hostKey)
       const ok = await new Promise<boolean>((resolve) => {
         client!.exec('echo dsh-remote-ide-ping', (error, stream) => {
           if (error) { resolve(false); return }
@@ -362,7 +484,8 @@ export class SshEngine {
         inFlight: 0,
       }
       this.pool.set(alias, record)
-      const config = buildConnectConfig(entry, undefined, this.opts.connectTimeoutMs)
+      const hostKey: HostKeySlot = {}
+      const config = buildConnectConfig(entry, undefined, this.opts.connectTimeoutMs, { store: this.store, slot: hostKey })
       if (entry.proxyJump.length > 0) {
         const hops = await this.connectHops(entry)
         config.sock = hops[hops.length - 1]!.sock
@@ -370,7 +493,7 @@ export class SshEngine {
       }
       let client: Client
       try {
-        client = await connectClient(config, entry.auth.kind === 'password' ? entry.auth.password : undefined)
+        client = await connectClient(config, entry.auth.kind === 'password' ? entry.auth.password : undefined, hostKey)
       } catch (error) {
         // 目标连接失败时跳板链已建立——显式释放，否则泄漏。
         for (const hop of record.hops) {
@@ -411,9 +534,10 @@ export class SshEngine {
       for (const hopAlias of entry.proxyJump) {
         const hop = this.store.get(hopAlias)
         if (hop === undefined) throw new Error(`jump host not found: ${hopAlias}`)
-        const config = buildConnectConfig(hop, undefined, this.opts.connectTimeoutMs)
+        const hostKey: HostKeySlot = {}
+        const config = buildConnectConfig(hop, undefined, this.opts.connectTimeoutMs, { store: this.store, slot: hostKey })
         if (hops.length > 0) config.sock = hops[hops.length - 1]!.sock
-        const client = await connectClient(config, hop.auth.kind === 'password' ? hop.auth.password : undefined)
+        const client = await connectClient(config, hop.auth.kind === 'password' ? hop.auth.password : undefined, hostKey)
         const sock = (client as unknown as { sock: import('node:net').Socket }).sock
         hops.push({ client, sock })
       }

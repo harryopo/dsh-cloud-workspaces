@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-105%20%E5%8D%95%E6%B5%8B%20%2B%2025%20E2E-brightgreen.svg)](#开发)
+[![Tests](https://img.shields.io/badge/tests-110%20%E5%8D%95%E6%B5%8B%20%2B%2025%20E2E-brightgreen.svg)](#开发)
 
 **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的远程 Linux 工作区插件：把服务器目录直接变成工作区，全程走标准 SSH。**
 
@@ -66,6 +66,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 
 - 主机配置存放在 `~/.dsh/` 下的用户私有文件（0600，Windows 上另加限制性 ACL）。**口令绝不写入 DSH 设置存储**——只落在这个文件里。旧版本遗留在 `settings.yaml` 的 `dsh-remote-ide-hosts` 段会被**只读导入一次、原样保留**：0.4.x 不会改写或删除它，请在设置卡确认主机已导入后**手动清理该段**（见 `docs/upgrade-to-0.2.md`）。设置卡只见脱敏视图，永远读不回凭据。
 - 远程会话按作用域隔离：遮蔽工具只存在于绑定了云端工作区的会话中，本地工作区永不受影响。
+- **服务器主机密钥采用首次信任（TOFU）**：首次握手成功时，把服务器的 `SHA256:` 指纹记进那个私有主机文件；之后连同一主机必须出示同一密钥。密钥变更时**默认直接拒绝握手**，错误信息会提示可能存在中间人攻击，并列出已记录指纹与服务器出示的指纹；确认服务器确实换钥后，删除并重新添加该主机，或删除 `~/.dsh/dsh-remote-ide.json` 中该主机的 `hostKey` 字段以重新信任。修改主机的 hostname 或端口即视为换端点，旧指纹自动失效。连接池复用的连接只在建立时校验一次（与 OpenSSH 一致）。该信任记录只存于本插件，**不**与 `~/.ssh/known_hosts` 共享。
 - 远程读文件上限 2 MiB：超限文件只流式读取头部 2 MiB，返回 `truncated: true`，绝不整读进宿主内存；头部含 NUL 字节的二进制文件直接拒绝，不按文本渲染。
 
 ## 安装
@@ -134,7 +135,7 @@ DSH host 进程 (Node)
 ```sh
 pnpm build        # tsc d.ts + tsdown 产物
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest —— 105 个单测
+pnpm test         # vitest —— 110 个单测
 node scripts/e2e-real-server.mjs   # 25 个 E2E（真 SSH 服务器）
 ```
 

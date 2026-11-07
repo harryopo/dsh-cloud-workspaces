@@ -75,9 +75,9 @@
     "lib/**/*.d.ts.map",
     "src",
     "client",
-    "agent-presets",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "license": "Apache-2.0",
