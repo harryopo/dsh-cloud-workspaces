@@ -1,7 +1,7 @@
 # npm 发布手册（dsh-cloud-workspaces）
 
-> 2026-10-30 状态：`0.2.1` 已在 npm；**`0.4.0` 待发布**（`npm pack --dry-run` 已验证：64 文件 / 218.4 kB / 构建绿）。0.4.0 是 breaking：需 DSH ≥ 0.2.1-rc.5；0.1.x 用户固定安装 `@0.3.0`。
-> 阻塞点只有一个：npm 令牌过期（`npm whoami` → ENEEDAUTH）。以下三步跑完即发布成功。
+> 2026-11-07 状态：`0.2.1` 在 npm；**`0.4.0` 未发布**（GitHub `v0.4.0` tag + Release 已就绪，commit `392664d`；`npm pack --dry-run` 实测：**44 文件 / 132.1 kB**（unpacked 463.9 kB）/ 构建绿）。0.4.0 是 breaking：需 DSH `^0.2.1-rc.5`；0.1.x 用户固定安装 `@0.3.0`。
+> 阻塞点只有一个：**本机 npm 未登录**（2026-11-07 `npm whoami` → `ENEEDAUTH`，exit 1）。`npm view dsh-cloud-workspaces versions --registry=https://registry.npmjs.org` 当前只返回 `0.2.1`。以下三步跑完即发布成功。
 
 ## 1. 生成令牌（网页操作，约 1 分钟）
 

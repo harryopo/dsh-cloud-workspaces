@@ -17,7 +17,7 @@
 - **版本矩阵**：仓库 0.4.0，DSH peer 与 dev 均 `^0.2.1-rc.5`（仅 0.2.x）；DSH 0.1.x 用户用 `dsh-cloud-workspaces@0.3.0`
 - **本次实跑验证**：`pnpm typecheck` 通过；`pnpm test` 105/105 通过；`node scripts/verify-client-security.mjs` 28/28 PASS
 - **E2E**：单次执行 25 项（脚本 27 处 `check`，含 2 处互斥分支）= 2026-10-30 真机 openEuler 基线，**2026-11-07 未复验**（无可用服务器）
-- **发布**：npm latest 仍为 0.2.1；`v0.4.0` tag / GitHub Release / npm publish 的本次结果见交接报告 `2026-11-05/project-handover/outputs/`
+- **发布（2026-11-07）**：GitHub lightweight tag `v0.4.0` → commit `392664d` 已推送，Release 已建；**npm 发布阻塞于未登录**（`npm whoami` ENEEDAUTH，`npm view ... versions` 仅 `0.2.1`），补令牌后按 `docs/npm-publish.md` 发布
 - **文档对齐**：README(en+zh)/CHANGELOG/AGENTS/docs 已按代码事实修正——旧 settings 段**只读导入、原样保留、需手动清理**；无 ssh-agent 兜底；读文件上限 2 MiB 且超限流式读头部
 - **已知缺口（未修）**：① SSH 主机密钥未校验（`engine.ts` 无 hostVerifier/known_hosts，P1）② `bash`/`read`/`write`/`edit`/`read_image` 遮蔽工具未实现 presenter（P2）③ `package.json` 的 `files[]` 仍含 `agent-presets`（P2 打包遗留）
 

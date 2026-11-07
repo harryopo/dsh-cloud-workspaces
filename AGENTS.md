@@ -106,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 - ✅ **发布闭环**（08-31）：GitHub + npm **0.2.1** + Discussions #5229；**09-05 安全加固**（口令存储收敛/ACL/read_image/钩子修复，v0.2.2）；**09-18 文档对齐 + Repo Wiki**（`docs/REPO-WIKI.md`）
 - ✅ **真机验证基线**（08-31 免 preset 全链路；09-18 后台任务 E2E 全通）：双栏选择器 / 官方收养 / 钩子 7 遮蔽工具实锤
 - ✅ **GitHub 冲星部署**（09-18 夜）：v0.3.0 Release + topics 扩充 + Discussions #5229 更新评论；门面四件套（CHANGELOG.md / issue 模板 / CONTRIBUTING 重写 / star-history）；social preview 图 `docs/assets/social-preview.png`（**待用户手动上传**到 Settings→General→Social preview）；推广成稿 `docs/promo/`（掘金/V2EX + Show HN，**待用户发布**）；good-first issues #2 #3 #4
-- ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布闭环（**0.4.0 的 tag/Release/npm publish**；0.2.2/0.3.0 为历史未发布版本；按 `docs/npm-publish.md`，需有效 npm 令牌）③ `~/.dsh` 目录 ACL 收紧决策
+- ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布（0.4.0 的 GitHub tag `v0.4.0` + Release 已完成；**npm publish 阻塞：本机 npm 未登录/令牌缺失**；补令牌后按 `docs/npm-publish.md` 发布；0.2.2/0.3.0 为历史未发布版本）③ `~/.dsh` 目录 ACL 收紧决策
 - 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）**且 output schema 必须与实际输出逐字段对齐**（宿主 `createSuccessResult` 无条件校验 `output.schema`，`additionalProperties:false` 下未声明字段一律 `ToolOutputError`——09-30 查了两天就漏在这一半）；**client 半只准 `h()` 渲染，零 HTML sink，远端返回的路径/目录名是不可信输入只能进 children 文本**（改完跑 `node scripts/verify-client-security.mjs`）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
 
 ## 参考资料（本地）
