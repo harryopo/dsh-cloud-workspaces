@@ -1,6 +1,6 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-10-30（v0.4.0：DSH 0.2.1-rc.5 迁移 + 双栏工作台选择器 + ssh_tunnel 端口转发；105 单测 + E2E 25/25）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-11-07（v0.4.0：DSH 0.2.1-rc.5 迁移 + 双栏工作台选择器 + ssh_tunnel 端口转发；单测 105/105 复验；E2E 25 项为 10-30 真机基线）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
@@ -12,10 +12,19 @@
 | `reference_ecosystem.md` | 生态参考、关键路径、modlens 识图方法 |
 | `errors_learnings.md` | 20 条踩坑 + 技术要点（含"绝不重启会话宿主实例"铁律、**DSH token 必须在真实元素上量**、**原生 CDP 驱动 Chromium**、Git Bash 调 wsl 的两个坑、Trae safe_rm 白名单） |
 
-## 最新状态（2026-10-01）
+## 最新状态（2026-11-07 · 0.4.0 发布收口）
+
+- **版本矩阵**：仓库 0.4.0，DSH peer 与 dev 均 `^0.2.1-rc.5`（仅 0.2.x）；DSH 0.1.x 用户用 `dsh-cloud-workspaces@0.3.0`
+- **本次实跑验证**：`pnpm typecheck` 通过；`pnpm test` 105/105 通过；`node scripts/verify-client-security.mjs` 28/28 PASS
+- **E2E**：单次执行 25 项（脚本 27 处 `check`，含 2 处互斥分支）= 2026-10-30 真机 openEuler 基线，**2026-11-07 未复验**（无可用服务器）
+- **发布**：npm latest 仍为 0.2.1；`v0.4.0` tag / GitHub Release / npm publish 的本次结果见交接报告 `2026-11-05/project-handover/outputs/`
+- **文档对齐**：README(en+zh)/CHANGELOG/AGENTS/docs 已按代码事实修正——旧 settings 段**只读导入、原样保留、需手动清理**；无 ssh-agent 兜底；读文件上限 2 MiB 且超限流式读头部
+- **已知缺口（未修）**：① SSH 主机密钥未校验（`engine.ts` 无 hostVerifier/known_hosts，P1）② `bash`/`read`/`write`/`edit`/`read_image` 遮蔽工具未实现 presenter（P2）③ `package.json` 的 `files[]` 仍含 `agent-presets`（P2 打包遗留）
+
+## 历史状态（2026-10-01）
 
 - **连接链路**：E2E **29/29 全通**（真机 `192.168.45.200`，164ms 建连）；09-30 的 `ssh_ls` 修复已在运行产物中确认
-- **UI 重构已完成**（保守贴合宿主 + 安全加固）：主按钮 ghost 风修复（明色主题不再白底白字）、卡片去混色、两级标题分层、tab 语义、14 处硬编码 fallback 清除、`window.confirm` → 自绘确认框（焦点陷阱 + Escape）、错误日志脱敏。**深浅双主题实测通过，console clean**，`scripts/verify-client-security.mjs` 29 项安全断言全过。
+- **UI 重构已完成**（保守贴合宿主 + 安全加固）：主按钮 ghost 风修复（明色主题不再白底白字）、卡片去混色、两级标题分层、tab 语义、14 处硬编码 fallback 清除、`window.confirm` → 自绘确认框（焦点陷阱 + Escape）、错误日志脱敏。**深浅双主题实测通过，console clean**，`scripts/verify-client-security.mjs` 28 项安全断言全过。
 - **待补测**：恶意目录名的**运行期**转义实测（真机在验证期间掉线，22 端口不可达，与改动无关）——静态断言已过，运行期待真机恢复
 - **验证基线**：**126/126 测试 + typecheck + build 全绿**
 - **发布状态**：GitHub + npm **0.2.1** 已闭环；**0.2.2 与 0.3.0 均未发布**（本地已是 0.3.0；令牌过期，按 `docs/npm-publish.md` 三步即发）
@@ -30,10 +39,10 @@
 dsh-cloud-workspaces — DSH「云端工作区」（免 preset 透明模式）
 
 ┌─ HOST PLANE（全局，所有会话可见）──────────────────────────────┐
-│  src/index.ts     插件入口：SshRuntime + 6 个 ssh_* 工具       │
+│  src/index.ts     插件入口：SshRuntime + 7 个 ssh_* 工具       │
 │  src/ssh-service.ts  SshRuntime (ctx.ssh) — 唯一连接所有者     │
 │  src/engine.ts    ssh2 引擎：连接池/ProxyJump/exec/SFTP/PTY    │
-│  src/tools.ts     ssh_list/exec/ls/read/write/workspace       │
+│  src/tools.ts     ssh_list/exec/ls/read/write/workspace/tunnel│
 │  src/job-runner.ts  后台任务生产者 → 官方 ctx.jobs (kind ssh)  │
 │  src/store.ts     主机配置 ~/.dsh/dsh-remote-ide.json (0600)   │
 └───────────────────────────────────────────────────────────────┘
@@ -45,13 +54,13 @@ dsh-cloud-workspaces — DSH「云端工作区」（免 preset 透明模式）
 │    + 动态 system prompt 段                                    │
 └───────────────────────────────────────────────────────────────┘
 
-  [legacy 参考，不部署] src/fs-ssh.ts · src/subprocess-ssh.ts
-                       agent-presets/remote-legacy/
+  [0.4.0 已删除] src/fs-ssh.ts · src/subprocess-ssh.ts（仅 git 历史可见）
+  [参考，不部署] agent-presets/remote-legacy/
 ```
 
 **技术栈**：TypeScript 5.7 · Node ≥22 · ssh2 1.17 · Cordis 4.0 · tsdown 0.22 · vitest 3.2
 **依赖关系**：ssh2（运行时，会 bundle）；@deepseek-ai/dsh-*（peer，运行时从 profile 解析，**不 bundle**）
-**构建**：`pnpm build`（tsc 声明 + tsdown 产物）；测试：126/126 全过
+**构建**：`pnpm build`（tsc 声明 + tsdown 产物）；测试：105/105 全过（2026-11-07 复验）
 
 ## 历史：三层架构（2026-08-28 · ❌ 已废弃，勿据此理解现状）
 

@@ -96,7 +96,6 @@
     "ssh",
     "sftp",
     "remote-development",
-    "ssh-agent",
     "cloud-workspace"
   ],
   "scripts": {

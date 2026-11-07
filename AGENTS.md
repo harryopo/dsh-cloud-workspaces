@@ -16,7 +16,7 @@
 
 ```
 src/
-  index.ts          # 插件入口：SshRuntime + 7 个 ssh_* 工具 + 设置 + typert 通道 + 会话路由安装
+  index.ts          # 插件入口：SshRuntime + 7 个 ssh_* 工具 + typert 通道 + 会话路由安装
   session-tools.ts  # ★核心：agent/created 钩子 → 占位会话在 agent scope 注册
                     #   bash/read/write/edit/glob/grep/read_image 遮蔽工具（含官方富 UI presenters）
                     #   + 动态 system prompt 段
@@ -40,7 +40,7 @@ agent-presets/
 scripts/
   start-dsh-web.ps1       # 一键启动 dsh web（4500；⚠️ npx 下载慢，见下）
   e2e-real-server.mjs     # 真机验收：node scripts/e2e-real-server.mjs [alias]（25 项检查）
-  verify-client-security.mjs  # client 半安全断言：node scripts/verify-client-security.mjs（29 项）
+  verify-client-security.mjs  # client 半安全断言：node scripts/verify-client-security.mjs（28 项）
 tests/          # vitest 105 用例（含 session-tools/engine-connection 并发与自愈回归、tools 输出边界、legacy-import、tunnel）
 memory/         # 项目记忆（进度/反馈/踩坑/参考）——最新进展在 project 文件顶部节
 docs/           # 03 方案书（纲领）+ 06 开发方法论（依据），索引见 docs/README.md
@@ -96,17 +96,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-dsh-web.ps1
 9. **同文件多个 Edit 并行会相互覆盖**（已犯 4 次）→ 同一文件的修改必须严格串行。
 10. **vitest fake 实例泄漏**：`FakeClient.instances` 只在所属 describe 的 beforeEach 清理——新 describe 忘了清，`instances[0]` 拿到陈旧对象导致诡异超时。
 11. **搜官方代码要进内层**：dsh 全局包 `lib/` 只是引导 stub，真正的包在其 `node_modules/@deepseek-ai/`。
-12. **lefthook 死钩子导致 commit 静默失败**（2026-08-31 已根除）：`.git/hooks/` 残留 lefthook 的 `prepare-commit-msg`/`post-commit`/`post-checkout`，其 fallback 里含**未加引号的含空格绝对路径**（指向 `.research` 旧源码目录），sh 解析炸掉且零输出 → `git commit` 退出 1 无任何报错（`--no-verify` 救不了 prepare-commit-msg）。3 个死钩子已删除，commit 恢复正常。若复发先查 `.git/hooks/` 非 sample 文件。
+12. **lefthook 死钩子导致 commit 静默失败**（2026-08-31 已根除）：`.git/hooks/` 残留 lefthook 的 `prepare-commit-msg`/`post-commit`/`post-checkout`，其 fallback 里含**未加引号的含空格绝对路径**（指向 `.research` 旧源码目录），sh 解析炸掉且零输出 → `git commit` 退出 1 无任何报错（`--no-verify` 救不了 prepare-commit-msg）。2026-08-31 已删除引发故障的 3 个死钩子；`.git/hooks/` 现仅剩 `post-commit` 与 `post-checkout` 两个 10 字节空脚本（内容只有 `#!/bin/sh`，无副作用），commit 正常。若复发先查 `.git/hooks/` 非 sample 文件。
 
-## 当前状态与下一步（2026-10-30 · DSH 0.2 迁移 + 双栏选择器）
+## 当前状态与下一步（2026-11-07 · 发布收口）
 
-- ✅ **0.4.0（2026-10-30）**：迁移到 DSH **0.2.1-rc.5**（settings 命名空间删除 → 主机元数据收敛到 0600 store + `legacy-import.ts` 一次性导入；jobs 改推模式 `job.append`；client 用 `uiWorkspace` 与新 inject 边；typert codec 必须有 `create()`）。工作区选择器重做为双栏工作台（本机/最近/主机 + 面包屑/可编辑路径/空错加载态）。**105/105 单测 + E2E 25/25（真实 openEuler）+ typecheck + build + 客户端安全断言全绿**；spec `docs/superpowers/specs/2026-10-30-dsh-02-migration-and-picker-design.md`，计划 `docs/superpowers/plans/2026-10-30-dsh-02-migration-and-picker.md`。隔离验收：`.tmp/dsh02` + `.tmp/dsh02-home`，端口 4600。
+- ✅ **0.4.0（2026-10-30 代码完成）**：迁移到 DSH **0.2.1-rc.5**（settings 命名空间删除 → 主机元数据收敛到 0600 store + `legacy-import.ts` 一次性导入<sup>只读，不改写旧段</sup>；jobs 改推模式 `job.append`；client 用 `uiWorkspace` 与新 inject 边；typert codec 必须有 `create()`）。工作区选择器重做为双栏工作台（本机/最近/主机 + 面包屑/可编辑路径/空错加载态）。**单测 105/105（2026-11-07 复验）**；E2E 25/25 为 **2026-10-30 真机 openEuler 基线，2026-11-07 未复验**（无可用服务器）。spec `docs/superpowers/specs/2026-10-30-dsh-02-migration-and-picker-design.md`，计划 `docs/superpowers/plans/2026-10-30-dsh-02-migration-and-picker.md`。隔离验收：`.tmp/dsh02` + `.tmp/dsh02-home`，端口 4600。
 
 - ✅ **远程后台任务**（v0.3.0）：遮蔽 `bash` 与 `ssh_exec` 获得 `run_in_background` → 官方 `ctx.jobs` 生产者（kind=`ssh`，`src/job-runner.ts`：常驻通道 wrapper + dd 增量读远端日志 + 杀进程组 TERM→KILL）。`job_output/job_list/job_kill`、完成通知、jobs UI 全部白拿官方实现。**当时 126/126 单测 + E2E 29/29 全绿**。设计 `docs/07-design-remote-jobs.md`，计划 `docs/superpowers/plans/2026-09-18-remote-jobs.md`
 - ✅ **发布闭环**（08-31）：GitHub + npm **0.2.1** + Discussions #5229；**09-05 安全加固**（口令存储收敛/ACL/read_image/钩子修复，v0.2.2）；**09-18 文档对齐 + Repo Wiki**（`docs/REPO-WIKI.md`）
 - ✅ **真机验证基线**（08-31 免 preset 全链路；09-18 后台任务 E2E 全通）：双栏选择器 / 官方收养 / 钩子 7 遮蔽工具实锤
 - ✅ **GitHub 冲星部署**（09-18 夜）：v0.3.0 Release + topics 扩充 + Discussions #5229 更新评论；门面四件套（CHANGELOG.md / issue 模板 / CONTRIBUTING 重写 / star-history）；social preview 图 `docs/assets/social-preview.png`（**待用户手动上传**到 Settings→General→Social preview）；推广成稿 `docs/promo/`（掘金/V2EX + Show HN，**待用户发布**）；good-first issues #2 #3 #4
-- ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布（0.2.2/0.3.0 积压；**按 `docs/npm-publish.md` 三步即发**，只差新令牌）③ `~/.dsh` 目录 ACL 收紧决策
+- ⏳ **待办**：① 真机后台任务体验（云端会话发 `run_in_background` 消息看 job_output 轮询与 notice——耗用户额度）② npm 发布闭环（**0.4.0 的 tag/Release/npm publish**；0.2.2/0.3.0 为历史未发布版本；按 `docs/npm-publish.md`，需有效 npm 令牌）③ `~/.dsh` 目录 ACL 收紧决策
 - 核心纪律 —— **跨边界输出必须过 jsonSafe**（typert 端点 + 工具 execute 返回）**且 output schema 必须与实际输出逐字段对齐**（宿主 `createSuccessResult` 无条件校验 `output.schema`，`additionalProperties:false` 下未声明字段一律 `ToolOutputError`——09-30 查了两天就漏在这一半）；**client 半只准 `h()` 渲染，零 HTML sink，远端返回的路径/目录名是不可信输入只能进 children 文本**（改完跑 `node scripts/verify-client-security.mjs`）；**同文件编辑串行**；**绝不重启承载会话的 4500 实例**
 
 ## 参考资料（本地）

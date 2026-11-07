@@ -64,6 +64,8 @@ Get-Content "$HOME\.dsh\dsh-remote-ide-debug.log" -Tail 10
 
 5. 后台任务冒烟：在云端会话里跑一条 `run_in_background` 命令，再用 `job_output` 读输出。
 
+> **旧 settings 段不会自动清理**：0.4.0 只**读取** `settings.yaml` 里的 `dsh-remote-ide-hosts:` 段并导入 0600 store，**不删除、不改写**该段。确认设置页主机已出现后，如需清除旧的明文口令，请**手动**编辑 `settings.yaml` 删除 `dsh-remote-ide-hosts:` 及其子项（编辑前先做第 0 步备份）。保留该段也无害，只是回滚到 0.3.0 时需要它。
+
 ## 5. 回滚（出问题 5 分钟内退回）
 
 ```powershell

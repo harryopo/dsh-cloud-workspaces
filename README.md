@@ -7,7 +7,15 @@
 
 **Remote Linux workspaces over SSH for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**
 
-> Requires DSH **>= 0.2.1-rc.5**. On 0.1.x, install `dsh-cloud-workspaces@0.3.0`.
+> **Compatibility matrix**
+>
+> | Plugin | DSH version | Notes |
+> | --- | --- | --- |
+> | **0.4.x** | **`^0.2.1-rc.5`** (0.2.x only) | Settings-namespace removal, push jobs producer, dual-pane picker, `ssh_tunnel` |
+> | 0.3.x | `^0.1.1-rc.2` (0.1.x) | Last line for DSH 0.1.x: remote background jobs |
+> | 0.2.x | `^0.1.1-rc.2` (0.1.x) | 0.2.1 on npm; 0.2.2 was the security-hardening release |
+>
+> DSH 0.2.x cannot run plugin 0.3.x, and DSH 0.1.x cannot run plugin 0.4.x. Check `dsh --version` before installing.
 
 Pick **Cloud (SSH)** in DSH's workspace picker, and the coding agent works directly on your Linux server: `bash`, `read`, `write`, `edit`, `glob`, `grep` — the entire built-in toolset — transparently execute over SSH. Files, search, editing and terminal all live on the remote box.
 
@@ -39,7 +47,7 @@ DSH's agent runs on your local machine. When your code, data or production box l
 
 ### SSH settings card (in DSH Settings → SSH Connections)
 
-- **Host manager** — display name, host, port, user; **password auth** (keyboard-interactive aware — works with PAM/Ubuntu servers that never offer the plain `password` method) or **private key** (path; ssh-agent fallback).
+- **Host manager** — display name, host, port, user; **password auth** (keyboard-interactive aware — works with PAM/Ubuntu servers that never offer the plain `password` method) or **private key** (path to a key file).
 - **Connection test** — one-click probe with latency; saved credentials are reattached server-side (the browser only ever sees a redacted view).
 - **Remote directory browser** — list, navigate, **create** and **delete** folders on the server; then **bind any directory as a cloud workspace** in one click.
 - **ProxyJump** — jump-host chains, per-hop credentials.
@@ -56,9 +64,9 @@ DSH's agent runs on your local machine. When your code, data or production box l
 
 ### Security
 
-- Host configuration lives in a private per-user file under `~/.dsh/` with owner-only permissions. **Passwords are never written to DSH's settings store** — they go only to that file, and any plaintext passwords left in settings by earlier versions are migrated out and stripped on startup. The settings card sees a redacted view and can never read a stored credential back.
+- Host configuration lives in a private per-user file under `~/.dsh/` with owner-only permissions (0600, plus a restrictive ACL on Windows). **Passwords are never written to DSH's settings store** — they go only to that file. A legacy `dsh-remote-ide-hosts` section left in `settings.yaml` by earlier versions is **read once and left untouched**: plugin 0.4.x does not rewrite or delete it, so remove that section manually after confirming the hosts appear in the settings card (see `docs/upgrade-to-0.2.md`). The settings card sees a redacted view and can never read a stored credential back.
 - Remote sessions are scoped: shadow tools exist only inside sessions bound to a cloud workspace. Local workspaces are never affected.
-- Remote file reads are capped; large files stream instead of buffering into memory.
+- Remote file reads are capped at 2 MiB: a larger file is read as a stream of its first 2 MiB and returned with `truncated: true`, never buffered whole in the host process. Binary files (NUL byte in the head) are rejected instead of rendered as text.
 
 ## Install
 
@@ -118,7 +126,7 @@ Browser (dsh web GUI): settings card + cloud-workspace picker
 speak to the host over the official Typert remote bridge.
 ```
 
-- **Host half** (`src/`, TypeScript): `SshEngine` + `SshRuntime`, shadow-tool registration for cloud sessions, the global `ssh_*` tools, Typert remote endpoints, background-job producer, settings schema.
+- **Host half** (`src/`, TypeScript): `SshEngine` + `SshRuntime`, shadow-tool registration for cloud sessions, the global `ssh_*` tools, Typert remote endpoints, background-job producer.
 - **Client half** (`client/`, plain ESM React via `createElement`): settings section + dual-pane workspace picker injected through official slots (`settings.section`, `workspace.*`). No JSX build step, `--dsw-*` design tokens only.
 
 ## Development

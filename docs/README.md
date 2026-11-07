@@ -1,7 +1,7 @@
 # docs/ 文档目录索引
 
 > 项目：dsh-cloud-workspaces —— DSH「云端工作区」（免 preset 透明模式，曾用名 dsh-remote-ide）
-> 更新：2026-09-30 · 当前阶段：功能完成（126/126 单测 + E2E 29/29），npm 0.3.0 待发
+> 更新：2026-11-07 · 当前阶段：0.4.0（DSH 0.2.x only）代码完成；单测 **105/105**（2026-11-07 复验），E2E **单次 25 项**（2026-10-30 真机基线，本次未复验）；npm 0.4.0 发布收口中
 
 ## 先读哪份
 
@@ -25,22 +25,23 @@
 ✅ M0 引擎与连接池 ctx.ssh
    →  ✅ M1 fs-ssh / M2 subprocess-ssh（08-30 转为 legacy 参考，不再部署）
    →  ✅ M3 preset 组合（08-30 下线，让位给 agent/created 遮蔽工具）
-   →  ✅ M4 真实 Linux 服务器验收（08-30，24/24 → 现 29/29）
+   →  ✅ M4 真实 Linux 服务器验收（08-30，24/24；现脚本单次执行 25 项）
    →  ✅ 免 preset 透明模式全链路（08-31，钩子 7 遮蔽工具）
    →  ✅ 安全加固（09-05，v0.2.2）+ 远程后台任务（09-18，v0.3.0）
-   →  📦 npm 发布：0.2.1 已上线；0.3.0 待发（令牌）
+   →  ✅ DSH 0.2 迁移 + 双栏选择器（10-30，0.4.0）
+   →  📦 npm 发布：0.2.1 已上线；0.3.0 / 0.4.0 未发布（0.4.0 发布收口中）
 ```
 
 ## 竞品与生态（2026-08-28 调研）
 
 - SSH 远程开发赛道已有 13+ 竞品（dsh-ssh/dsh-ssh、flymysql/dsh-remote、CrazyShout/dsh-ssh-remote 等）
 - 我们的差异化：**全生态唯一的「官方工具透明重定向」**——agent 照旧调 `bash`/`read`/`edit`，调用落远程（竞品靠 SFTP 镜像同步或私有 `rw_*` 工具名，agent 非透明）；零远程安装（标准 sshd 即可）+ ProxyJump 连接池
-- 上游 DSH 最新稳定版 `0.1.1-rc.2`（本插件已锁定；0.1.2-alpha.1 修复了 profile preset roots 启动丢失问题）
+- 版本矩阵：**插件 0.4.x 要求 DSH `^0.2.1-rc.5`（仅 0.2.x）**；DSH 0.1.x 请用插件 0.3.0（其 SDK 基线为 `0.1.1-rc.2`）
 
 ## 配套资产
 
 | 资产 | 位置 |
 |---|---|
-| 本地 DSH 源码（rc.5，仅作历史参考；契约以 npm 0.1.1-rc.2 d.ts 为准） | `.research/dsh-source/deepseek-harness-master/` |
+| 本地 DSH 源码（rc.5，仅作历史参考；**契约以 npm `@deepseek-ai/dsh-*@0.2.1-rc.5` 的 d.ts 为准**） | `.research/dsh-source/deepseek-harness-master/` |
 | 项目记忆 | `memory/`（`MEMORY.md` 为索引，进展在 `project_dsh_remote_ide.md` 顶部节） |
 | 交接文档 | 仓库根 `agents.md` / `CLAUDE.md` |

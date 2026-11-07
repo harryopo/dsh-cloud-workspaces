@@ -30,7 +30,7 @@
 - **深色主题实测**：主按钮/普通按钮 600/500 字重分明、卡片 `#232324`、对比度全部 ≥AA（最低 danger 4.24，AA 需 4.5——`#f25a5a` 是宿主自带值，未改）
 - **明色主题实测**（注入 light token 验证成对翻转）：主按钮 `#1d1d1f` on `#f5f5f7`、卡片白底深字、次级 `#86868b` —— **此前的「白底白字」风险已消除**
 - **浏览器 console 全程 clean**（`Log.entryAdded` 零告警）
-- **安全**：`scripts/verify-client-security.mjs` **29 项断言全过**（HTML sink / 原生弹窗 / 远端数据只进文本位置 / 密钥卫生 / 危险操作护栏）。⚠️ 写该脚本时发现**注释里的 `window.confirm` 会让 grep 误报** → 脚本先剥注释再扫。已确认不进 npm tarball（`files[]` 不含 `scripts/`）。
+- **安全**：`scripts/verify-client-security.mjs` **28 项断言全过**（HTML sink / 原生弹窗 / 远端数据只进文本位置 / 密钥卫生 / 危险操作护栏）。⚠️ 写该脚本时发现**注释里的 `window.confirm` 会让 grep 误报** → 脚本先剥注释再扫。已确认不进 npm tarball（`files[]` 不含 `scripts/`）。
 
 ### 未完成
 - **真机确认框实测被环境挡住**：`192.168.45.200` 在 UI 验证期间掉线（22 端口不可达），E2E 独立复现同样 `Timed out while waiting for handshake` → **与本次改动无关**。恶意目录名（`<img src=x onerror=alert(1)>`）的**运行期**转义实测因此未完成，只有静态断言 + React 语义保证。**待真机恢复后补测**。

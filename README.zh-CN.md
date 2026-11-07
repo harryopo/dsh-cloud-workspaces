@@ -3,11 +3,19 @@
 [![npm version](https://img.shields.io/npm/v/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-cloud-workspaces.svg)](https://www.npmjs.com/package/dsh-cloud-workspaces)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-100%20%E5%8D%95%E6%B5%8B%20%2B%2025%20E2E-brightgreen.svg)](#开发)
+[![Tests](https://img.shields.io/badge/tests-105%20%E5%8D%95%E6%B5%8B%20%2B%2025%20E2E-brightgreen.svg)](#开发)
 
 **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的远程 Linux 工作区插件：把服务器目录直接变成工作区，全程走标准 SSH。**
 
-> 需要 DSH **>= 0.2.1-rc.5**；0.1.x 请安装 `dsh-cloud-workspaces@0.3.0`。
+> **兼容矩阵**
+>
+> | 插件 | DSH 版本 | 说明 |
+> | --- | --- | --- |
+> | **0.4.x** | **`^0.2.1-rc.5`**（仅 0.2.x） | settings 命名空间退场、推模式后台任务、双栏选择器、`ssh_tunnel` |
+> | 0.3.x | `^0.1.1-rc.2`（0.1.x） | DSH 0.1.x 的最后一条线：远程后台任务 |
+> | 0.2.x | `^0.1.1-rc.2`（0.1.x） | 0.2.1 曾上 npm；0.2.2 为安全加固版 |
+>
+> DSH 0.2.x 不能运行 0.3.x，DSH 0.1.x 不能运行 0.4.x。安装前先看 `dsh --version`。
 
 在工作区选择器里选 **「云端 (SSH)」**，编码 Agent 就直接在你的 Linux 服务器上干活：`bash`、`read`、`write`、`edit`、`glob`、`grep` —— 内置工具全家桶 —— 全部经 SSH 透明执行。文件、搜索、编辑、终端，统统落在远程。
 
@@ -39,7 +47,7 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 
 ### SSH 设置卡片（DSH 设置 → SSH 连接）
 
-- **主机管理** —— 显示名、主机、端口、用户；**密码认证**（支持 keyboard-interactive——PAM/Ubuntu 等只提供交互式认证的服务器也能连）或**私钥认证**（路径；ssh-agent 兜底）。
+- **主机管理** —— 显示名、主机、端口、用户；**密码认证**（支持 keyboard-interactive——PAM/Ubuntu 等只提供交互式认证的服务器也能连）或**私钥认证**（指定私钥文件路径）。
 - **连接测试** —— 一键探测并显示延迟；已保存凭据在服务端补回（浏览器只见脱敏视图）。
 - **远端目录浏览器** —— 浏览、**新建**、**删除**服务器文件夹；任意目录**一键绑定为云端工作区**。
 - **ProxyJump** —— 跳板机链，逐跳凭据。
@@ -56,9 +64,9 @@ DSH 的 Agent 跑在本地。当代码、数据或生产环境在远程 Linux �
 
 ### 安全
 
-- 主机配置存放在 `~/.dsh/` 下的用户私有文件（仅属主可读写）。**口令绝不写入 DSH 设置存储**——只落在该文件里；旧版本遗留在设置中的明文口令会在启动时迁出并剥离。设置卡只见脱敏视图，永远读不回凭据。
+- 主机配置存放在 `~/.dsh/` 下的用户私有文件（0600，Windows 上另加限制性 ACL）。**口令绝不写入 DSH 设置存储**——只落在这个文件里。旧版本遗留在 `settings.yaml` 的 `dsh-remote-ide-hosts` 段会被**只读导入一次、原样保留**：0.4.x 不会改写或删除它，请在设置卡确认主机已导入后**手动清理该段**（见 `docs/upgrade-to-0.2.md`）。设置卡只见脱敏视图，永远读不回凭据。
 - 远程会话按作用域隔离：遮蔽工具只存在于绑定了云端工作区的会话中，本地工作区永不受影响。
-- 远程读文件有上限；大文件流式读头部而非整读进内存。
+- 远程读文件上限 2 MiB：超限文件只流式读取头部 2 MiB，返回 `truncated: true`，绝不整读进宿主内存；头部含 NUL 字节的二进制文件直接拒绝，不按文本渲染。
 
 ## 安装
 
@@ -118,7 +126,7 @@ DSH host 进程 (Node)
 经官方 Typert remote 桥与 host 通信。
 ```
 
-- **Host 半**（`src/`，TypeScript）：`SshEngine` + `SshRuntime`、云端会话的遮蔽工具注册、全局 `ssh_*` 工具、Typert remote 端点、后台任务生产者、设置 schema。
+- **Host 半**（`src/`，TypeScript）：`SshEngine` + `SshRuntime`、云端会话的遮蔽工具注册、全局 `ssh_*` 工具、Typert remote 端点、后台任务生产者。
 - **Client 半**（`client/`，纯 ESM React `createElement`）：经官方插槽（`settings.section`、`workspace.*`）注入设置卡与双栏选择器。无 JSX 构建步骤，只用 `--dsw-*` 设计 token。
 
 ## 开发
