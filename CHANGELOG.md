@@ -2,15 +2,7 @@
 
 All notable changes to `dsh-cloud-workspaces` are documented here.
 
-## [Unreleased]
-
-### Security
-- **Server host keys are now verified (trust on first use).** The first successful handshake records the server's `SHA256:` fingerprint in the 0600 host store; later connections must present the same key. A changed key fails the handshake with a man-in-the-middle warning that names the recorded and presented fingerprints and explains how to clear the record (delete and re-add the host, or remove its `hostKey` field from `~/.dsh/dsh-remote-ide.json`). Changing a host's hostname or port drops the old fingerprint. Ad-hoc "test connection" probes of unsaved hosts are accepted but not persisted. Trust records are local to this plugin and are not shared with `~/.ssh/known_hosts`.
-
-### Changed
-- Package manifest: `agent-presets/` (retired reference presets, no runtime dependency) is no longer shipped; `CHANGELOG.md` is now included in the tarball.
-
-## [0.4.0] — 2026-10-30
+## [0.4.0] — 2026-11-07
 
 ### Breaking
 - **Requires DeepSeek Harness >= 0.2.1-rc.5.** The 0.2 SDK removed the settings-namespace API and replaced the jobs producer contract; 0.1.x is no longer supported (install `dsh-cloud-workspaces@0.3.0` for 0.1.x).
@@ -28,6 +20,7 @@ All notable changes to `dsh-cloud-workspaces` are documented here.
 - **Settings card and workspace picker restyled to match the host design system.** The primary button used to render as white-on-dark text on a light fill (and would have inverted to invisible in the light theme); buttons, cards, tabs, inputs and the section hierarchy now use the host's semantic `--dsw-*` tokens, so both themes adapt as pairs. Removed 14 hardcoded Apple-light fallbacks, dropped the `color-mix` greying on cards, de-emphasised the monospace font on host addresses, and tightened the section copy.
 - Remote delete now uses an in-app confirmation dialog instead of the native `window.confirm`, matching the rest of the UI. The dialog traps focus, closes on `Escape`, and renders the remote path as inert text.
 - Client-side error logging now reports only the error message instead of dumping the error object, keeping host configuration out of the browser console.
+- Package manifest: `agent-presets/` (retired reference presets, no runtime dependency) is no longer shipped; `CHANGELOG.md` is now included in the tarball explicitly.
 
 ### Fixed
 - **A crashing cloud picker can no longer block local workspace creation.** The directory-flow occupant is wrapped in a render boundary; if it throws, the dialog falls back to a single "choose a local folder" action (issue #1).
@@ -41,11 +34,18 @@ All notable changes to `dsh-cloud-workspaces` are documented here.
 - Removed a hint pointing at `ssh_config`, a tool that is not registered.
 
 ### Security
+- **Server host keys are verified (trust on first use).** The first successful handshake records the server's `SHA256:` fingerprint in the 0600 host store; later connections must present the same key. A changed key fails the handshake with a man-in-the-middle warning that names the recorded and presented fingerprints and explains how to clear the record (delete and re-add the host, or remove its `hostKey` field from `~/.dsh/dsh-remote-ide.json`). Changing a host's hostname or port drops the old fingerprint. Ad-hoc "test connection" probes of unsaved hosts are accepted but not persisted. Trust records are local to this plugin and are not shared with `~/.ssh/known_hosts`.
 - Added `scripts/verify-client-security.mjs` — an executable check (28 assertions: 11 sink probes, 3 native-dialog probes, 5 untrusted-data placements, 5 secret-hygiene probes, 4 destructive-action safeguards) covering HTML-writing sinks, native dialogs, untrusted remote data staying in text position, secret hygiene and destructive-action safeguards. Run with `node scripts/verify-client-security.mjs`.
 
 ### Documentation
 - Corrected the READMEs (en + zh) which still described the retired `ctx.fs` / `ctx.subprocess` seam-replacement architecture as the shipped headline feature; the real mechanism is per-session shadow tools registered via the `agent/created` hook. Also corrected the `preset scoping` claim (the `ssh_*` tools are global, not preset-gated), the credential-storage wording (passwords live only in the 0600 store, never in settings), and stale test/version counts across `agents.md`, `docs/REPO-WIKI.md`, `docs/README.md` and `memory/`.
 - Documented the real migration semantics: the legacy `dsh-remote-ide-hosts` section in `settings.yaml` is **read once and left untouched** — removing it is a manual step (see `docs/upgrade-to-0.2.md`).
+
+### Verification
+- `pnpm typecheck` — pass
+- `pnpm test` — 110/110 pass (11 files)
+- `node scripts/verify-client-security.mjs` — 28/28 assertions pass
+- E2E: 25 checks per run (real openEuler baseline, 2026-10-30; not re-run for this release)
 
 ## [v0.3.0] — 2026-09-18
 

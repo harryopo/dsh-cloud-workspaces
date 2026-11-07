@@ -1,6 +1,6 @@
 # npm 发布手册（dsh-cloud-workspaces）
 
-> 2026-11-07 状态：`0.2.1` 在 npm；**`0.4.0` 未发布**（GitHub `v0.4.0` tag + Release 已就绪，commit `392664d`；`npm pack --dry-run` 实测（含本轮主机密钥/打包改动、`pnpm build` 后）：**43 文件 / 140.6 kB**（unpacked 491.3 kB）/ 构建绿）。0.4.0 是 breaking：需 DSH `^0.2.1-rc.5`；0.1.x 用户固定安装 `@0.3.0`。本轮 `files[]` 已剔除 `agent-presets/` 并显式纳入 `CHANGELOG.md`；主机密钥 TOFU 校验等改动进下一版，不改 0.4.0 已发 tag。
+> 2026-11-07 状态：`0.2.1` 在 npm；**`0.4.0` 未发布**（GitHub `v0.4.0` tag + Release 已改指本日收口提交，含主机密钥 TOFU 校验 + 打包清单修正；`npm pack --dry-run` 实测：**43 文件 / 140.7 kB**（unpacked 491.5 kB）/ `pnpm typecheck` + `pnpm test` 110/110 全绿）。0.4.0 是 breaking：需 DSH `^0.2.1-rc.5`；0.1.x 用户固定安装 `@0.3.0`。`files[]` 已剔除 `agent-presets/` 并显式纳入 `CHANGELOG.md`；主机密钥 TOFU 校验与打包修正均已计入 0.4.0（无「下一版」遗留改动）。
 > 阻塞点只有一个：**本机 npm 未登录**（2026-11-07 `npm whoami` → `ENEEDAUTH`，exit 1）。`npm view dsh-cloud-workspaces versions --registry=https://registry.npmjs.org` 当前只返回 `0.2.1`。以下三步跑完即发布成功。
 
 ## 1. 生成令牌（网页操作，约 1 分钟）

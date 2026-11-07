@@ -1,6 +1,6 @@
 # MEMORY.md — dsh-cloud-workspaces 项目记忆索引
 
-> 更新：2026-11-07（v0.4.0 已 tag/Release；本轮补 SSH 主机密钥 TOFU 校验 + 打包清单修正，进下一版；单测 110/110 复验；E2E 25 项为 10-30 真机基线）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
+> 更新：2026-11-07（v0.4.0 tag/Release 已改指 `345ec87`，含 SSH 主机密钥 TOFU 校验 + 打包清单修正；单测 110/110 复验；E2E 25 项为 10-30 真机基线）· 项目：DeepSeek Harness「云端工作区」（dsh-cloud-workspaces，曾用名 dsh-remote-ide）
 
 ## 索引
 
@@ -17,9 +17,9 @@
 - **版本矩阵**：仓库 0.4.0，DSH peer 与 dev 均 `^0.2.1-rc.5`（仅 0.2.x）；DSH 0.1.x 用户用 `dsh-cloud-workspaces@0.3.0`
 - **本次实跑验证**：`pnpm typecheck` 通过；`pnpm test` 110/110 通过（新增 5 个 TOFU 用例）；`node scripts/verify-client-security.mjs` 28/28 PASS
 - **E2E**：单次执行 25 项（脚本 27 处 `check`，含 2 处互斥分支）= 2026-10-30 真机 openEuler 基线，**2026-11-07 未复验**（无可用服务器）
-- **发布（2026-11-07）**：GitHub lightweight tag `v0.4.0` → commit `392664d` 已推送，Release 已建；**npm 发布阻塞于未登录**（`npm whoami` ENEEDAUTH，`npm view ... versions` 仅 `0.2.1`），补令牌后按 `docs/npm-publish.md` 发布
+- **发布（2026-11-07）**：GitHub lightweight tag `v0.4.0` 已改指本日收口提交（代码提交 `345ec87` 之上再追加文档同步提交），含主机密钥 TOFU 校验 + 打包清单修正；Release 说明同步更新；**npm 发布阻塞于未登录**（`npm whoami` ENEEDAUTH，`npm view ... versions` 仅 `0.2.1`），补令牌后按 `docs/npm-publish.md` 发布
 - **文档对齐**：README(en+zh)/CHANGELOG/AGENTS/docs 已按代码事实修正——旧 settings 段**只读导入、原样保留、需手动清理**；无 ssh-agent 兜底；读文件上限 2 MiB 且超限流式读头部
-- **本轮已修（2026-11-07，进下一版）**：① SSH 主机密钥已接入 `hostVerifier`（TOFU：首连记 `SHA256:` 指纹到 store 的 `hostKey`，变更 fail-closed 拒绝并给 MITM 告警 + 清除路径）③ `files[]` 已剔除 `agent-presets`、显式纳入 `CHANGELOG.md`
+- **已并入 v0.4.0（2026-11-07）**：① SSH 主机密钥已接入 `hostVerifier`（TOFU：首连记 `SHA256:` 指纹到 store 的 `hostKey`，变更 fail-closed 拒绝并给 MITM 告警 + 清除路径）③ `files[]` 已剔除 `agent-presets`、显式纳入 `CHANGELOG.md`
 - **已知缺口（未修）**：② `bash`/`read`/`write`/`edit`/`read_image` 遮蔽工具未实现 presenter（功能型 P2，不影响安全）
 
 ## 历史状态（2026-10-01）
