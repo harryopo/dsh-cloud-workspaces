@@ -1,6 +1,6 @@
 # Repo Wiki — dsh-cloud-workspaces
 
-> 生成：2026-09-18 · **更新：2026-10-30（v0.4.0：DSH 0.2 迁移 + 双栏选择器）** · 基线 commit `ffc747b` · 105/105 单测 + E2E 25/25 全绿实测（真实 openEuler）
+> 生成：2026-09-18 · **更新：2026-11-07（v0.4.0 收口：DSH 0.2 迁移 + 双栏选择器 + SSH 主机密钥 TOFU 校验 + 打包清单修正）** · 基线 commit `345ec87` · 110/110 单测 + 28/28 客户端安全断言；E2E 25/25 为 2026-10-30 真机基线（本轮未复验）
 > 来源：全仓库文件逐个读取核验（src / client / tests / scripts / docs / config / memory）；未标注处均有代码依据，推断处标【信息缺失】或 ⚠️。
 
 ## 1. 项目概述
@@ -55,7 +55,7 @@
 | `index.ts` | 装配：起 SshRuntime → 注册 ssh_* 工具（sync 受 enabled/announceToAgent 开关）→ 两段 systemPrompt（全局宣告 + 会话动态段）→ 启动 legacy-import → inject(typert) 挂载设置面 → installSessionRouting | 全部 |
 | `session-tools.ts` | `ctx.on('agent/created')` → `routeByCwd(cwd)` 命中占位 → **仅在 `payload.agent.ctx`（agent scope）**注册 7 遮蔽工具 + `runtime.connect(hostId)` 预热切 activeAlias；isEnabled 事件时求值 | engine/workspace/jsonsafe/debug-log |
 | `ssh-service.ts` | Service `ctx.ssh`：connect/disconnect/getConnection（broken 或陈旧 rejection 自动重建）/getConnectionFor（多主机不切激活）/wrap 句柄/disposal 守卫 | engine/store |
-| `engine.ts` | 连接池（Map<alias,PoolRecord> + connecting 在途去重）/keepalive/sweep 空闲回收（inFlight 守卫）/exec（超时+输出 cap）/openChannel 流式/openShell PTY/SFTP CRUD（readFile 流式 cap、writeFile 自动建父目录、posix-rename）/ProxyJump 链/keyboard-interactive/本地端口转发（`openTunnel`/`listTunnels`/`closeTunnel`，回环绑定、连接断开一并关闭） | ssh2/store |
+| `engine.ts` | 连接池（Map<alias,PoolRecord> + connecting 在途去重）/keepalive/sweep 空闲回收（inFlight 守卫）/exec（超时+输出 cap）/openChannel 流式/openShell PTY/SFTP CRUD（readFile 流式 cap、writeFile 自动建父目录、posix-rename）/ProxyJump 链/keyboard-interactive/本地端口转发（`openTunnel`/`listTunnels`/`closeTunnel`，回环绑定、连接断开一并关闭）/**主机密钥校验**（`hostVerifier` + TOFU：首连记 `SHA256:` 指纹于 store 的 `hostKey`，变更 fail-closed 拒绝并给 MITM 告警；ad-hoc 探测不落盘） | ssh2/store |
 | `store.ts` | `~/.dsh/dsh-remote-ide.json`（0600 + Windows icacls 断继承）；upsert 校验（isSafeHostId 防原型污染）；`~/.ssh/config` 导入 | protocol |
 | `workspace.ts` | 占位路径 `<DSH_HOME|~/.dsh>/remote/<hostId>/<base64url(远程绝对路径)>`：编解码可逆、routeByCwd、resolveRemotePath（占位绝对路径重锚回远程）、manifest、listPlaceholders | 纯函数+注入 fs |
 | `typert.ts` | 9 端点（listHosts/saveHost/deleteHost/testConnection/listRemoteDir/mkdirRemote/removeRemote/createPlaceholder/listPlaceholders）；主机元数据与口令唯一权威=0600 store；createPlaceholder 后台注册 workspaceRegistry（5s 超时不阻塞） | engine/legacy-import/workspace/jsonsafe |
@@ -110,7 +110,7 @@ flowchart LR
 
 **占位工作区（workspace.ts）**：`remoteRoot()`（env 可覆盖）、`isValidHostId`、`encode/decodeRemotePath`（base64url 可逆+规范编码校验）、`mapRemoteToLocal/mapLocalToRemote`、`routeByCwd`、`resolveRemotePath`、`createPlaceholderDir`（幂等+manifest）、`listPlaceholders`、`readManifest`。
 
-**存储与安全（store.ts/legacy-import.ts/typert.ts）**：0600+icacls ACL 收紧、`isSafeHostId` 原型污染防护（store 键双侧过滤）、口令 write-only 边界（wire 脱敏 + 唯一落 store）、`~/.ssh/config` 导入、0.2 旧 settings 段一次性导入、`getStoredEntry`（host 平面内部补回口令专用，绝不进 wire）。
+**存储与安全（store.ts/legacy-import.ts/typert.ts）**：0600+icacls ACL 收紧、`isSafeHostId` 原型污染防护（store 键双侧过滤）、口令 write-only 边界（wire 脱敏 + 唯一落 store）、`~/.ssh/config` 导入、0.2 旧 settings 段一次性导入、`getStoredEntry`（host 平面内部补回口令专用，绝不进 wire）、**主机密钥 TOFU**（`engine.ts` `hostVerifier`：首连记 `SHA256:` 指纹到 store `hostKey`，变更默认拒绝握手，端点变更丢旧指纹）。
 
 **边界工具**：`jsonSafe`（所有 typert 端点 return + 工具 execute return 必包）；`debugLog`（512KiB 轮转，`~/.dsh/dsh-remote-ide-debug.log`）。
 
